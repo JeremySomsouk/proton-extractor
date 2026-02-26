@@ -25,10 +25,17 @@ struct Args {
     month: MonthFilter,
 }
 
+#[derive(Clone)]
 struct Event {
     summary: String,
     start: NaiveDateTime,
     end: NaiveDateTime,
+}
+
+impl Event {
+    fn new(summary: String, start: NaiveDateTime, end: NaiveDateTime) -> Self {
+        Self { summary, start, end }
+    }
 }
 
 struct RawEvent {
@@ -64,6 +71,9 @@ fn parse_rrule(rrule: &str) -> Option<(String, NaiveDateTime)> {
     Some((freq?, until?))
 }
 
+const RECURRENCE_LIMIT_DAYS: i64 = 365 * 5; // 5 year limit for recurrence expansion
+const MAX_RECURRENCE_INSTANCES: usize = 365; // Safety limit for instances
+
 fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
     // Separate overrides (events with RECURRENCE-ID) from base events
     let mut overrides: HashSet<(String, NaiveDate)> = HashSet::new();
@@ -82,14 +92,15 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
 
     let mut result: Vec<Event> = Vec::new();
 
-    // Add override events directly
-    for event in override_events {
-        result.push(Event {
-            summary: event.summary,
-            start: event.start,
-            end: event.end,
-        });
-    }
+    // Add override events directly (filter invalid durations)
+    result.extend(override_events.into_iter().filter_map(|e| {
+        let duration = e.end - e.start;
+        if duration.num_minutes() > 0 {
+            Some(Event::new(e.summary, e.start, e.end))
+        } else {
+            None
+        }
+    }));
 
     // Expand base events
     for event in base_events {
@@ -97,51 +108,55 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
 
         match &event.rrule {
             None => {
-                result.push(Event {
-                    summary: event.summary,
-                    start: event.start,
-                    end: event.end,
-                });
+                let duration = event.end - event.start;
+                if duration.num_minutes() > 0 {
+                    result.push(Event::new(event.summary, event.start, event.end));
+                }
             }
             Some(rrule) => {
                 let Some((freq, until)) = parse_rrule(rrule) else {
                     // Can't parse RRULE, just add the single event
-                    result.push(Event {
-                        summary: event.summary,
-                        start: event.start,
-                        end: event.end,
-                    });
+                    let duration = event.end - event.start;
+                    if duration.num_minutes() > 0 {
+                        result.push(Event::new(event.summary, event.start, event.end));
+                    }
                     continue;
                 };
 
                 let duration = event.end - event.start;
+                if duration.num_minutes() <= 0 {
+                    continue;
+                }
+
                 let step = match freq.as_str() {
                     "WEEKLY" => Duration::weeks(1),
                     "DAILY" => Duration::days(1),
                     _ => {
                         // Unsupported frequency, add single event
-                        result.push(Event {
-                            summary: event.summary,
-                            start: event.start,
-                            end: event.end,
-                        });
+                        result.push(Event::new(event.summary, event.start, event.end));
                         continue;
                     }
                 };
 
+                // Clamp until to avoid unbounded expansion
+                let start_date = event.start.date();
+                let limit_date = start_date.and_hms_opt(23, 59, 59).unwrap().and_utc().naive_local() + Duration::days(RECURRENCE_LIMIT_DAYS);
+                let until = if until > limit_date { limit_date } else { until };
+
                 let mut current = event.start;
+                let mut instances = 0;
                 while current <= until {
+                    if instances >= MAX_RECURRENCE_INSTANCES {
+                        break;
+                    }
                     let date = current.date();
                     if !exdate_set.contains(&date)
                         && !overrides.contains(&(event.uid.clone(), date))
                     {
-                        result.push(Event {
-                            summary: event.summary.clone(),
-                            start: current,
-                            end: current + duration,
-                        });
+                        result.push(Event::new(event.summary.clone(), current, current + duration));
                     }
                     current += step;
+                    instances += 1;
                 }
             }
         }
@@ -201,12 +216,8 @@ fn matches_filter(event: &Event, filter: &MonthFilter) -> bool {
     let now = Local::now().naive_local();
     let (ev_year, ev_month) = (event.start.year(), event.start.month());
     match filter {
-        MonthFilter::All => {
-            (ev_year, ev_month) <= (now.year(), now.month())
-        }
-        MonthFilter::Current => {
-            ev_year == now.year() && ev_month == now.month()
-        }
+        MonthFilter::All => (ev_year, ev_month) <= (now.year(), now.month()),
+        MonthFilter::Current => ev_year == now.year() && ev_month == now.month(),
         MonthFilter::Previous => {
             let (y, m) = if now.month() == 1 {
                 (now.year() - 1, 12)
@@ -220,9 +231,11 @@ fn matches_filter(event: &Event, filter: &MonthFilter) -> bool {
 
 fn extract_person(summary: &str) -> Option<&str> {
     let start = summary.rfind('[')?;
-    let end = summary.rfind(']')?;
-    if end > start + 1 {
-        Some(&summary[start + 1..end])
+    let end = summary.find(']').filter(|&e| e > start)?;
+    let inner = &summary[start + 1..end];
+    // Validate: not empty and not just whitespace
+    if !inner.is_empty() && !inner.trim().is_empty() {
+        Some(inner)
     } else {
         None
     }
@@ -248,10 +261,13 @@ fn main() {
 
     let mut all_raw_events = Vec::new();
     for path in &args.files {
-        let file = File::open(path).unwrap_or_else(|e| {
-            eprintln!("Error opening {}: {}", path.display(), e);
-            std::process::exit(1);
-        });
+        let file = match File::open(path) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("Error opening {}: {}", path.display(), e);
+                continue;
+            }
+        };
 
         let reader = BufReader::new(file);
         let parser = IcalParser::new(reader);
@@ -290,8 +306,8 @@ fn main() {
     let mut grand_total_minutes: i64 = 0;
 
     for ((year, month), events) in &by_month {
-        let month_name = chrono::Month::try_from(u8::try_from(*month).unwrap())
-            .unwrap()
+        let month_name = chrono::Month::try_from(u8::try_from(*month).unwrap_or(1))
+            .unwrap_or_else(|_| chrono::Month::January)
             .name();
         println!("\n--- {} {} ---", month_name, year);
 
@@ -317,7 +333,7 @@ fn main() {
         grand_total_minutes += month_minutes;
     }
 
-    if by_month.len() > 1 {
+    if grand_total_minutes > 0 && by_month.len() > 1 {
         println!("\n=== Grand Total: {} ===", format_hours(grand_total_minutes));
     }
 
@@ -325,9 +341,7 @@ fn main() {
     let mut by_person: BTreeMap<&str, i64> = BTreeMap::new();
     for event in &filtered {
         let mins = (event.end - event.start).num_minutes();
-        if mins <= 0 {
-            continue;
-        }
+        debug_assert!(mins > 0, "Event with non-positive duration should have been filtered");
         let person = extract_person(&event.summary).unwrap_or("(unknown)");
         *by_person.entry(person).or_default() += mins;
     }
