@@ -1,0 +1,9 @@
+[package]
+name = "proton-extractor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ical = "0.11"
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
