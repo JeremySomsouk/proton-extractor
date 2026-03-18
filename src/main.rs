@@ -7,6 +7,8 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug, Clone, ValueEnum)]
 enum MonthFilter {
     Current,
@@ -15,7 +17,7 @@ enum MonthFilter {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "proton-extractor", about = "Sum calendar event hours from ICS files")]
+#[command(name = "proton-extractor", about = "Sum calendar event hours from ICS files", version = VERSION)]
 struct Args {
     /// Paths to .ics files
     files: Vec<PathBuf>,
