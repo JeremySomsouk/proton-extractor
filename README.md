@@ -1,83 +1,135 @@
-# proton-extractor
+# 🦀 Proton Extractor
 
-CLI tool to sum calendar event hours from Proton Calendar `.ics` exports.
+> **Track your time without the spreadsheet. Extract hours from Proton Calendar exports.**
 
-Parses one or more ICS files, groups events by month, and displays per-event durations with monthly and grand totals. Supports recurring events with safety limits to prevent unbounded expansion.
+CLI tool that parses Proton Calendar `.ics` exports and generates clean, readable time reports — grouped by month, person, and event type.
 
-## Install
+![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)
+![macOS](https://img.shields.io/badge/macOS-native-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-```bash
-cargo install --path .
+## ⚡ What It Does
+
+```
+$ proton-extractor ~/Downloads/calendar-2026-*.ics
+
+--- February 2026 ---
+  2h 30m  Childcare [Lulu]
+  2h 30m  Childcare [Jeremy]
+  4h      Meeting & Signature [Client]
+  ------
+  9h      Lulu
+  9h      Jeremy
+  18h     TOTAL
+
+=== Grand Total: 47h ===
+=== Hours per person ===
+  22h 30m  Lulu
+  24h 30m  Jeremy
 ```
 
-## Usage
+No exports. No spreadsheets. No manual counting.
+
+## 🚀 Quick Start
 
 ```bash
-# Single file
-proton-extractor calendar.ics
+# Install
+cargo install --git https://github.com/JeremySomsouk/proton-extractor
 
-# Multiple files (e.g. all .ics in Downloads)
-proton-extractor ~/Downloads/*.ics
+# Run on your Proton Calendar exports
+proton-extractor ~/Downloads/calendar.ics
 
-# Filter to current month only
+# Filter to current month
 proton-extractor ~/Downloads/*.ics -m current
 
-# Filter to previous month
+# Previous month only
 proton-extractor ~/Downloads/*.ics -m previous
 ```
 
-### Options
+## 💡 Features
 
-| Flag | Values | Default | Description |
-|------|--------|---------|-------------|
-| `-m, --month` | `all`, `current`, `previous` | `all` | Filter events by month |
+### 📅 Smart Parsing
+- Parses standard `.ics` files from Proton Calendar exports
+- Extracts **person names** from `[PersonName]` in event titles
+- Handles **recurring events** (RRULE) with 5-year look-ahead
+- Respects **exclusion dates** (EXDATE)
+- Skips zero/negative duration events automatically
 
-## Example output
+### 📊 Time Reports
+- **Per-month breakdown** with event details
+- **Per-person totals** — see who's working on what
+- **Grand totals** across all files
+- **Multiple files** supported — glob patterns work
+
+### 🎯 Use Cases
 
 ```
---- January 2026 ---
-  1h 30m  Meeting & signature [Person A]
-  2h      Childcare [Person A]
-  2h      Childcare [Person A]
-  2h      Childcare [Person B]
-  2h      Childcare [Person B]
-  2h      Childcare [Person A]
-  2h      Childcare [Person A]
-  2h      Childcare [Person B]
-  2h      Childcare [Person B]
-  ------
-  8h      Person B
-  9h 30m  Person A
-  17h 30m  TOTAL
+# Freelancers: Track client time
+proton-extractor client-calendar.ics
+
+# Babysitter: Log hours for parents
+proton-extractor babysitter-calendar.ics -m previous
+
+# Families: Split childcare between parents
+proton-extractor ~/Downloads/*-calendar.ics
+```
+
+## ⚙️ Usage
+
+| Flag | Values | Description |
+|------|--------|-------------|
+| `-m, --month` | `all`, `current`, `previous` | Filter by month |
+
+### Event Format
+
+Proton Extractor looks for person names in brackets:
+
+```
+✅ "Meeting with [Alice] at 2pm"     → Person: Alice
+✅ "Childcare [Jeremy]"               → Person: Jeremy  
+✅ "Stand-up"                        → Person: (none)
+```
+
+**Tip:** Use Proton Calendar's description field to tag events with person names in brackets.
+
+## 🛠️ Installation
+
+### From Source
+```bash
+git clone git@github.com:JeremySomsouk/proton-extractor.git
+cd proton-extractor
+cargo install --path .
+```
+
+### Requirements
+- Rust 1.70+
+- Proton Calendar export (`.ics` file)
+
+## 📝 Example Output
+
+```
+$ proton-extractor babysitter-feb.ics -m february
 
 --- February 2026 ---
-  2h 30m  Childcare [Person A]
-  2h 30m  Childcare [Person A]
-  2h 30m  Childcare [Person B]
-  2h 30m  Childcare [Person A]
-  2h 30m  Childcare [Person A]
-  4h      Childcare [Person B]
-  2h 30m  Childcare [Person B]
-  2h 30m  Childcare [Person A]
-  2h 30m  Childcare [Person A]
-  3h      Childcare [Person B]
-  2h 30m  Childcare [Person B]
+  4h 00m  BabySitting [Emma]
+  3h 00m  BabySitting [Lucas]
+  2h 30m  BabySitting [Emma]
+  3h 30m  BabySitting [Lucas]
   ------
-  14h 30m  Person B
-  15h     Person A
-  29h 30m  TOTAL
+  7h 30m  Emma
+  6h 30m  Lucas
+  ------
+  14h 00m  TOTAL
 
-=== Grand Total: 47h ===
-
-=== Hours per person ===
-  22h 30m  Person B
-  24h 30m  Person A
+=== Grand Total: 14h ===
 ```
 
-## Features
+Event titles with `[Name]` format extract person hours automatically.
 
-- **Recurring events**: Expands RRULE-based events (DAILY, WEEKLY) with a 5-year look-ahead limit
-- **Person extraction**: Parses `[PersonName]` from event summaries
-- **EXDATE handling**: Respects exclusion dates in recurring events
-- **Event filtering**: Skips events with invalid (zero or negative) durations
-- **Multiple files**: Process several ICS files at once, gracefully skips unreadable files
+## 🤝 Contributing
+
+Open issues or PRs welcome.
+
+## License
+
+MIT
