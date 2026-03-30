@@ -430,6 +430,14 @@ fn format_hours(total_minutes: i64) -> String {
     }
 }
 
+fn format_percentage(part: i64, total: i64) -> String {
+    if total == 0 || part == 0 {
+        return "0.0%".to_string();
+    }
+    let pct = (part as f64 / total as f64) * 100.0;
+    format!("{:.1}%", pct)
+}
+
 fn main() -> io::Result<()> {
     let args = Args::parse();
 
@@ -654,7 +662,7 @@ fn main() -> io::Result<()> {
             if !by_person.is_empty() {
                 println!("\n=== Hours per person ===");
                 for (person, mins) in &by_person {
-                    println!("  {:6}  {}", format_hours(*mins), person);
+                    println!("  {:6}  {:>6}  {}", format_hours(*mins), format_percentage(*mins, grand_total_minutes), person);
                 }
             }
         }
@@ -706,10 +714,10 @@ fn main() -> io::Result<()> {
 
             if !by_person.is_empty() {
                 println!("## Hours per Person\n");
-                println!("| Hours | Person |");
-                println!("|-------|--------|");
+                println!("| Hours | % | Person |");
+                println!("|-------|-------|--------|");
                 for (person, mins) in &by_person {
-                    println!("| {} | {} |", format_hours(*mins), person);
+                    println!("| {} | {} | {} |", format_hours(*mins), format_percentage(*mins, grand_total_minutes), person);
                 }
             }
         }
@@ -755,6 +763,17 @@ mod tests {
         assert_eq!(format_hours(90), "1h 30m");
         assert_eq!(format_hours(45), "0h 45m");
         assert_eq!(format_hours(150), "2h 30m");
+    }
+
+    #[test]
+    fn test_format_percentage() {
+        assert_eq!(format_percentage(30, 100), "30.0%");
+        assert_eq!(format_percentage(25, 100), "25.0%");
+        assert_eq!(format_percentage(50, 100), "50.0%");
+        assert_eq!(format_percentage(10, 1000), "1.0%");
+        assert_eq!(format_percentage(333, 1000), "33.3%");
+        assert_eq!(format_percentage(0, 100), "0.0%");
+        assert_eq!(format_percentage(100, 0), "0.0%"); // avoid division by zero
     }
 
     #[test]
