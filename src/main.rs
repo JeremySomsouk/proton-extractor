@@ -24,6 +24,7 @@ enum OutputFormat {
     Json,
     Csv,
     Markdown,
+    Ical,
 }
 
 #[derive(Parser, Debug)]
@@ -563,6 +564,7 @@ fn main() -> io::Result<()> {
     for path in &args.files {
         if let Err(e) = validate_ics_file(path) {
             eprintln!("Error: {}", e);
+            std::process::exit(1);
         }
     }
 
@@ -715,6 +717,27 @@ fn main() -> io::Result<()> {
                 months: months_json,
             };
             println!("{}", serde_json::to_string_pretty(&output).unwrap_or_else(|_| "{}".to_string()));
+        }
+        OutputFormat::Ical => {
+            println!("BEGIN:VCALENDAR");
+            println!("VERSION:2.0");
+            println!("PRODID:-//proton-extractor//EN");
+            for event in &filtered {
+                println!("BEGIN:VEVENT");
+                println!("UID:{}@proton-extractor", event.start.and_utc().timestamp());
+                println!("DTSTAMP:{}", event.start.format("%Y%m%dT%H%M%S"));
+                println!("DTSTART:{}", event.start.format("%Y%m%dT%H%M%S"));
+                println!("DTEND:{}", event.end.format("%Y%m%dT%H%M%S"));
+                // Escape summary for iCal format
+                let summary_escaped = event.summary
+                    .replace("\\", "\\\\")
+                    .replace(";", "\\;")
+                    .replace(",", "\\,")
+                    .replace("\n", "\\n");
+                println!("SUMMARY:{}", summary_escaped);
+                println!("END:VEVENT");
+            }
+            println!("END:VCALENDAR");
         }
         OutputFormat::Text | OutputFormat::Markdown => {
             // Build per-person summary across all events
