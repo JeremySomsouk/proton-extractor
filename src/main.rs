@@ -6,7 +6,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -82,7 +82,7 @@ fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::
     Ok(())
 }
 
-fn validate_ics_file(path: &PathBuf) -> io::Result<()> {
+fn validate_ics_file(path: &Path) -> io::Result<()> {
     let extension = path
         .extension()
         .and_then(|e| e.to_str())
@@ -210,8 +210,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
     let mut base_events: Vec<RawEvent> = Vec::new();
 
     for event in raw_events {
-        if event.recurrence_id.is_some() {
-            let rid = event.recurrence_id.unwrap();
+        if let Some(rid) = event.recurrence_id {
             overrides.insert((event.uid.clone(), rid.date()));
             override_events.push(event);
         } else {
@@ -364,7 +363,7 @@ struct MonthSummary {
 impl MonthSummary {
     fn new(year: i32, month: u32, events: Vec<Event>) -> Self {
         let month_name = chrono::Month::try_from(u8::try_from(month).unwrap_or(1))
-            .unwrap_or_else(|_| chrono::Month::January)
+            .unwrap_or(chrono::Month::January)
             .name()
             .to_string();
         let _ = year; // used in debug assertions if any
@@ -645,7 +644,7 @@ fn main() -> io::Result<()> {
     match args.format {
         OutputFormat::Csv => {
             let mut wtr = csv::Writer::from_writer(std::io::stdout());
-            wtr.write_record(&["date", "start", "end", "duration_minutes", "person", "summary"])
+            wtr.write_record(["date", "start", "end", "duration_minutes", "person", "summary"])
                 .ok();
             for event in &filtered {
                 let mins = match event_duration_minutes(event) {
