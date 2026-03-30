@@ -154,7 +154,31 @@ struct RawEvent {
 }
 
 fn parse_ical_datetime(value: &str) -> Option<NaiveDateTime> {
-    let clean = value.trim_end_matches('Z');
+    // Handle UTC suffix
+    let value = value.trim_end_matches('Z');
+    
+    // Handle UTC offset suffix (e.g., +0530, -0800, +00:00)
+    let (clean, _offset_minutes) = if let Some(idx) = value.rfind(|c: char| c == '+' || c == '-') {
+        if idx > 0 {
+            let offset_str = &value[idx + 1..];
+            // Only process if offset looks valid (4 or 5 digits like 0530 or +05:30)
+            if offset_str.len() >= 4 {
+                let offset_clean = offset_str.replace(':', "");
+                if offset_clean.chars().all(|c| c.is_ascii_digit()) {
+                    let sign = if value.chars().nth(idx) == Some('-') { -1 } else { 1 };
+                    let offset_hhmm = offset_clean[..4].parse::<i32>().ok()?;
+                    let offset_mins = sign * ((offset_hhmm / 100) * 60 + (offset_hhmm % 100));
+                    return NaiveDateTime::parse_from_str(&value[..idx], "%Y%m%dT%H%M%S")
+                        .ok()
+                        .map(|dt| dt - Duration::minutes(offset_mins.into()));
+                }
+            }
+        }
+        (value, 0)
+    } else {
+        (value, 0)
+    };
+    
     NaiveDateTime::parse_from_str(clean, "%Y%m%dT%H%M%S")
         .or_else(|_| {
             NaiveDate::parse_from_str(clean, "%Y%m%d")
@@ -1052,6 +1076,37 @@ mod tests {
         let dt = parse_ical_datetime("20240315");
         assert!(dt.is_some());
         assert_eq!(dt.unwrap().hour(), 0);
+    }
+
+    #[test]
+    fn test_parse_ical_datetime_with_utc_offset() {
+        // UTC+0530 offset: 9:00 local = 3:30 UTC
+        let dt = parse_ical_datetime("20240315T090000+0530");
+        assert!(dt.is_some());
+        let dt = dt.unwrap();
+        assert_eq!(dt.hour(), 3);
+        assert_eq!(dt.minute(), 30);
+
+        // UTC-0800 offset: 9:00 local = 17:00 UTC
+        let dt = parse_ical_datetime("20240315T090000-0800");
+        assert!(dt.is_some());
+        let dt = dt.unwrap();
+        assert_eq!(dt.hour(), 17);
+        assert_eq!(dt.minute(), 0);
+
+        // UTC+00:00 offset format with colon
+        let dt = parse_ical_datetime("20240315T090000+0000");
+        assert!(dt.is_some());
+        let dt = dt.unwrap();
+        assert_eq!(dt.hour(), 9);
+        assert_eq!(dt.minute(), 0);
+
+        // Negative offset with colon: 10:00-0500 = 15:00 UTC
+        let dt = parse_ical_datetime("20240315T100000-0500");
+        assert!(dt.is_some());
+        let dt = dt.unwrap();
+        assert_eq!(dt.hour(), 15);
+        assert_eq!(dt.minute(), 0);
     }
 
     #[test]
