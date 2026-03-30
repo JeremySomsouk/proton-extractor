@@ -22,6 +22,7 @@ enum OutputFormat {
     Text,
     Json,
     Csv,
+    Markdown,
 }
 
 #[derive(Parser, Debug)]
@@ -41,6 +42,10 @@ struct Args {
     /// Output format
     #[arg(short, long, value_enum, default_value = "text")]
     format: OutputFormat,
+
+    /// Exclude events matching this person name (case-insensitive, can be repeated)
+    #[arg(long)]
+    exclude_person: Vec<String>,
 
     /// Filter by person name (case-insensitive)
     #[arg(long)]
@@ -284,6 +289,14 @@ fn matches_person_filter(event: &Event, person_filter: &Option<String>) -> bool 
         .unwrap_or(false)
 }
 
+fn matches_exclude_filter(event: &Event, exclude_filters: &[String]) -> bool {
+    let Some(person) = extract_person(&event.summary) else {
+        return true;
+    };
+    let person_lower = person.to_lowercase();
+    !exclude_filters.iter().any(|f| person_lower.contains(&f.to_lowercase()))
+}
+
 fn matches_date_range(event: &Event, from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> bool {
     let event_date = event.start.date();
     if let Some(from_date) = from {
@@ -358,6 +371,9 @@ fn main() -> io::Result<()> {
         if let Some(ref p) = args.person {
             eprintln!("[verbose] Filtering by person: {}", p);
         }
+        if !args.exclude_person.is_empty() {
+            eprintln!("[verbose] Excluding persons: {:?}", args.exclude_person);
+        }
         if let Some(ref f) = args.from {
             eprintln!("[verbose] From date: {}", f);
         }
@@ -419,6 +435,7 @@ fn main() -> io::Result<()> {
         .iter()
         .filter(|e| matches_filter(e, &args.month))
         .filter(|e| matches_person_filter(e, &args.person))
+        .filter(|e| matches_exclude_filter(e, &args.exclude_person))
         .filter(|e| matches_date_range(e, &args.from, &args.to))
         .collect();
 
@@ -574,6 +591,61 @@ fn main() -> io::Result<()> {
                 }
             }
         }
+        OutputFormat::Markdown => {
+            println!("# Calendar Hours Report\n");
+
+            for ((year, month), events) in &by_month {
+                let month_name = chrono::Month::try_from(u8::try_from(*month).unwrap_or(1))
+                    .unwrap_or_else(|_| chrono::Month::January)
+                    .name();
+
+                let mut month_minutes: i64 = 0;
+                let mut month_by_person: BTreeMap<&str, i64> = BTreeMap::new();
+
+                for event in events {
+                    let duration = event.end - event.start;
+                    let mins = duration.num_minutes();
+                    if mins <= 0 {
+                        continue;
+                    }
+                    month_minutes += mins;
+                    let person = extract_person(&event.summary).unwrap_or("(unknown)");
+                    *month_by_person.entry(person).or_default() += mins;
+                }
+
+                println!("## {} {}\n", month_name, year);
+                println!("| Hours | Person |");
+                println!("|-------|--------|");
+                for (person, mins) in &month_by_person {
+                    println!("| {} | {} |", format_hours(*mins), person);
+                }
+                println!("| **{}** | **TOTAL** |", format_hours(month_minutes));
+                println!();
+                grand_total_minutes += month_minutes;
+            }
+
+            if grand_total_minutes > 0 && by_month.len() > 1 {
+                println!("---\n\n**Grand Total: {}**\n", format_hours(grand_total_minutes));
+            }
+
+            // Per-person summary across all months
+            let mut by_person: BTreeMap<&str, i64> = BTreeMap::new();
+            for event in &filtered {
+                let mins = (event.end - event.start).num_minutes();
+                debug_assert!(mins > 0, "Event with non-positive duration should have been filtered");
+                let person = extract_person(&event.summary).unwrap_or("(unknown)");
+                *by_person.entry(person).or_default() += mins;
+            }
+
+            if !by_person.is_empty() {
+                println!("## Hours per Person\n");
+                println!("| Hours | Person |");
+                println!("|-------|--------|");
+                for (person, mins) in &by_person {
+                    println!("| {} | {} |", format_hours(*mins), person);
+                }
+            }
+        }
     }
 
     Ok(())
@@ -693,5 +765,35 @@ mod tests {
         let to = NaiveDate::from_ymd_opt(2024, 3, 1).unwrap();
         let result = validate_date_range(&Some(from), &Some(to));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_matches_exclude_filter() {
+        let event = Event::new(
+            "Meeting with [John Doe]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+
+        // Empty exclude list should include
+        assert!(matches_exclude_filter(&event, &[]));
+
+        // Excluding different person should include
+        assert!(matches_exclude_filter(&event, &["Jane".to_string()]));
+
+        // Excluding matching person should exclude
+        assert!(!matches_exclude_filter(&event, &["John".to_string()]));
+        assert!(!matches_exclude_filter(&event, &["john".to_string()])); // case insensitive
+
+        // Multiple exclude filters
+        assert!(!matches_exclude_filter(&event, &["Jane".to_string(), "John".to_string()]));
+
+        // No person in event should be included
+        let event_no_person = Event::new(
+            "Regular meeting".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        assert!(matches_exclude_filter(&event_no_person, &["anything".to_string()]));
     }
 }
