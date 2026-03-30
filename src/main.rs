@@ -101,7 +101,7 @@ fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::
 
 fn validate_month(month: Option<u32>) -> io::Result<()> {
     if let Some(m) = month {
-        if m < 1 || m > 12 {
+        if !(1..=12).contains(&m) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("--month must be between 1 and 12, got {}", m),
@@ -158,7 +158,7 @@ fn parse_ical_datetime(value: &str) -> Option<NaiveDateTime> {
     let value = value.trim_end_matches('Z');
     
     // Handle UTC offset suffix (e.g., +0530, -0800, +00:00)
-    let (clean, _offset_minutes) = if let Some(idx) = value.rfind(|c: char| c == '+' || c == '-') {
+    let (clean, _offset_minutes) = if let Some(idx) = value.rfind(|c| ['+', '-'].contains(&c)) {
         if idx > 0 {
             let offset_str = &value[idx + 1..];
             // Only process if offset looks valid (4 or 5 digits like 0530 or +05:30)
@@ -238,7 +238,9 @@ fn parse_duration(duration: &str) -> Option<Duration> {
     Some(Duration::days(days) + Duration::weeks(weeks) + Duration::hours(hours) + Duration::minutes(minutes))
 }
 
-fn parse_rrule(rrule: &str) -> Option<(String, NaiveDateTime, Option<Vec<String>>, Option<i32>, Option<i32>)> {
+type RRuleParseResult = (String, NaiveDateTime, Option<Vec<String>>, Option<i32>, Option<i32>);
+
+fn parse_rrule(rrule: &str) -> Option<RRuleParseResult> {
     let mut freq = None;
     let mut until = None;
     let mut byday = None;
@@ -257,7 +259,11 @@ fn parse_rrule(rrule: &str) -> Option<(String, NaiveDateTime, Option<Vec<String>
             count = v.parse().ok().filter(|&c| c > 0);
         }
     }
-    let default_until = NaiveDate::from_ymd_opt(2099, 12, 31).unwrap().and_hms_opt(23, 59, 59).unwrap();
+    // Use a far-future datetime as default (guaranteed valid since year 2099 is always valid)
+    let default_until = NaiveDate::from_ymd_opt(2099, 12, 31)
+        .expect("Date 2099-12-31 should always be valid")
+        .and_hms_opt(23, 59, 59)
+        .expect("Time 23:59:59 should always be valid");
     Some((freq?, until.unwrap_or(default_until), byday, interval, count))
 }
 
@@ -360,7 +366,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     let date = current.date();
                     
                     // BYDAY filter: only include if no BYDAY specified or date matches one of the days
-                    let include_byday = byday.as_ref().map_or(true, |days| {
+                    let include_byday = byday.as_ref().is_none_or(|days| {
                         days.iter().any(|d| {
                             day_to_weekday(d)
                                 .map(|wd| date.weekday().num_days_from_monday() + 1 == wd)
