@@ -102,6 +102,10 @@ struct Args {
     /// Preview mode: show event count without processing output
     #[arg(long)]
     dry_run: bool,
+
+    /// Filter by day of week: MO,TU,WE,TH,FR,SA,SU (can be repeated, e.g., --weekdays MO --weekdays WE)
+    #[arg(long, value_delimiter = ',', value_name = "DAYS")]
+    weekdays: Option<Vec<String>>,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -680,6 +684,30 @@ fn matches_month_filter(event: &Event, month: &Option<u32>) -> bool {
     }
 }
 
+// Map day abbreviation to weekday number (Monday = 1)
+fn weekday_abbrev_to_num(day: &str) -> Option<u32> {
+    match day.to_uppercase().as_str() {
+        "MO" => Some(1),
+        "TU" => Some(2),
+        "WE" => Some(3),
+        "TH" => Some(4),
+        "FR" => Some(5),
+        "SA" => Some(6),
+        "SU" => Some(7),
+        _ => None,
+    }
+}
+
+fn matches_weekday_filter(event: &Event, weekdays: &[String]) -> bool {
+    if weekdays.is_empty() {
+        return true;
+    }
+    let event_weekday = event.start.weekday().num_days_from_monday() + 1;
+    weekdays.iter().any(|day| {
+        weekday_abbrev_to_num(day).map(|wd| wd == event_weekday).unwrap_or(false)
+    })
+}
+
 // JSON serialization structures
 #[derive(Serialize)]
 struct JsonEvent {
@@ -811,6 +839,9 @@ fn main() -> io::Result<()> {
         if let Some(ref y) = args.year {
             eprintln!("[verbose] Filter by year: {}", y);
         }
+        if let Some(ref wd) = args.weekdays {
+            eprintln!("[verbose] Filter by weekdays: {:?}", wd);
+        }
     }
 
     if args.files.is_empty() {
@@ -878,6 +909,7 @@ fn main() -> io::Result<()> {
     };
     let mut out_writer = out_writer;
 
+    let weekdays_filter = args.weekdays.unwrap_or_default();
     let filtered: Vec<&Event> = all_events
         .iter()
         .filter(|e| matches_filter(e, &args.date))
@@ -888,6 +920,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_date_range(e, &args.from, &args.to))
         .filter(|e| matches_year_filter(e, &args.year))
         .filter(|e| matches_month_filter(e, &args.month))
+        .filter(|e| matches_weekday_filter(e, &weekdays_filter))
         .collect();
 
     if args.verbose {
@@ -1851,5 +1884,60 @@ mod tests {
         // Verify ISO year at year boundary
         let date = NaiveDate::from_ymd_opt(2024, 12, 30).unwrap();
         assert_eq!(date.iso_week().year(), 2025); // ISO year is 2025
+    }
+
+    #[test]
+    fn test_weekday_abbrev_to_num() {
+        assert_eq!(weekday_abbrev_to_num("MO"), Some(1));
+        assert_eq!(weekday_abbrev_to_num("TU"), Some(2));
+        assert_eq!(weekday_abbrev_to_num("WE"), Some(3));
+        assert_eq!(weekday_abbrev_to_num("TH"), Some(4));
+        assert_eq!(weekday_abbrev_to_num("FR"), Some(5));
+        assert_eq!(weekday_abbrev_to_num("SA"), Some(6));
+        assert_eq!(weekday_abbrev_to_num("SU"), Some(7));
+        // Case insensitive
+        assert_eq!(weekday_abbrev_to_num("mo"), Some(1));
+        assert_eq!(weekday_abbrev_to_num("MO"), Some(1));
+        // Only 2-letter abbreviations accepted
+        assert_eq!(weekday_abbrev_to_num("Mon"), None);
+        assert_eq!(weekday_abbrev_to_num("XX"), None);
+        assert_eq!(weekday_abbrev_to_num(""), None);
+    }
+
+    #[test]
+    fn test_matches_weekday_filter() {
+        // Wednesday March 6, 2024
+        let wednesday = Event::new(
+            "Wednesday meeting [Alice]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 6).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 6).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        // Friday March 8, 2024
+        let friday = Event::new(
+            "Friday meeting [Bob]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 8).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 8).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+
+        // Empty filter includes all
+        assert!(matches_weekday_filter(&wednesday, &[]));
+        assert!(matches_weekday_filter(&friday, &[]));
+
+        // Single day filter
+        assert!(matches_weekday_filter(&wednesday, &["WE".to_string()]));
+        assert!(!matches_weekday_filter(&friday, &["WE".to_string()]));
+
+        // Multiple days filter (OR logic)
+        assert!(matches_weekday_filter(&wednesday, &["MO".to_string(), "WE".to_string(), "FR".to_string()]));
+        assert!(matches_weekday_filter(&friday, &["MO".to_string(), "WE".to_string(), "FR".to_string()]));
+
+        // Case insensitive filter
+        assert!(matches_weekday_filter(&wednesday, &["we".to_string()]));
+
+        // Invalid weekday in filter is skipped (valid ones still work)
+        assert!(matches_weekday_filter(&wednesday, &["WE".to_string(), "XX".to_string()]));
+        // But XX alone doesn't match anyone
+        assert!(!matches_weekday_filter(&wednesday, &["XX".to_string()]));
+        assert!(!matches_weekday_filter(&friday, &["XX".to_string()]));
     }
 }
