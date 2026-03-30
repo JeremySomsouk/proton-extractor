@@ -161,6 +161,10 @@ struct Args {
     /// Enable compact JSON output (no pretty-printing)
     #[arg(long, requires = "format")]
     compact: bool,
+
+    /// Show statistics about events (count, avg/day, top person, busiest day)
+    #[arg(long)]
+    stats: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -1088,7 +1092,73 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
-    let grand_total_minutes: i64 = grouped.values().map(|m| m.total_minutes()).sum();
+    let grand_total_minutes: i64 = filtered.iter()
+        .filter_map(|e| event_duration_minutes(e))
+        .sum();
+
+    // Show statistics if --stats is requested
+    if args.stats {
+        let total_events = filtered.len();
+        let total_mins = grand_total_minutes;
+
+        // Events per person
+        let mut by_person: BTreeMap<&str, i64> = BTreeMap::new();
+        for event in &filtered {
+            let mins = event_duration_minutes(event).unwrap_or(0);
+            let person = extract_person(&event.summary).unwrap_or("(unknown)");
+            *by_person.entry(person).or_default() += mins;
+        }
+
+        // Events per day of week
+        let mut by_weekday: BTreeMap<&str, i64> = BTreeMap::new();
+        let weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        for event in &filtered {
+            let mins = event_duration_minutes(event).unwrap_or(0);
+            let wd = event.start.weekday().num_days_from_monday() as usize;
+            let name = weekday_names.get(wd).unwrap_or(&"Unknown");
+            *by_weekday.entry(name).or_default() += mins;
+        }
+
+        // Date range
+        let dates: Vec<_> = filtered.iter().map(|e| e.start.date()).collect();
+        let min_date = dates.iter().min();
+        let max_date = dates.iter().max();
+
+        writeln!(out_writer, "📊 Statistics")?;
+        writeln!(out_writer, "{}", colored(color::CYAN, "============"))?;
+        writeln!(out_writer)?;
+        writeln!(out_writer, "Total events:  {}", colored(color::YELLOW, total_events.to_string()))?;
+        writeln!(out_writer, "Total hours:    {}", colored(color::YELLOW, format_hours(total_mins)))?;
+        if let (Some(min_d), Some(max_d)) = (min_date, max_date) {
+            let days_span = (*max_d - *min_d).num_days() + 1;
+            let avg_per_day = if days_span > 0 { total_mins / days_span as i64 } else { total_mins };
+            writeln!(out_writer, "Date range:     {} to {} ({} days)", min_d, max_d, days_span)?;
+            writeln!(out_writer, "Avg per day:    {}", colored(color::YELLOW, format_hours(avg_per_day)))?;
+        }
+
+        writeln!(out_writer)?;
+        writeln!(out_writer, "{}", colored(color::CYAN, "By Person"))?;
+        writeln!(out_writer, "{}", colored(color::CYAN, "--------"))?;
+        if !by_person.is_empty() {
+            let top_person = by_person.iter().max_by_key(|(_, v)| *v);
+            for (person, mins) in &by_person {
+                let marker = if Some((person, mins)) == top_person { " 🏆" } else { "" };
+                let pct = format_percentage(*mins, total_mins);
+                writeln!(out_writer, "  {}  {:>6}  ({}){}", colored(color::YELLOW, format_hours(*mins)), colored(color::MAGENTA, pct), person, marker)?;
+            }
+        } else {
+            writeln!(out_writer, "  (no person data)")?;
+        }
+
+        writeln!(out_writer)?;
+        writeln!(out_writer, "{}", colored(color::CYAN, "By Weekday"))?;
+        writeln!(out_writer, "{}", colored(color::CYAN, "------------"))?;
+        for (day, mins) in &by_weekday {
+            writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(*mins)), day)?;
+        }
+
+        return Ok(());
+    }
 
     match args.format {
         OutputFormat::Csv => {
