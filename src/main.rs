@@ -1345,7 +1345,7 @@ fn main() -> io::Result<()> {
                     writeln!(out_writer)?;
                 }
 
-                writeln!(out_writer, "### {} By Person", "👤")?;
+                writeln!(out_writer, "### 👤 By Person")?;
                 writeln!(out_writer)?;
                 writeln!(out_writer, "| Person | Hours | % |")?;
                 writeln!(out_writer, "|--------|-------|---|")?;
