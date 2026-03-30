@@ -165,6 +165,10 @@ struct Args {
     /// Show statistics about events (count, avg/day, top person, busiest day)
     #[arg(long)]
     stats: bool,
+
+    /// Reverse chronological order (newest first)
+    #[arg(long)]
+    reverse: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -1022,6 +1026,15 @@ fn main() -> io::Result<()> {
     if args.verbose {
         eprintln!("[verbose] Events after filtering: {}", filtered.len());
     }
+
+    // Apply reverse order if requested
+    let filtered: Vec<&Event> = if args.reverse {
+        let mut rev = filtered;
+        rev.reverse();
+        rev
+    } else {
+        filtered
+    };
 
     if filtered.is_empty() {
         println!("No events found for the selected period.");
