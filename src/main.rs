@@ -70,6 +70,7 @@ enum DateFilter {
     Yesterday,
     Tomorrow,
     Week,
+    LastWeek,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -251,6 +252,10 @@ struct Args {
     /// Quick filter: show only this week's events (Monday to Sunday)
     #[arg(long)]
     weekly: bool,
+
+    /// Quick filter: show only last week's events (Monday to Sunday)
+    #[arg(long)]
+    last_week: bool,
 
     /// Filter out events shorter than this duration (e.g., "30m", "1h", "2h30m")
     #[arg(long)]
@@ -846,6 +851,12 @@ fn group_by_person<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>>
 
 fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yesterday: &NaiveDateTime, tomorrow: &NaiveDateTime) -> bool {
     let (ev_year, ev_month, ev_day) = (event.start.year(), event.start.month(), event.start.day());
+    
+    // Compute last week dates internally
+    let days_since_monday = now.weekday().num_days_from_monday();
+    let last_week_monday = now.date() - Duration::weeks(1) - Duration::days(days_since_monday as i64);
+    let last_week_sunday = last_week_monday + Duration::days(6);
+    
     match filter {
         DateFilter::All => true, // Show all events regardless of date
         DateFilter::Current => ev_year == now.year() && ev_month == now.month(),
@@ -880,6 +891,11 @@ fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yeste
             let now_week = now_iso_week.week();
 
             ev_iso_year == now_iso_year && ev_week == now_week
+        }
+        DateFilter::LastWeek => {
+            // Events from last week (Monday to Sunday)
+            let ev_date = NaiveDate::from_ymd_opt(ev_year, ev_month, ev_day).unwrap_or_default();
+            ev_date >= last_week_monday && ev_date <= last_week_sunday
         }
     }
 }
@@ -1434,6 +1450,8 @@ fn main() -> io::Result<()> {
         DateFilter::Tomorrow
     } else if args.weekly {
         DateFilter::Week
+    } else if args.last_week {
+        DateFilter::LastWeek
     } else {
         args.date.clone()
     };
