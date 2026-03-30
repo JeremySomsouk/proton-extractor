@@ -643,8 +643,8 @@ fn main() -> io::Result<()> {
 
     let grouped: BTreeMap<(i32, u32), MonthSummary> = group_by_month(&filtered);
 
-    if filtered.is_empty() {
-        println!("No events found for the selected period.");
+    if grouped.is_empty() {
+        eprintln!("No events found for the selected period.");
         return Ok(());
     }
 
