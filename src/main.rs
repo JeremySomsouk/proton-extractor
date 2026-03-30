@@ -408,6 +408,8 @@ struct JsonOutput {
     months: Vec<JsonMonthSummary>,
 }
 
+/// Extracts person name from event summary using [name] format.
+/// Returns the content inside brackets if found and not empty/whitespace.
 fn extract_person(summary: &str) -> Option<&str> {
     let start = summary.rfind('[')?;
     let end = summary.find(']').filter(|&e| e > start)?;
@@ -483,11 +485,13 @@ fn main() -> io::Result<()> {
         for calendar in parser {
             match calendar {
                 Ok(cal) => {
-                    let count = cal.events.len();
-                    if args.verbose {
-                        eprintln!("[verbose] Found {} events in {}", count, path.display());
+                    if args.verbose && !cal.events.is_empty() {
+                        eprintln!("[verbose] Found {} events in {}", cal.events.len(), path.display());
                     }
                     all_raw_events.extend(extract_raw_events(cal.events));
+                }
+                Err(_e) if args.quiet => {
+                    // Suppress parse errors in quiet mode
                 }
                 Err(e) => {
                     eprintln!("Warning: failed to parse {}: {}", path.display(), e);
