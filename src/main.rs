@@ -1,6 +1,5 @@
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveDateTime, Timelike};
 use clap::{CommandFactory, Parser, ValueEnum};
-use clap_complete;
 use ical::parser::ical::component::IcalEvent;
 use ical::IcalParser;
 use serde::Serialize;
@@ -1124,7 +1123,7 @@ fn main() -> io::Result<()> {
     if let Some(shell) = &args.generate_completion {
         let mut cmd = Args::command();
         let name = env!("CARGO_PKG_NAME");
-        clap_complete::generate(shell.clone(), &mut cmd, name, &mut std::io::stdout());
+        clap_complete::generate(*shell, &mut cmd, name, &mut std::io::stdout());
         return Ok(());
     }
 
