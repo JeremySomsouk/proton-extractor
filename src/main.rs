@@ -93,6 +93,8 @@ struct RawEvent {
     summary: String,
     start: NaiveDateTime,
     end: NaiveDateTime,
+    #[allow(dead_code)]
+    duration: Option<Duration>,
     uid: String,
     rrule: Option<String>,
     exdates: Vec<NaiveDate>,
@@ -107,6 +109,57 @@ fn parse_ical_datetime(value: &str) -> Option<NaiveDateTime> {
                 .map(|d| d.and_hms_opt(0, 0, 0).unwrap())
         })
         .ok()
+}
+
+fn parse_duration(duration: &str) -> Option<Duration> {
+    // Parse ISO 8601 duration format: P[n]D, P[n]W, PT[n]H, PT[n]M, etc.
+    let duration = duration.trim();
+    if duration.is_empty() || !duration.starts_with('P') {
+        return None;
+    }
+    
+    let mut days: i64 = 0;
+    let mut weeks: i64 = 0;
+    let mut hours: i64 = 0;
+    let mut minutes: i64 = 0;
+    
+    let mut num_str = String::new();
+    let mut has_unit = false;
+    let mut after_t = false;
+    
+    for ch in duration.chars().skip(1) { // Skip 'P'
+        match ch {
+            'D' => {
+                if let Ok(n) = num_str.parse() { days = n; has_unit = true; }
+                num_str.clear();
+            }
+            'W' => {
+                if let Ok(n) = num_str.parse() { weeks = n; has_unit = true; }
+                num_str.clear();
+            }
+            'T' => {
+                after_t = true;
+                continue;
+            }
+            'H' if after_t => {
+                if let Ok(n) = num_str.parse() { hours = n; has_unit = true; }
+                num_str.clear();
+            }
+            'M' if after_t => {
+                if let Ok(n) = num_str.parse() { minutes = n; has_unit = true; }
+                num_str.clear();
+            }
+            '0'..='9' => num_str.push(ch),
+            _ => {}
+        }
+    }
+    
+    // Must have at least one unit
+    if !has_unit {
+        return None;
+    }
+    
+    Some(Duration::days(days) + Duration::weeks(weeks) + Duration::hours(hours) + Duration::minutes(minutes))
 }
 
 fn parse_rrule(rrule: &str) -> Option<(String, NaiveDateTime)> {
@@ -224,6 +277,7 @@ fn extract_raw_events(ical_events: Vec<IcalEvent>) -> Vec<RawEvent> {
             let mut summary = String::from("(untitled)");
             let mut start = None;
             let mut end = None;
+            let mut duration = None;
             let mut uid = String::new();
             let mut rrule = None;
             let mut exdates = Vec::new();
@@ -238,6 +292,7 @@ fn extract_raw_events(ical_events: Vec<IcalEvent>) -> Vec<RawEvent> {
                     "SUMMARY" => summary = val.to_string(),
                     "DTSTART" => start = parse_ical_datetime(val),
                     "DTEND" => end = parse_ical_datetime(val),
+                    "DURATION" => duration = parse_duration(val),
                     "UID" => uid = val.to_string(),
                     "RRULE" => rrule = Some(val.to_string()),
                     "EXDATE" => {
@@ -250,10 +305,22 @@ fn extract_raw_events(ical_events: Vec<IcalEvent>) -> Vec<RawEvent> {
                 }
             }
 
+            let start = start?;
+            
+            // If DTEND is missing but DURATION is present, compute end time
+            let end = match end {
+                Some(e) => e,
+                None => {
+                    let dur = duration?;
+                    start + dur
+                }
+            };
+
             Some(RawEvent {
                 summary,
-                start: start?,
-                end: end?,
+                start,
+                end,
+                duration,
                 uid,
                 rrule,
                 exdates,
@@ -712,6 +779,32 @@ mod tests {
     fn test_parse_rrule() {
         assert!(parse_rrule("FREQ=WEEKLY;UNTIL=20240315T090000Z").is_some());
         assert_eq!(parse_rrule("FREQ=DAILY"), None); // missing UNTIL
+    }
+
+    #[test]
+    fn test_parse_duration() {
+        // Days
+        assert_eq!(parse_duration("P1D"), Some(Duration::days(1)));
+        assert_eq!(parse_duration("P7D"), Some(Duration::days(7)));
+        
+        // Weeks
+        assert_eq!(parse_duration("P1W"), Some(Duration::weeks(1)));
+        assert_eq!(parse_duration("P2W"), Some(Duration::weeks(2)));
+        
+        // Hours and minutes
+        assert_eq!(parse_duration("PT1H"), Some(Duration::hours(1)));
+        assert_eq!(parse_duration("PT30M"), Some(Duration::minutes(30)));
+        assert_eq!(parse_duration("PT1H30M"), Some(Duration::hours(1) + Duration::minutes(30)));
+        
+        // Combined
+        assert_eq!(parse_duration("P1DT1H"), Some(Duration::days(1) + Duration::hours(1)));
+        assert_eq!(parse_duration("P1DT1H30M"), Some(Duration::days(1) + Duration::hours(1) + Duration::minutes(30)));
+        
+        // Invalid
+        assert_eq!(parse_duration(""), None);
+        assert_eq!(parse_duration("INVALID"), None);
+        assert_eq!(parse_duration("P"), None);
+        assert_eq!(parse_duration("123"), None); // bare number
     }
 
     #[test]
