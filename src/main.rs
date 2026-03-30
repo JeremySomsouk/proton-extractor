@@ -37,6 +37,10 @@ struct Args {
     #[arg(short, long, value_enum, default_value = "all")]
     date: DateFilter,
 
+    /// Filter by a specific year (e.g., 2024)
+    #[arg(long)]
+    year: Option<i32>,
+
     /// Only show totals, hide individual events
     #[arg(short, long)]
     quiet: bool,
@@ -495,6 +499,14 @@ fn matches_date_range(event: &Event, from: &Option<NaiveDate>, to: &Option<Naive
     true
 }
 
+fn matches_year_filter(event: &Event, year: &Option<i32>) -> bool {
+    if let Some(y) = year {
+        event.start.year() == *y
+    } else {
+        true
+    }
+}
+
 // JSON serialization structures
 #[derive(Serialize)]
 struct JsonEvent {
@@ -595,6 +607,9 @@ fn main() -> io::Result<()> {
         if let Some(ref t) = args.to {
             eprintln!("[verbose] To date: {}", t);
         }
+        if let Some(ref y) = args.year {
+            eprintln!("[verbose] Filter by year: {}", y);
+        }
     }
 
     if args.files.is_empty() {
@@ -667,6 +682,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_person_filter(e, &args.person))
         .filter(|e| matches_exclude_filter(e, &args.exclude_person))
         .filter(|e| matches_date_range(e, &args.from, &args.to))
+        .filter(|e| matches_year_filter(e, &args.year))
         .collect();
 
     if args.verbose {
