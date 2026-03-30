@@ -218,6 +218,10 @@ struct Args {
     /// Disable colored output
     #[arg(long)]
     no_color: bool,
+
+    /// Read from stdin instead of files (useful for piping ICS content)
+    #[arg(long)]
+    stdin: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -1047,6 +1051,59 @@ fn format_percentage(part: i64, total: i64) -> String {
     format!("{:.1}%", pct)
 }
 
+/// Helper to build JsonOutput from grouped events
+fn build_json_output(grouped: &BTreeMap<(i32, u32), MonthSummary>, grand_total_minutes: i64) -> JsonOutput {
+    let mut months_json: Vec<JsonMonthSummary> = Vec::new();
+    for ((year, month), summary) in grouped {
+        let mut month_minutes: i64 = 0;
+        let mut month_by_person: BTreeMap<String, i64> = BTreeMap::new();
+        let mut events_json: Vec<JsonEvent> = Vec::new();
+
+        for event in &summary.events {
+            if let Some(mins) = event_duration_minutes(event) {
+                month_minutes += mins;
+                let person = extract_person(&event.summary).map(|s| s.to_string());
+                if let Some(ref p) = person {
+                    *month_by_person.entry(p.clone()).or_default() += mins;
+                }
+                events_json.push(JsonEvent {
+                    summary: event.summary.clone(),
+                    person,
+                    start: event.start.format("%Y-%m-%d %H:%M").to_string(),
+                    end: event.end.format("%Y-%m-%d %H:%M").to_string(),
+                    duration_minutes: mins,
+                    duration_formatted: format_hours(mins),
+                });
+            }
+        }
+
+        let by_person: Vec<PersonHours> = month_by_person
+            .into_iter()
+            .map(|(p, m)| PersonHours {
+                person: p,
+                minutes: m,
+                formatted: format_hours(m),
+            })
+            .collect();
+
+        months_json.push(JsonMonthSummary {
+            year: *year,
+            month: *month,
+            month_name: summary.month_name.clone(),
+            total_minutes: month_minutes,
+            total_formatted: format_hours(month_minutes),
+            by_person,
+            events: events_json,
+        });
+    }
+
+    JsonOutput {
+        grand_total_minutes,
+        grand_total_formatted: format_hours(grand_total_minutes),
+        months: months_json,
+    }
+}
+
 fn main() -> io::Result<()> {
     let args = Args::parse();
 
@@ -1114,44 +1171,72 @@ fn main() -> io::Result<()> {
         debug!("Quick filter --yesterday: enabled");
     }
 
-    if args.files.is_empty() {
-        warn!("No .ics files provided");
+    let has_stdin = args.stdin;
+    let has_files = !args.files.is_empty();
+
+    if !has_stdin && !has_files {
+        warn!("No .ics files provided and stdin not enabled");
+        std::process::exit(1);
+    }
+
+    if has_files && has_stdin {
+        warn!("Cannot use both --stdin and file arguments simultaneously");
         std::process::exit(1);
     }
 
     validate_date_range(&args.from, &args.to)?;
     validate_month(args.month)?;
 
-    // Validate file extensions before processing
-    for path in &args.files {
-        if let Err(e) = validate_ics_file(path) {
-            warn!("Invalid file: {}", e);
-            std::process::exit(1);
-        }
-    }
-
     let mut all_raw_events = Vec::new();
-    for path in &args.files {
-        debug!("Reading: {}", path.display());
-        let file = File::open(path)
-            .map_err(|e| io::Error::new(io::ErrorKind::NotFound, format!("Failed to open {}: {}", path.display(), e)))?;
 
-        let reader = BufReader::new(file);
+    if has_stdin {
+        // Read from stdin
+        debug!("Reading from stdin");
+        let reader = BufReader::new(std::io::stdin());
         let parser = IcalParser::new(reader);
-
         for calendar in parser {
             match calendar {
                 Ok(cal) => {
-                    if !cal.events.is_empty() {
-                        debug!("Found {} events in {}", cal.events.len(), path.display());
-                    }
+                    debug!("Found {} events from stdin", cal.events.len());
                     all_raw_events.extend(extract_raw_events(cal.events));
                 }
-                Err(_e) if args.quiet => {
-                    // Suppress parse errors in quiet mode
-                }
+                Err(_e) if args.quiet => {}
                 Err(e) => {
-                    warn!("Failed to parse {}: {}", path.display(), e);
+                    warn!("Failed to parse stdin: {}", e);
+                }
+            }
+        }
+    } else {
+        // Validate file extensions before processing
+        for path in &args.files {
+            if let Err(e) = validate_ics_file(path) {
+                warn!("Invalid file: {}", e);
+                std::process::exit(1);
+            }
+        }
+
+        for path in &args.files {
+            debug!("Reading: {}", path.display());
+            let file = File::open(path)
+                .map_err(|e| io::Error::new(io::ErrorKind::NotFound, format!("Failed to open {}: {}", path.display(), e)))?;
+
+            let reader = BufReader::new(file);
+            let parser = IcalParser::new(reader);
+
+            for calendar in parser {
+                match calendar {
+                    Ok(cal) => {
+                        if !cal.events.is_empty() {
+                            debug!("Found {} events in {}", cal.events.len(), path.display());
+                        }
+                        all_raw_events.extend(extract_raw_events(cal.events));
+                    }
+                    Err(_e) if args.quiet => {
+                        // Suppress parse errors in quiet mode
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse {}: {}", path.display(), e);
+                    }
                 }
             }
         }
@@ -1163,11 +1248,35 @@ fn main() -> io::Result<()> {
 
     debug!("Expanded events: {}", all_events.len());
 
-    // Parse duration filters
-    let min_duration = args.min_duration.as_ref()
-        .and_then(|s| parse_human_duration(s).or_else(|| parse_duration(s)));
-    let max_duration = args.max_duration.as_ref()
-        .and_then(|s| parse_human_duration(s).or_else(|| parse_duration(s)));
+    // Parse duration filters with validation
+    let min_duration: Option<Duration> = if let Some(ref s) = args.min_duration {
+        Some(parse_human_duration(s)
+            .or_else(|| parse_duration(s))
+            .ok_or_else(|| io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Invalid --min-duration format '{}'. Use formats like '30m', '1h', '2h30m', '1d'", s)
+            ))?)
+    } else {
+        None
+    };
+
+    let max_duration: Option<Duration> = if let Some(ref s) = args.max_duration {
+        Some(parse_human_duration(s)
+            .or_else(|| parse_duration(s))
+            .ok_or_else(|| io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Invalid --max-duration format '{}'. Use formats like '30m', '1h', '2h30m', '1d'", s)
+            ))?)
+    } else {
+        None
+    };
+
+    // Validate min < max if both are set
+    if let (Some(min), Some(max)) = (&min_duration, &max_duration) {
+        if min.num_minutes() > max.num_minutes() {
+            warn!("--min-duration ({}) is greater than --max-duration ({})", min.num_minutes(), max.num_minutes());
+        }
+    }
 
     if let Some(ref d) = min_duration {
         debug!("Min duration filter: {} minutes", d.num_minutes());
@@ -1437,55 +1546,7 @@ fn main() -> io::Result<()> {
             wtr.flush().ok();
         }
         OutputFormat::Json => {
-            let mut months_json: Vec<JsonMonthSummary> = Vec::new();
-            for ((year, month), summary) in &grouped {
-                let mut month_minutes: i64 = 0;
-                let mut month_by_person: BTreeMap<String, i64> = BTreeMap::new();
-                let mut events_json: Vec<JsonEvent> = Vec::new();
-                
-                for event in &summary.events {
-                    if let Some(mins) = event_duration_minutes(event) {
-                        month_minutes += mins;
-                        let person = extract_person(&event.summary).map(|s| s.to_string());
-                        if let Some(ref p) = person {
-                            *month_by_person.entry(p.clone()).or_default() += mins;
-                        }
-                        events_json.push(JsonEvent {
-                            summary: event.summary.clone(),
-                            person,
-                            start: event.start.format("%Y-%m-%d %H:%M").to_string(),
-                            end: event.end.format("%Y-%m-%d %H:%M").to_string(),
-                            duration_minutes: mins,
-                            duration_formatted: format_hours(mins),
-                        });
-                    }
-                }
-                
-                let by_person: Vec<PersonHours> = month_by_person
-                    .into_iter()
-                    .map(|(p, m)| PersonHours {
-                        person: p,
-                        minutes: m,
-                        formatted: format_hours(m),
-                    })
-                    .collect();
-                
-                months_json.push(JsonMonthSummary {
-                    year: *year,
-                    month: *month,
-                    month_name: summary.month_name.clone(),
-                    total_minutes: month_minutes,
-                    total_formatted: format_hours(month_minutes),
-                    by_person,
-                    events: events_json,
-                });
-            }
-            
-            let json_output = JsonOutput {
-                grand_total_minutes,
-                grand_total_formatted: format_hours(grand_total_minutes),
-                months: months_json,
-            };
+            let json_output = build_json_output(&grouped, grand_total_minutes);
             let json_str = if args.compact {
                 serde_json::to_string(&json_output).unwrap_or_else(|_| "{}".to_string())
             } else {
@@ -1535,56 +1596,9 @@ fn main() -> io::Result<()> {
             writeln!(out_writer, "END:VCALENDAR")?;
         }
         OutputFormat::Yaml => {
-            let yaml_output = serde_yaml::to_string(&JsonOutput {
-                grand_total_minutes,
-                grand_total_formatted: format_hours(grand_total_minutes),
-                months: {
-                    let mut months_json: Vec<JsonMonthSummary> = Vec::new();
-                    for ((year, month), summary) in &grouped {
-                        let mut month_minutes: i64 = 0;
-                        let mut month_by_person: BTreeMap<String, i64> = BTreeMap::new();
-                        let mut events_json: Vec<JsonEvent> = Vec::new();
-                        
-                        for event in &summary.events {
-                            if let Some(mins) = event_duration_minutes(event) {
-                                month_minutes += mins;
-                                let person = extract_person(&event.summary).map(|s| s.to_string());
-                                if let Some(ref p) = person {
-                                    *month_by_person.entry(p.clone()).or_default() += mins;
-                                }
-                                events_json.push(JsonEvent {
-                                    summary: event.summary.clone(),
-                                    person,
-                                    start: event.start.format("%Y-%m-%d %H:%M").to_string(),
-                                    end: event.end.format("%Y-%m-%d %H:%M").to_string(),
-                                    duration_minutes: mins,
-                                    duration_formatted: format_hours(mins),
-                                });
-                            }
-                        }
-                        
-                        let by_person: Vec<PersonHours> = month_by_person
-                            .into_iter()
-                            .map(|(p, m)| PersonHours {
-                                person: p,
-                                minutes: m,
-                                formatted: format_hours(m),
-                            })
-                            .collect();
-                        
-                        months_json.push(JsonMonthSummary {
-                            year: *year,
-                            month: *month,
-                            month_name: summary.month_name.clone(),
-                            total_minutes: month_minutes,
-                            total_formatted: format_hours(month_minutes),
-                            by_person,
-                            events: events_json,
-                        });
-                    }
-                    months_json
-                },
-            }).unwrap_or_else(|_| "{}".to_string());
+            let json_output = build_json_output(&grouped, grand_total_minutes);
+            let yaml_output = serde_yaml::to_string(&json_output)
+                .unwrap_or_else(|_| "{}".to_string());
             writeln!(out_writer, "{}", yaml_output)?;
         }
         OutputFormat::Html => {
