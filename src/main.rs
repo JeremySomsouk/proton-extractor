@@ -776,26 +776,71 @@ fn main() -> io::Result<()> {
     match args.format {
         OutputFormat::Csv => {
             let mut wtr = csv::Writer::from_writer(out_writer);
-            wtr.write_record(["date", "start", "end", "duration_minutes", "person", "summary"])
-                .ok();
-            for event in &filtered {
-                let mins = match event_duration_minutes(event) {
-                    Some(m) => m,
-                    None => continue,
-                };
-                let person = extract_person(&event.summary).unwrap_or("(unknown)");
+            
+            // In quiet/sum_only mode, output only totals per person
+            if args.quiet || args.sum_only {
+                // Build per-person summary
+                let all_by_person: BTreeMap<&str, i64> = filtered
+                    .iter()
+                    .filter_map(|e| {
+                        let mins = event_duration_minutes(e)?;
+                        Some((extract_person(&e.summary).unwrap_or("(unknown)"), mins))
+                    })
+                    .fold(BTreeMap::new(), |mut acc, (person, mins)| {
+                        *acc.entry(person).or_default() += mins;
+                        acc
+                    });
+                
+                wtr.write_record(["person", "total_minutes", "total_formatted", "percentage"])
+                    .ok();
+                for (person, mins) in &all_by_person {
+                    wtr.write_record(&[
+                        csv_escape(person),
+                        mins.to_string(),
+                        format_hours(*mins),
+                        format_percentage(*mins, grand_total_minutes),
+                    ])
+                    .ok();
+                }
                 wtr.write_record(&[
-                    event.start.format("%Y-%m-%d").to_string(),
-                    event.start.format("%H:%M").to_string(),
-                    event.end.format("%H:%M").to_string(),
-                    mins.to_string(),
-                    csv_escape(person),
-                    csv_escape(&event.summary),
+                    "TOTAL".to_string(),
+                    grand_total_minutes.to_string(),
+                    format_hours(grand_total_minutes),
+                    "100.0%".to_string(),
+                ])
+                .ok();
+            } else {
+                // Full output with individual events
+                wtr.write_record(["date", "start", "end", "duration_minutes", "person", "summary"])
+                    .ok();
+                for event in &filtered {
+                    let mins = match event_duration_minutes(event) {
+                        Some(m) => m,
+                        None => continue,
+                    };
+                    let person = extract_person(&event.summary).unwrap_or("(unknown)");
+                    wtr.write_record(&[
+                        event.start.format("%Y-%m-%d").to_string(),
+                        event.start.format("%H:%M").to_string(),
+                        event.end.format("%H:%M").to_string(),
+                        mins.to_string(),
+                        csv_escape(person),
+                        csv_escape(&event.summary),
+                    ])
+                    .ok();
+                }
+                // Add grand total as final row
+                wtr.write_record(&[
+                    "TOTAL".to_string(),
+                    "".to_string(),
+                    "".to_string(),
+                    grand_total_minutes.to_string(),
+                    "".to_string(),
+                    "".to_string(),
                 ])
                 .ok();
             }
             wtr.flush().ok();
-            eprintln!("\nGrand Total: {}", format_hours(grand_total_minutes));
         }
         OutputFormat::Json => {
             let mut months_json: Vec<JsonMonthSummary> = Vec::new();
