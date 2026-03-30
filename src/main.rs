@@ -358,25 +358,25 @@ pub fn parse_human_duration(s: &str) -> Option<Duration> {
             '0'..='9' => current_num.push(ch),
             'h' | 'H' => {
                 if let Ok(n) = current_num.parse() {
-                    total = total + Duration::hours(n);
+                    total += Duration::hours(n);
                 }
                 current_num.clear();
             }
             'm' | 'M' => {
                 if let Ok(n) = current_num.parse() {
-                    total = total + Duration::minutes(n);
+                    total += Duration::minutes(n);
                 }
                 current_num.clear();
             }
             'd' | 'D' => {
                 if let Ok(n) = current_num.parse() {
-                    total = total + Duration::days(n);
+                    total += Duration::days(n);
                 }
                 current_num.clear();
             }
             'w' | 'W' => {
                 if let Ok(n) = current_num.parse() {
-                    total = total + Duration::weeks(n);
+                    total += Duration::weeks(n);
                 }
                 current_num.clear();
             }
@@ -388,7 +388,7 @@ pub fn parse_human_duration(s: &str) -> Option<Duration> {
     // Handle trailing number without unit (treat as minutes)
     if !current_num.is_empty() {
         if let Ok(n) = current_num.parse() {
-            total = total + Duration::minutes(n);
+            total += Duration::minutes(n);
         } else {
             return None;
         }
