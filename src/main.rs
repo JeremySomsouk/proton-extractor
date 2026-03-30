@@ -326,6 +326,7 @@ struct Event {
 }
 
 impl Event {
+    #[allow(dead_code)]
     fn new(summary: String, start: NaiveDateTime, end: NaiveDateTime) -> Self {
         Self { summary, start, end, location: None, categories: vec![] }
     }
