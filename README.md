@@ -40,10 +40,10 @@ cargo install --git https://github.com/JeremySomsouk/proton-extractor
 proton-extractor ~/Downloads/calendar.ics
 
 # Filter to current month
-proton-extractor ~/Downloads/*.ics -m current
+proton-extractor ~/Downloads/*.ics -d current
 
 # Previous month only
-proton-extractor ~/Downloads/*.ics -m previous
+proton-extractor ~/Downloads/*.ics -d previous
 ```
 
 ## 💡 Features
@@ -60,6 +60,7 @@ proton-extractor ~/Downloads/*.ics -m previous
 - **Per-person totals** — see who's working on what
 - **Grand totals** across all files
 - **Multiple files** supported — glob patterns work
+- **Export filtered events** to `.ics` format for re-importing
 
 ### 🎯 Use Cases
 
@@ -114,7 +115,7 @@ cargo install --path .
 ## 📝 Example Output
 
 ```
-$ proton-extractor babysitter-feb.ics -m february
+$ proton-extractor babysitter-feb.ics -d february
 
 --- February 2026 ---
   4h 00m  BabySitting [Emma]
