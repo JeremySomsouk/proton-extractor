@@ -68,6 +68,14 @@ struct Args {
     /// Only show total hours, hide per-person breakdown
     #[arg(long)]
     sum_only: bool,
+
+    /// Output file path (default: stdout)
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+
+    /// List all unique persons found in events
+    #[arg(long)]
+    list_persons: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -572,13 +580,8 @@ fn main() -> io::Result<()> {
         if args.verbose {
             eprintln!("[verbose] Reading: {}", path.display());
         }
-        let file = match File::open(path) {
-            Ok(f) => f,
-            Err(e) => {
-                eprintln!("Error opening {}: {}", path.display(), e);
-                continue;
-            }
-        };
+        let file = File::open(path)
+            .map_err(|e| io::Error::new(io::ErrorKind::NotFound, format!("Failed to open {}: {}", path.display(), e)))?;
 
         let reader = BufReader::new(file);
         let parser = IcalParser::new(reader);
@@ -630,12 +633,24 @@ fn main() -> io::Result<()> {
 
     let grouped: BTreeMap<(i32, u32), MonthSummary> = group_by_month(&filtered);
 
-    if args.verbose {
-        eprintln!("[verbose] Events after filtering: {}", filtered.len());
-    }
-
     if filtered.is_empty() {
         println!("No events found for the selected period.");
+        return Ok(());
+    }
+
+    // Collect all unique persons if --list-persons is requested
+    if args.list_persons {
+        let mut persons: HashSet<String> = HashSet::new();
+        for event in &filtered {
+            if let Some(p) = extract_person(&event.summary) {
+                persons.insert(p.to_string());
+            }
+        }
+        let mut sorted: Vec<_> = persons.into_iter().collect();
+        sorted.sort();
+        for person in sorted {
+            println!("{}", person);
+        }
         return Ok(());
     }
 
