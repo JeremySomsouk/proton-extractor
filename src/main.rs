@@ -69,6 +69,7 @@ enum DateFilter {
     All,
     Today,
     Yesterday,
+    Tomorrow,
     Week,
 }
 
@@ -207,6 +208,10 @@ struct Args {
     /// Quick filter: show only yesterday's events
     #[arg(long)]
     yesterday: bool,
+
+    /// Quick filter: show only tomorrow's events
+    #[arg(long)]
+    tomorrow: bool,
 
     /// Filter out events shorter than this duration (e.g., "30m", "1h", "2h30m")
     #[arg(long)]
@@ -782,7 +787,7 @@ fn group_by_person<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>>
     by_person
 }
 
-fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yesterday: &NaiveDateTime) -> bool {
+fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yesterday: &NaiveDateTime, tomorrow: &NaiveDateTime) -> bool {
     let (ev_year, ev_month, ev_day) = (event.start.year(), event.start.month(), event.start.day());
     match filter {
         DateFilter::All => true, // Show all events regardless of date
@@ -800,6 +805,9 @@ fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yeste
         }
         DateFilter::Yesterday => {
             ev_year == yesterday.year() && ev_month == yesterday.month() && ev_day == yesterday.day()
+        }
+        DateFilter::Tomorrow => {
+            ev_year == tomorrow.year() && ev_month == tomorrow.month() && ev_day == tomorrow.day()
         }
         DateFilter::Week => {
             // Get ISO week number AND ISO week year for both event and current date
@@ -1308,6 +1316,8 @@ fn main() -> io::Result<()> {
         DateFilter::Today
     } else if args.yesterday {
         DateFilter::Yesterday
+    } else if args.tomorrow {
+        DateFilter::Tomorrow
     } else {
         args.date.clone()
     };
@@ -1315,10 +1325,11 @@ fn main() -> io::Result<()> {
     // Compute current date once for date filters (avoid calling Local::now() per event)
     let now = Local::now().naive_local();
     let yesterday = now - Duration::days(1);
+    let tomorrow = now + Duration::days(1);
     
     let filtered: Vec<&Event> = all_events
         .iter()
-        .filter(|e| matches_filter(e, &effective_date, &now, &yesterday))
+        .filter(|e| matches_filter(e, &effective_date, &now, &yesterday, &tomorrow))
         .filter(|e| matches_person_filter(e, &args.person))
         .filter(|e| matches_project_filter(e, &args.project))
         .filter(|e| matches_exclude_filter(e, &args.exclude_person))
@@ -2132,6 +2143,7 @@ mod tests {
         let today = Local::now().naive_local().date();
         let now = today.and_hms_opt(12, 0, 0).unwrap();
         let yesterday_dt = (today - chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
+        let tomorrow_dt = (today + chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
         let today_event = Event::new(
             "Today meeting [Alice]".to_string(),
             today.and_hms_opt(9, 0, 0).unwrap(),
@@ -2143,11 +2155,19 @@ mod tests {
             yesterday.and_hms_opt(9, 0, 0).unwrap(),
             yesterday.and_hms_opt(10, 0, 0).unwrap(),
         );
+        let tomorrow = today + chrono::Duration::days(1);
+        let tomorrow_event = Event::new(
+            "Tomorrow meeting [Carol]".to_string(),
+            tomorrow.and_hms_opt(9, 0, 0).unwrap(),
+            tomorrow.and_hms_opt(10, 0, 0).unwrap(),
+        );
         
-        assert!(matches_filter(&today_event, &DateFilter::Today, &now, &yesterday_dt));
-        assert!(!matches_filter(&yesterday_event, &DateFilter::Today, &now, &yesterday_dt));
-        assert!(matches_filter(&today_event, &DateFilter::All, &now, &yesterday_dt));
-        assert!(matches_filter(&yesterday_event, &DateFilter::All, &now, &yesterday_dt));
+        assert!(matches_filter(&today_event, &DateFilter::Today, &now, &yesterday_dt, &tomorrow_dt));
+        assert!(!matches_filter(&yesterday_event, &DateFilter::Today, &now, &yesterday_dt, &tomorrow_dt));
+        assert!(!matches_filter(&tomorrow_event, &DateFilter::Today, &now, &yesterday_dt, &tomorrow_dt));
+        assert!(matches_filter(&today_event, &DateFilter::All, &now, &yesterday_dt, &tomorrow_dt));
+        assert!(matches_filter(&yesterday_event, &DateFilter::All, &now, &yesterday_dt, &tomorrow_dt));
+        assert!(matches_filter(&tomorrow_event, &DateFilter::All, &now, &yesterday_dt, &tomorrow_dt));
     }
 
     #[test]
@@ -2155,6 +2175,7 @@ mod tests {
         let today = Local::now().naive_local().date();
         let now = today.and_hms_opt(12, 0, 0).unwrap();
         let yesterday_dt = (today - chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
+        let tomorrow_dt = (today + chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
         let today_event = Event::new(
             "Today meeting [Alice]".to_string(),
             today.and_hms_opt(9, 0, 0).unwrap(),
@@ -2173,9 +2194,38 @@ mod tests {
             two_days_ago.and_hms_opt(10, 0, 0).unwrap(),
         );
         
-        assert!(matches_filter(&yesterday_event, &DateFilter::Yesterday, &now, &yesterday_dt));
-        assert!(!matches_filter(&today_event, &DateFilter::Yesterday, &now, &yesterday_dt));
-        assert!(!matches_filter(&two_days_ago_event, &DateFilter::Yesterday, &now, &yesterday_dt));
+        assert!(matches_filter(&yesterday_event, &DateFilter::Yesterday, &now, &yesterday_dt, &tomorrow_dt));
+        assert!(!matches_filter(&today_event, &DateFilter::Yesterday, &now, &yesterday_dt, &tomorrow_dt));
+        assert!(!matches_filter(&two_days_ago_event, &DateFilter::Yesterday, &now, &yesterday_dt, &tomorrow_dt));
+    }
+
+    #[test]
+    fn test_matches_filter_tomorrow() {
+        let today = Local::now().naive_local().date();
+        let now = today.and_hms_opt(12, 0, 0).unwrap();
+        let yesterday_dt = (today - chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
+        let tomorrow_dt = (today + chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
+        let today_event = Event::new(
+            "Today meeting [Alice]".to_string(),
+            today.and_hms_opt(9, 0, 0).unwrap(),
+            today.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        let tomorrow = today + chrono::Duration::days(1);
+        let tomorrow_event = Event::new(
+            "Tomorrow meeting [Bob]".to_string(),
+            tomorrow.and_hms_opt(9, 0, 0).unwrap(),
+            tomorrow.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        let two_days_future = today + chrono::Duration::days(2);
+        let two_days_future_event = Event::new(
+            "Two days from now [Carol]".to_string(),
+            two_days_future.and_hms_opt(9, 0, 0).unwrap(),
+            two_days_future.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        assert!(matches_filter(&tomorrow_event, &DateFilter::Tomorrow, &now, &yesterday_dt, &tomorrow_dt));
+        assert!(!matches_filter(&today_event, &DateFilter::Tomorrow, &now, &yesterday_dt, &tomorrow_dt));
+        assert!(!matches_filter(&two_days_future_event, &DateFilter::Tomorrow, &now, &yesterday_dt, &tomorrow_dt));
     }
 
     #[test]
@@ -2183,6 +2233,7 @@ mod tests {
         let today = Local::now().naive_local().date();
         let now = today.and_hms_opt(12, 0, 0).unwrap();
         let yesterday_dt = (today - chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
+        let tomorrow_dt = (today + chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
         let today_event = Event::new(
             "Today meeting [Alice]".to_string(),
             today.and_hms_opt(9, 0, 0).unwrap(),
@@ -2195,8 +2246,8 @@ mod tests {
             last_week.and_hms_opt(10, 0, 0).unwrap(),
         );
         
-        assert!(matches_filter(&today_event, &DateFilter::Week, &now, &yesterday_dt));
-        assert!(!matches_filter(&last_week_event, &DateFilter::Week, &now, &yesterday_dt));
+        assert!(matches_filter(&today_event, &DateFilter::Week, &now, &yesterday_dt, &tomorrow_dt));
+        assert!(!matches_filter(&last_week_event, &DateFilter::Week, &now, &yesterday_dt, &tomorrow_dt));
     }
 
     #[test]
