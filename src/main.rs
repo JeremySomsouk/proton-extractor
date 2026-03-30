@@ -138,7 +138,7 @@ struct Args {
     to: Option<NaiveDate>,
 
     /// Enable verbose output
-    #[arg(short, long)]
+    #[arg(short = 'v', long)]
     verbose: bool,
 
     /// Only show total hours, hide per-person breakdown
@@ -806,13 +806,13 @@ struct JsonOutput {
     months: Vec<JsonMonthSummary>,
 }
 
-/// Extracts person name from event summary using [name] format.
-/// Returns the content inside brackets if found and not empty/whitespace.
-fn extract_person(summary: &str) -> Option<&str> {
-    let start = summary.rfind('[')?;
-    let end = summary.find(']').filter(|&e| e > start)?;
+/// Extracts content between matching bracket pairs, or None if invalid/empty.
+/// The `open` and `close` args specify which bracket characters to match.
+/// Returns the inner content (without brackets) if found and not empty/whitespace.
+fn extract_bracketed(summary: &str, open: char, close: char) -> Option<&str> {
+    let start = summary.rfind(open)?;
+    let end = summary.find(close).filter(|&e| e > start)?;
     let inner = &summary[start + 1..end];
-    // Validate: not empty and not just whitespace
     if !inner.is_empty() && !inner.trim().is_empty() {
         Some(inner)
     } else {
@@ -820,17 +820,16 @@ fn extract_person(summary: &str) -> Option<&str> {
     }
 }
 
+/// Extracts person name from event summary using [name] format.
+/// Returns the content inside brackets if found and not empty/whitespace.
+fn extract_person(summary: &str) -> Option<&str> {
+    extract_bracketed(summary, '[', ']')
+}
+
 /// Extracts project name from event summary using {project} format.
 /// Returns the content inside curly braces if found and not empty/whitespace.
 fn extract_project(summary: &str) -> Option<&str> {
-    let start = summary.rfind('{')?;
-    let end = summary.find('}').filter(|&e| e > start)?;
-    let inner = &summary[start + 1..end];
-    if !inner.is_empty() && !inner.trim().is_empty() {
-        Some(inner)
-    } else {
-        None
-    }
+    extract_bracketed(summary, '{', '}')
 }
 
 fn format_hours(total_minutes: i64) -> String {
