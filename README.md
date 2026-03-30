@@ -83,21 +83,22 @@ proton-extractor ~/Downloads/*-calendar.ics
 | `-f, --format` | `text`, `json`, `csv`, `markdown`, `ical` | Output format |
 | `--exclude-person` | name | Exclude events by person |
 | `-p, --person` | name | Filter by person |
+| `--project` | name | Filter by project (see {project} tags) |
 | `--from` | YYYY-MM-DD | Start date |
 | `--to` | YYYY-MM-DD | End date |
 | `--list-persons` | | List all unique persons found in events |
 
 ### Event Format
 
-Proton Extractor looks for person names in brackets:
+Proton Extractor looks for person names in brackets and projects in curly braces:
 
 ```
-✅ "Meeting with [Alice] at 2pm"     → Person: Alice
-✅ "Childcare [Jeremy]"               → Person: Jeremy  
-✅ "Stand-up"                        → Person: (none)
+✅ "Meeting with [Alice] {Project Alpha}"  → Person: Alice, Project: Alpha
+✅ "Childcare [Jeremy] {Family}"            → Person: Jeremy, Project: Family
+✅ "Stand-up"                              → Person: (none), Project: (none)
 ```
 
-**Tip:** Use Proton Calendar's description field to tag events with person names in brackets.
+**Tip:** Use Proton Calendar's description field to tag events with `[PersonName]` and `{ProjectName}`.
 
 ## 🛠️ Installation
 

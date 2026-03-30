@@ -62,6 +62,10 @@ struct Args {
     #[arg(long)]
     person: Option<String>,
 
+    /// Filter by project name in [project] tags (case-insensitive)
+    #[arg(long)]
+    project: Option<String>,
+
     /// Start date (YYYY-MM-DD)
     #[arg(long, alias = "since")]
     from: Option<NaiveDate>,
@@ -569,6 +573,15 @@ fn matches_person_filter(event: &Event, person_filter: &Option<String>) -> bool 
         .unwrap_or(false)
 }
 
+fn matches_project_filter(event: &Event, project_filter: &Option<String>) -> bool {
+    let Some(filter) = project_filter else {
+        return true;
+    };
+    extract_project(&event.summary)
+        .map(|p| p.to_lowercase().contains(&filter.to_lowercase()))
+        .unwrap_or(false)
+}
+
 fn matches_exclude_filter(event: &Event, exclude_filters: &[String]) -> bool {
     let Some(person) = extract_person(&event.summary) else {
         return true;
@@ -658,6 +671,19 @@ fn extract_person(summary: &str) -> Option<&str> {
     }
 }
 
+/// Extracts project name from event summary using {project} format.
+/// Returns the content inside curly braces if found and not empty/whitespace.
+fn extract_project(summary: &str) -> Option<&str> {
+    let start = summary.rfind('{')?;
+    let end = summary.find('}').filter(|&e| e > start)?;
+    let inner = &summary[start + 1..end];
+    if !inner.is_empty() && !inner.trim().is_empty() {
+        Some(inner)
+    } else {
+        None
+    }
+}
+
 fn format_hours(total_minutes: i64) -> String {
     let h = total_minutes / 60;
     let m = total_minutes % 60;
@@ -698,6 +724,9 @@ fn main() -> io::Result<()> {
         eprintln!("[verbose] Processing {} file(s)", args.files.len());
         if let Some(ref p) = args.person {
             eprintln!("[verbose] Filtering by person: {}", p);
+        }
+        if let Some(ref p) = args.project {
+            eprintln!("[verbose] Filtering by project: {}", p);
         }
         if !args.exclude_person.is_empty() {
             eprintln!("[verbose] Excluding persons: {:?}", args.exclude_person);
@@ -782,6 +811,7 @@ fn main() -> io::Result<()> {
         .iter()
         .filter(|e| matches_filter(e, &args.date))
         .filter(|e| matches_person_filter(e, &args.person))
+        .filter(|e| matches_project_filter(e, &args.project))
         .filter(|e| matches_exclude_filter(e, &args.exclude_person))
         .filter(|e| matches_date_range(e, &args.from, &args.to))
         .filter(|e| matches_year_filter(e, &args.year))
@@ -1042,6 +1072,26 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_project_valid() {
+        assert_eq!(extract_project("Meeting {Alpha} discussion"), Some("Alpha"));
+        assert_eq!(extract_project("{Beta} standup"), Some("Beta"));
+        assert_eq!(extract_project("  {  Gamma  }  report"), Some("  Gamma  "));
+    }
+
+    #[test]
+    fn test_extract_project_no_braces() {
+        assert_eq!(extract_project("Regular meeting"), None);
+        assert_eq!(extract_project("{Only opening"), None);
+        assert_eq!(extract_project("Only closing}"), None);
+    }
+
+    #[test]
+    fn test_extract_project_empty() {
+        assert_eq!(extract_project("{}"), None);
+        assert_eq!(extract_project("{ }"), None);
+    }
+
+    #[test]
     fn test_format_hours_whole() {
         assert_eq!(format_hours(60), "1h");
         assert_eq!(format_hours(120), "2h");
@@ -1191,6 +1241,29 @@ mod tests {
         assert!(matches_person_filter(&event, &Some("John".to_string())));
         assert!(matches_person_filter(&event, &Some("john".to_string())));
         assert!(!matches_person_filter(&event, &Some("Jane".to_string())));
+    }
+
+    #[test]
+    fn test_matches_project_filter() {
+        let event = Event::new(
+            "Meeting {Project Alpha}".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        assert!(matches_project_filter(&event, &None));
+        assert!(matches_project_filter(&event, &Some("Alpha".to_string())));
+        assert!(matches_project_filter(&event, &Some("alpha".to_string())));
+        assert!(matches_project_filter(&event, &Some("Project".to_string())));
+        assert!(!matches_project_filter(&event, &Some("Beta".to_string())));
+        
+        // Event without project
+        let no_project = Event::new(
+            "Regular meeting".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        assert!(!matches_project_filter(&no_project, &Some("anything".to_string())));
     }
 
     #[test]
