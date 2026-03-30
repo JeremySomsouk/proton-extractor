@@ -63,9 +63,13 @@ struct Args {
     #[arg(long)]
     person: Option<String>,
 
-    /// Filter by project name in [project] tags (case-insensitive)
+    /// Filter by project name in {project} tags (case-insensitive)
     #[arg(long)]
     project: Option<String>,
+
+    /// Exclude events matching this project name in {project} tags (case-insensitive, can be repeated)
+    #[arg(long)]
+    exclude_project: Vec<String>,
 
     /// Start date (YYYY-MM-DD)
     #[arg(long, alias = "since")]
@@ -624,6 +628,14 @@ fn matches_project_filter(event: &Event, project_filter: &Option<String>) -> boo
         .unwrap_or(false)
 }
 
+fn matches_exclude_project_filter(event: &Event, exclude_filters: &[String]) -> bool {
+    let Some(project) = extract_project(&event.summary) else {
+        return true;
+    };
+    let project_lower = project.to_lowercase();
+    !exclude_filters.iter().any(|f| project_lower.contains(&f.to_lowercase()))
+}
+
 fn matches_exclude_filter(event: &Event, exclude_filters: &[String]) -> bool {
     let Some(person) = extract_person(&event.summary) else {
         return true;
@@ -782,6 +794,9 @@ fn main() -> io::Result<()> {
         if !args.exclude_person.is_empty() {
             eprintln!("[verbose] Excluding persons: {:?}", args.exclude_person);
         }
+        if !args.exclude_project.is_empty() {
+            eprintln!("[verbose] Excluding projects: {:?}", args.exclude_project);
+        }
         if let Some(ref f) = args.from {
             eprintln!("[verbose] From date: {}", f);
         }
@@ -864,6 +879,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_person_filter(e, &args.person))
         .filter(|e| matches_project_filter(e, &args.project))
         .filter(|e| matches_exclude_filter(e, &args.exclude_person))
+        .filter(|e| matches_exclude_project_filter(e, &args.exclude_project))
         .filter(|e| matches_date_range(e, &args.from, &args.to))
         .filter(|e| matches_year_filter(e, &args.year))
         .filter(|e| matches_month_filter(e, &args.month))
@@ -1715,6 +1731,34 @@ mod tests {
             NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
         );
         assert!(matches_exclude_filter(&event_no_person, &["anything".to_string()]));
+    }
+
+    #[test]
+    fn test_matches_exclude_project_filter() {
+        let event = Event::new(
+            "Meeting {Project Alpha}".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+
+        // Empty exclude list should include
+        assert!(matches_exclude_project_filter(&event, &[]));
+
+        // Excluding different project should include
+        assert!(matches_exclude_project_filter(&event, &["Beta".to_string()]));
+
+        // Excluding matching project should exclude
+        assert!(!matches_exclude_project_filter(&event, &["Alpha".to_string()]));
+        assert!(!matches_exclude_project_filter(&event, &["alpha".to_string()])); // case insensitive
+        assert!(!matches_exclude_project_filter(&event, &["Project".to_string()])); // partial match
+
+        // No project in event should be included
+        let event_no_project = Event::new(
+            "Regular meeting".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        assert!(matches_exclude_project_filter(&event_no_project, &["anything".to_string()]));
     }
 
     #[test]

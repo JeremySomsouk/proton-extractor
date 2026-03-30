@@ -82,6 +82,7 @@ proton-extractor ~/Downloads/*-calendar.ics
 | `-d, --date` | `all`, `current`, `previous`, `today`, `week` | Filter by date period |
 | `-f, --format` | `text`, `json`, `csv`, `markdown`, `ical`, `html` | Output format |
 | `--exclude-person` | name | Exclude events by person |
+| `--exclude-project` | name | Exclude events by project |
 | `-p, --person` | name | Filter by person |
 | `--project` | name | Filter by project (see {project} tags) |
 | `--from` | YYYY-MM-DD | Start date |
