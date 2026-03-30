@@ -11,10 +11,11 @@ use std::path::PathBuf;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone, ValueEnum)]
-enum MonthFilter {
+enum DateFilter {
     Current,
     Previous,
     All,
+    Today,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -31,9 +32,9 @@ struct Args {
     /// Paths to .ics files
     files: Vec<PathBuf>,
 
-    /// Filter by month
+    /// Filter by date: current month, previous, all, or today
     #[arg(short, long, value_enum, default_value = "all")]
-    month: MonthFilter,
+    date: DateFilter,
 
     /// Only show totals, hide individual events
     #[arg(short, long)]
@@ -330,19 +331,22 @@ fn extract_raw_events(ical_events: Vec<IcalEvent>) -> Vec<RawEvent> {
         .collect()
 }
 
-fn matches_filter(event: &Event, filter: &MonthFilter) -> bool {
+fn matches_filter(event: &Event, filter: &DateFilter) -> bool {
     let now = Local::now().naive_local();
-    let (ev_year, ev_month) = (event.start.year(), event.start.month());
+    let (ev_year, ev_month, ev_day) = (event.start.year(), event.start.month(), event.start.day());
     match filter {
-        MonthFilter::All => (ev_year, ev_month) <= (now.year(), now.month()),
-        MonthFilter::Current => ev_year == now.year() && ev_month == now.month(),
-        MonthFilter::Previous => {
+        DateFilter::All => (ev_year, ev_month, ev_day) <= (now.year(), now.month(), now.day()),
+        DateFilter::Current => ev_year == now.year() && ev_month == now.month(),
+        DateFilter::Previous => {
             let (y, m) = if now.month() == 1 {
                 (now.year() - 1, 12)
             } else {
                 (now.year(), now.month() - 1)
             };
             ev_year == y && ev_month == m
+        }
+        DateFilter::Today => {
+            ev_year == now.year() && ev_month == now.month() && ev_day == now.day()
         }
     }
 }
@@ -534,7 +538,7 @@ fn main() -> io::Result<()> {
 
     let filtered: Vec<&Event> = all_events
         .iter()
-        .filter(|e| matches_filter(e, &args.month))
+        .filter(|e| matches_filter(e, &args.date))
         .filter(|e| matches_person_filter(e, &args.person))
         .filter(|e| matches_exclude_filter(e, &args.exclude_person))
         .filter(|e| matches_date_range(e, &args.from, &args.to))
@@ -882,6 +886,27 @@ mod tests {
         assert!(matches_date_range(&event, &None, &Some(NaiveDate::from_ymd_opt(2024, 3, 31).unwrap())));
         assert!(!matches_date_range(&event, &Some(NaiveDate::from_ymd_opt(2024, 4, 1).unwrap()), &None));
         assert!(!matches_date_range(&event, &None, &Some(NaiveDate::from_ymd_opt(2024, 3, 1).unwrap())));
+    }
+
+    #[test]
+    fn test_matches_filter_today() {
+        let today = Local::now().naive_local().date();
+        let today_event = Event::new(
+            "Today meeting [Alice]".to_string(),
+            today.and_hms_opt(9, 0, 0).unwrap(),
+            today.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        let yesterday = today - chrono::Duration::days(1);
+        let yesterday_event = Event::new(
+            "Yesterday meeting [Bob]".to_string(),
+            yesterday.and_hms_opt(9, 0, 0).unwrap(),
+            yesterday.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        assert!(matches_filter(&today_event, &DateFilter::Today));
+        assert!(!matches_filter(&yesterday_event, &DateFilter::Today));
+        assert!(matches_filter(&today_event, &DateFilter::All));
+        assert!(matches_filter(&yesterday_event, &DateFilter::All));
     }
 
     #[test]
