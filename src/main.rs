@@ -212,6 +212,10 @@ struct Args {
     #[arg(long)]
     tomorrow: bool,
 
+    /// Quick filter: show only this week's events (Monday to Sunday)
+    #[arg(long)]
+    weekly: bool,
+
     /// Filter out events shorter than this duration (e.g., "30m", "1h", "2h30m")
     #[arg(long)]
     min_duration: Option<String>,
@@ -1182,6 +1186,9 @@ fn main() -> io::Result<()> {
     if args.yesterday {
         debug!("Quick filter --yesterday: enabled");
     }
+    if args.weekly {
+        debug!("Quick filter --weekly: enabled");
+    }
 
     let has_stdin = args.stdin;
     let has_files = !args.files.is_empty();
@@ -1317,6 +1324,8 @@ fn main() -> io::Result<()> {
         DateFilter::Yesterday
     } else if args.tomorrow {
         DateFilter::Tomorrow
+    } else if args.weekly {
+        DateFilter::Week
     } else {
         args.date.clone()
     };
