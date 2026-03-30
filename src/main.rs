@@ -391,13 +391,20 @@ struct JsonEvent {
 }
 
 #[derive(Serialize)]
+struct PersonHours {
+    person: String,
+    minutes: i64,
+    formatted: String,
+}
+
+#[derive(Serialize)]
 struct JsonMonthSummary {
     year: i32,
     month: u32,
     month_name: String,
     total_minutes: i64,
     total_formatted: String,
-    by_person: Vec<(String, i64, String)>,
+    by_person: Vec<PersonHours>,
     events: Vec<JsonEvent>,
 }
 
@@ -429,6 +436,21 @@ fn format_hours(total_minutes: i64) -> String {
         format!("{}h", h)
     } else {
         format!("{}h {}m", h, m)
+    }
+}
+
+/// Returns duration in minutes, filtering out non-positive durations
+fn event_duration_minutes(event: &Event) -> Option<i64> {
+    let mins = (event.end - event.start).num_minutes();
+    if mins > 0 { Some(mins) } else { None }
+}
+
+/// Escapes a string for CSV output (handles quotes and commas)
+fn csv_escape(s: &str) -> String {
+    if s.contains('"') || s.contains(',') || s.contains('\n') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
     }
 }
 
@@ -542,20 +564,19 @@ fn main() -> io::Result<()> {
             wtr.write_record(&["date", "start", "end", "duration_minutes", "person", "summary"])
                 .ok();
             for event in &filtered {
-                let duration = event.end - event.start;
-                let mins = duration.num_minutes();
-                if mins <= 0 {
-                    continue;
-                }
+                let mins = match event_duration_minutes(event) {
+                    Some(m) => m,
+                    None => continue,
+                };
                 grand_total_minutes += mins;
-                let person = extract_person(&event.summary).unwrap_or("(unknown)").to_string();
+                let person = extract_person(&event.summary).unwrap_or("(unknown)");
                 wtr.write_record(&[
                     event.start.format("%Y-%m-%d").to_string(),
                     event.start.format("%H:%M").to_string(),
                     event.end.format("%H:%M").to_string(),
                     mins.to_string(),
-                    person,
-                    event.summary.clone(),
+                    csv_escape(person),
+                    csv_escape(&event.summary),
                 ])
                 .ok();
             }
@@ -595,9 +616,13 @@ fn main() -> io::Result<()> {
                     });
                 }
                 
-                let by_person: Vec<(String, i64, String)> = month_by_person
+                let by_person: Vec<PersonHours> = month_by_person
                     .into_iter()
-                    .map(|(p, m)| (p.clone(), m, format_hours(m)))
+                    .map(|(p, m)| PersonHours {
+                        person: p,
+                        minutes: m,
+                        formatted: format_hours(m),
+                    })
                     .collect();
                 
                 months_json.push(JsonMonthSummary {
@@ -881,6 +906,110 @@ mod tests {
         let to = NaiveDate::from_ymd_opt(2024, 3, 1).unwrap();
         let result = validate_date_range(&Some(from), &Some(to));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_csv_escape() {
+        assert_eq!(csv_escape("simple"), "simple");
+        assert_eq!(csv_escape("has,comma"), "\"has,comma\"");
+        assert_eq!(csv_escape("has\"quote"), "\"has\"\"quote\"");
+        assert_eq!(csv_escape("has\nnewline"), "\"has\nnewline\"");
+        assert_eq!(csv_escape("has,comma\"and\nnewline"), "\"has,comma\"\"and\nnewline\"");
+    }
+
+    #[test]
+    fn test_event_duration_minutes() {
+        let event = Event::new(
+            "Test".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        assert_eq!(event_duration_minutes(&event), Some(60));
+
+        // Zero duration
+        let zero = Event::new(
+            "Zero".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+        );
+        assert_eq!(event_duration_minutes(&zero), None);
+
+        // Negative duration
+        let neg = Event::new(
+            "Neg".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+        );
+        assert_eq!(event_duration_minutes(&neg), None);
+    }
+
+    #[test]
+    fn test_expand_events_simple() {
+        let raw = RawEvent {
+            summary: "Meeting [Alice]".to_string(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            duration: None,
+            uid: "uid1".to_string(),
+            rrule: None,
+            exdates: vec![],
+            recurrence_id: None,
+        };
+        let expanded = expand_events(vec![raw]);
+        assert_eq!(expanded.len(), 1);
+        assert_eq!(expanded[0].summary, "Meeting [Alice]");
+    }
+
+    #[test]
+    fn test_expand_events_filters_zero_duration() {
+        let zero_duration = RawEvent {
+            summary: "Zero [Bob]".to_string(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            duration: None,
+            uid: "uid1".to_string(),
+            rrule: None,
+            exdates: vec![],
+            recurrence_id: None,
+        };
+        let expanded = expand_events(vec![zero_duration]);
+        assert!(expanded.is_empty());
+    }
+
+    #[test]
+    fn test_expand_events_daily_recurrence() {
+        let daily = RawEvent {
+            summary: "Daily [Carol]".to_string(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            duration: None,
+            uid: "uid1".to_string(),
+            rrule: Some("FREQ=DAILY;UNTIL=20240305T235959".to_string()),
+            exdates: vec![],
+            recurrence_id: None,
+        };
+        let expanded = expand_events(vec![daily]);
+        // 5 days: March 1, 2, 3, 4, 5
+        assert_eq!(expanded.len(), 5);
+        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
+        assert_eq!(expanded[4].start.date(), NaiveDate::from_ymd_opt(2024, 3, 5).unwrap());
+    }
+
+    #[test]
+    fn test_expand_events_with_exdates() {
+        let with_exdate = RawEvent {
+            summary: "Weekly [Dave]".to_string(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            duration: None,
+            uid: "uid1".to_string(),
+            rrule: Some("FREQ=WEEKLY;UNTIL=20240315T235959".to_string()),
+            exdates: vec![NaiveDate::from_ymd_opt(2024, 3, 8).unwrap()],
+            recurrence_id: None,
+        };
+        let expanded = expand_events(vec![with_exdate]);
+        // 3 weeks, minus 1 exdate = 2 events (March 1, 15)
+        assert_eq!(expanded.len(), 2);
     }
 
     #[test]
