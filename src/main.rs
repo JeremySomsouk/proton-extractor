@@ -160,6 +160,30 @@ struct Args {
     #[arg(long)]
     list_events: bool,
 
+    /// List all unique locations found in events
+    #[arg(long)]
+    list_locations: bool,
+
+    /// List all unique categories found in events
+    #[arg(long)]
+    list_categories: bool,
+
+    /// Filter by category name (case-insensitive)
+    #[arg(long)]
+    category: Option<String>,
+
+    /// Exclude events matching this category (case-insensitive, can be repeated)
+    #[arg(long)]
+    exclude_category: Vec<String>,
+
+    /// Filter by location (case-insensitive)
+    #[arg(long)]
+    location: Option<String>,
+
+    /// Exclude events matching this location (case-insensitive, can be repeated)
+    #[arg(long)]
+    exclude_location: Vec<String>,
+
     /// Generate shell completion script for bash, zsh, fish, or powershell
     #[arg(long, value_enum)]
     generate_completion: Option<clap_complete::Shell>,
@@ -297,11 +321,17 @@ struct Event {
     summary: String,
     start: NaiveDateTime,
     end: NaiveDateTime,
+    location: Option<String>,
+    categories: Vec<String>,
 }
 
 impl Event {
     fn new(summary: String, start: NaiveDateTime, end: NaiveDateTime) -> Self {
-        Self { summary, start, end }
+        Self { summary, start, end, location: None, categories: vec![] }
+    }
+
+    fn with_metadata(summary: String, start: NaiveDateTime, end: NaiveDateTime, location: Option<String>, categories: Vec<String>) -> Self {
+        Self { summary, start, end, location, categories }
     }
 }
 
@@ -313,6 +343,8 @@ struct RawEvent {
     rrule: Option<String>,
     exdates: Vec<NaiveDate>,
     recurrence_id: Option<NaiveDateTime>,
+    location: Option<String>,
+    categories: Vec<String>,
 }
 
 fn parse_ical_datetime(value: &str) -> Option<NaiveDateTime> {
@@ -511,7 +543,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
     result.extend(override_events.into_iter().filter_map(|e| {
         let duration = e.end - e.start;
         if duration.num_minutes() > 0 {
-            Some(Event::new(e.summary, e.start, e.end))
+            Some(Event::with_metadata(e.summary, e.start, e.end, e.location, e.categories))
         } else {
             None
         }
@@ -525,7 +557,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
             None => {
                 let duration = event.end - event.start;
                 if duration.num_minutes() > 0 {
-                    result.push(Event::new(event.summary, event.start, event.end));
+                    result.push(Event::with_metadata(event.summary, event.start, event.end, event.location, event.categories.clone()));
                 }
             }
             Some(rrule) => {
@@ -533,7 +565,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     // Can't parse RRULE, just add the single event
                     let duration = event.end - event.start;
                     if duration.num_minutes() > 0 {
-                        result.push(Event::new(event.summary, event.start, event.end));
+                        result.push(Event::with_metadata(event.summary, event.start, event.end, event.location, event.categories.clone()));
                     }
                     continue;
                 };
@@ -551,7 +583,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     "YEARLY" => Duration::days(0),  // Placeholder - handled separately
                     _ => {
                         // Unsupported frequency, add single event
-                        result.push(Event::new(event.summary, event.start, event.end));
+                        result.push(Event::with_metadata(event.summary, event.start, event.end, event.location, event.categories.clone()));
                         continue;
                     }
                 };
@@ -585,7 +617,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                         && !exdate_set.contains(&date)
                         && !overrides.contains(&(event.uid.clone(), date))
                     {
-                        result.push(Event::new(event.summary.clone(), current, current + duration));
+                        result.push(Event::with_metadata(event.summary.clone(), current, current + duration, event.location.clone(), event.categories.clone()));
                     }
 
                     // Increment to next occurrence
@@ -668,6 +700,8 @@ fn extract_raw_events(ical_events: Vec<IcalEvent>) -> Vec<RawEvent> {
             let mut rrule = None;
             let mut exdates = Vec::new();
             let mut recurrence_id = None;
+            let mut location = None;
+            let mut categories = Vec::new();
 
             for prop in &e.properties {
                 let val = match &prop.value {
@@ -687,6 +721,11 @@ fn extract_raw_events(ical_events: Vec<IcalEvent>) -> Vec<RawEvent> {
                         }
                     }
                     "RECURRENCE-ID" => recurrence_id = parse_ical_datetime(val),
+                    "LOCATION" => location = Some(val.to_string()),
+                    "CATEGORIES" => {
+                        // CATEGORIES can be comma-separated
+                        categories = val.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                    }
                     _ => {}
                 }
             }
@@ -710,6 +749,8 @@ fn extract_raw_events(ical_events: Vec<IcalEvent>) -> Vec<RawEvent> {
                 rrule,
                 exdates,
                 recurrence_id,
+                location,
+                categories,
             })
         })
         .collect()
@@ -949,6 +990,50 @@ fn matches_exclude_summary_filter(event: &Event, exclude_filters: &[String]) -> 
     }
     let summary_lower = event.summary.to_lowercase();
     !exclude_filters.iter().any(|f| summary_lower.contains(&f.to_lowercase()))
+}
+
+/// Returns true if event matches the category filter (case-insensitive).
+/// Returns true if no filter is set.
+fn matches_category_filter(event: &Event, category_filter: &Option<String>) -> bool {
+    let Some(filter) = category_filter else {
+        return true;
+    };
+    event.categories.iter().any(|c| c.to_lowercase().contains(&filter.to_lowercase()))
+}
+
+/// Returns true if event does NOT match any exclude_category filter (case-insensitive).
+/// Returns true if no exclude filters are set.
+fn matches_exclude_category_filter(event: &Event, exclude_filters: &[String]) -> bool {
+    if exclude_filters.is_empty() {
+        return true;
+    }
+    let categories_lower: Vec<String> = event.categories.iter().map(|c| c.to_lowercase()).collect();
+    !exclude_filters.iter().any(|f| {
+        let f_lower = f.to_lowercase();
+        categories_lower.iter().any(|c| c.contains(&f_lower))
+    })
+}
+
+/// Returns true if event matches the location filter (case-insensitive).
+/// Returns true if no filter is set.
+fn matches_location_filter(event: &Event, location_filter: &Option<String>) -> bool {
+    let Some(filter) = location_filter else {
+        return true;
+    };
+    event.location.as_ref().map(|l| l.to_lowercase().contains(&filter.to_lowercase())).unwrap_or(false)
+}
+
+/// Returns true if event does NOT match any exclude_location filter (case-insensitive).
+/// Returns true if no exclude filters are set.
+fn matches_exclude_location_filter(event: &Event, exclude_filters: &[String]) -> bool {
+    if exclude_filters.is_empty() {
+        return true;
+    }
+    if let Some(ref loc) = event.location {
+        let loc_lower = loc.to_lowercase();
+        return !exclude_filters.iter().any(|f| loc_lower.contains(&f.to_lowercase()));
+    }
+    true // No location = can't match exclude filter
 }
 
 /// Returns true if event matches ALL search terms (case-insensitive, AND logic).
@@ -1371,6 +1456,10 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_month_filter(e, &args.month))
         .filter(|e| matches_weekday_filter(e, &weekdays_filter))
         .filter(|e| matches_exclude_weekday_filter(e, &exclude_weekdays_filter))
+        .filter(|e| matches_category_filter(e, &args.category))
+        .filter(|e| matches_exclude_category_filter(e, &args.exclude_category))
+        .filter(|e| matches_location_filter(e, &args.location))
+        .filter(|e| matches_exclude_location_filter(e, &args.exclude_location))
         .filter(|e| matches_duration_filter(e, &min_duration, &max_duration))
         .take(args.limit.unwrap_or(usize::MAX))
         .collect();
@@ -1443,6 +1532,42 @@ fn main() -> io::Result<()> {
         sorted.sort();
         for project in sorted {
             writeln!(out_writer, "{}", project)?;
+        }
+        return Ok(());
+    }
+
+    // Collect all unique locations if --list-locations is requested
+    if args.list_locations {
+        let mut locations: HashSet<String> = HashSet::new();
+        for event in &filtered {
+            if let Some(ref loc) = event.location {
+                if !loc.is_empty() {
+                    locations.insert(loc.clone());
+                }
+            }
+        }
+        let mut sorted: Vec<_> = locations.into_iter().collect();
+        sorted.sort();
+        for location in sorted {
+            writeln!(out_writer, "{}", location)?;
+        }
+        return Ok(());
+    }
+
+    // Collect all unique categories if --list-categories is requested
+    if args.list_categories {
+        let mut categories: HashSet<String> = HashSet::new();
+        for event in &filtered {
+            for cat in &event.categories {
+                if !cat.is_empty() {
+                    categories.insert(cat.clone());
+                }
+            }
+        }
+        let mut sorted: Vec<_> = categories.into_iter().collect();
+        sorted.sort();
+        for category in sorted {
+            writeln!(out_writer, "{}", category)?;
         }
         return Ok(());
     }
@@ -2447,6 +2572,8 @@ mod tests {
             rrule: None,
             exdates: vec![],
             recurrence_id: None,
+            location: None,
+            categories: vec![],
         };
         let expanded = expand_events(vec![raw]);
         assert_eq!(expanded.len(), 1);
@@ -2463,6 +2590,8 @@ mod tests {
             rrule: None,
             exdates: vec![],
             recurrence_id: None,
+            location: None,
+            categories: vec![],
         };
         let expanded = expand_events(vec![zero_duration]);
         assert!(expanded.is_empty());
@@ -2478,6 +2607,8 @@ mod tests {
             rrule: Some("FREQ=DAILY;UNTIL=20240305T235959".to_string()),
             exdates: vec![],
             recurrence_id: None,
+            location: None,
+            categories: vec![],
         };
         let expanded = expand_events(vec![daily]);
         // 5 days: March 1, 2, 3, 4, 5
@@ -2496,6 +2627,8 @@ mod tests {
             rrule: Some("FREQ=WEEKLY;UNTIL=20240315T235959".to_string()),
             exdates: vec![NaiveDate::from_ymd_opt(2024, 3, 8).unwrap()],
             recurrence_id: None,
+            location: None,
+            categories: vec![],
         };
         let expanded = expand_events(vec![with_exdate]);
         // 3 weeks, minus 1 exdate = 2 events (March 1, 15)
@@ -2513,6 +2646,8 @@ mod tests {
             rrule: Some("FREQ=WEEKLY;INTERVAL=2;UNTIL=20240331T235959".to_string()),
             exdates: vec![],
             recurrence_id: None,
+            location: None,
+            categories: vec![],
         };
         let expanded = expand_events(vec![biweekly]);
         assert_eq!(expanded.len(), 3);
@@ -2532,6 +2667,8 @@ mod tests {
             rrule: Some("FREQ=DAILY;COUNT=5".to_string()),
             exdates: vec![],
             recurrence_id: None,
+            location: None,
+            categories: vec![],
         };
         let expanded = expand_events(vec![daily_count]);
         // Should only produce 5 events despite no UNTIL
@@ -2551,6 +2688,8 @@ mod tests {
             rrule: Some("FREQ=DAILY;INTERVAL=3;COUNT=4".to_string()),
             exdates: vec![],
             recurrence_id: None,
+            location: None,
+            categories: vec![],
         };
         let expanded = expand_events(vec![combined]);
         assert_eq!(expanded.len(), 4);
@@ -2628,6 +2767,8 @@ mod tests {
             rrule: Some("FREQ=MONTHLY;UNTIL=20240615T235959".to_string()),
             exdates: vec![],
             recurrence_id: None,
+            location: None,
+            categories: vec![],
         };
         let expanded = expand_events(vec![monthly]);
         // 6 months: Jan, Feb, Mar, Apr, May, Jun
@@ -2648,6 +2789,8 @@ mod tests {
             rrule: Some("FREQ=MONTHLY;UNTIL=20230430T235959".to_string()),
             exdates: vec![],
             recurrence_id: None,
+            location: None,
+            categories: vec![],
         };
         let expanded = expand_events(vec![monthly_31st]);
         // 4 months: Jan 31, Feb 28 (clamped), Mar 31, Apr 30 (clamped)
@@ -2863,6 +3006,8 @@ mod tests {
             rrule: Some("FREQ=YEARLY;UNTIL=20251231T235959".to_string()),
             exdates: vec![],
             recurrence_id: None,
+            location: None,
+            categories: vec![],
         };
         let expanded = expand_events(vec![yearly]);
         // 4 years: 2022, 2023, 2024, 2025
@@ -2884,6 +3029,8 @@ mod tests {
             rrule: Some("FREQ=YEARLY;UNTIL=20251231T235959".to_string()),
             exdates: vec![],
             recurrence_id: None,
+            location: None,
+            categories: vec![],
         };
         let expanded = expand_events(vec![leap_day]);
         // Feb 29 gets clamped to Feb 28 in non-leap years
