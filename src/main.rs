@@ -1092,10 +1092,15 @@ fn matches_duration_filter(
 struct JsonEvent {
     summary: String,
     person: Option<String>,
+    project: Option<String>,
     start: String,
     end: String,
+    date: String,
+    weekday: String,
     duration_minutes: i64,
     duration_formatted: String,
+    location: Option<String>,
+    categories: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -1209,10 +1214,15 @@ fn build_json_output(grouped: &BTreeMap<(i32, u32), MonthSummary>, grand_total_m
                 events_json.push(JsonEvent {
                     summary: event.summary.clone(),
                     person,
+                    project: extract_project(&event.summary).map(|s| s.to_string()),
                     start: event.start.format("%Y-%m-%d %H:%M").to_string(),
                     end: event.end.format("%Y-%m-%d %H:%M").to_string(),
+                    date: event.start.format("%Y-%m-%d").to_string(),
+                    weekday: event.start.format("%A").to_string(),
                     duration_minutes: mins,
                     duration_formatted: format_hours(mins),
+                    location: event.location.clone(),
+                    categories: event.categories.clone(),
                 });
             }
         }
@@ -1799,7 +1809,7 @@ fn main() -> io::Result<()> {
                 .ok();
             } else {
                 // Full output with individual events
-                wtr.write_record(["date", "start", "end", "duration_minutes", "person", "summary"])
+                wtr.write_record(["date", "start", "end", "duration_minutes", "person", "project", "summary", "location", "categories"])
                     .ok();
                 for event in &filtered {
                     let mins = match event_duration_minutes(event) {
@@ -1807,13 +1817,17 @@ fn main() -> io::Result<()> {
                         None => continue,
                     };
                     let person = extract_person(&event.summary).unwrap_or("(unknown)");
+                    let project = extract_project(&event.summary).unwrap_or("");
                     wtr.write_record(&[
                         event.start.format("%Y-%m-%d").to_string(),
                         event.start.format("%H:%M").to_string(),
                         event.end.format("%H:%M").to_string(),
                         mins.to_string(),
                         csv_escape(person),
+                        csv_escape(project),
                         csv_escape(&event.summary),
+                        csv_escape(event.location.as_deref().unwrap_or("")),
+                        csv_escape(&event.categories.join(", ")),
                     ])
                     .ok();
                 }
@@ -1823,6 +1837,9 @@ fn main() -> io::Result<()> {
                     "".to_string(),
                     "".to_string(),
                     grand_total_minutes.to_string(),
+                    "".to_string(),
+                    "".to_string(),
+                    "".to_string(),
                     "".to_string(),
                     "".to_string(),
                 ])
@@ -1852,8 +1869,11 @@ fn main() -> io::Result<()> {
                         "start": event.start.format("%Y-%m-%d %H:%M").to_string(),
                         "end": event.end.format("%Y-%m-%d %H:%M").to_string(),
                         "date": event.start.format("%Y-%m-%d").to_string(),
+                        "weekday": event.start.format("%A").to_string(),
                         "duration_minutes": mins,
                         "duration_formatted": format_hours(mins),
+                        "location": event.location,
+                        "categories": event.categories,
                     });
                     writeln!(out_writer, "{}", json_event)?;
                 }
