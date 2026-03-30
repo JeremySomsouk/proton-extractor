@@ -4,7 +4,7 @@ use clap_complete;
 use ical::parser::ical::component::IcalEvent;
 use ical::IcalParser;
 use serde::Serialize;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs::File;
 use std::io::{self, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -82,6 +82,7 @@ enum OutputFormat {
     Ical,
     Html,
     Yaml,
+    Pivot,
 }
 
 #[derive(Parser, Debug)]
@@ -222,6 +223,10 @@ struct Args {
     /// Read from stdin instead of files (useful for piping ICS content)
     #[arg(long)]
     stdin: bool,
+
+    /// List all unique tags found in events (shows [person] and {project} separately)
+    #[arg(long)]
+    list_tags: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -1400,6 +1405,38 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    // List all unique tags if --list-tags is requested
+    if args.list_tags {
+        let mut persons: HashSet<String> = HashSet::new();
+        let mut projects: HashSet<String> = HashSet::new();
+        for event in &filtered {
+            if let Some(p) = extract_person(&event.summary) {
+                persons.insert(p.to_string());
+            }
+            if let Some(p) = extract_project(&event.summary) {
+                projects.insert(p.to_string());
+            }
+        }
+        let mut sorted_persons: Vec<_> = persons.into_iter().collect();
+        let mut sorted_projects: Vec<_> = projects.into_iter().collect();
+        sorted_persons.sort();
+        sorted_projects.sort();
+        
+        if !sorted_persons.is_empty() {
+            writeln!(out_writer, "{}", colored(color::CYAN, "Persons:"))?;
+            for person in &sorted_persons {
+                writeln!(out_writer, "  [{}]", person)?;
+            }
+        }
+        if !sorted_projects.is_empty() {
+            writeln!(out_writer, "{}", colored(color::CYAN, "Projects:"))?;
+            for project in &sorted_projects {
+                writeln!(out_writer, "  {{{}}}", project)?;
+            }
+        }
+        return Ok(());
+    }
+
     // List all unique events if --list-events is requested
     if args.list_events {
         for event in &filtered {
@@ -1600,6 +1637,65 @@ fn main() -> io::Result<()> {
             let yaml_output = serde_yaml::to_string(&json_output)
                 .unwrap_or_else(|_| "{}".to_string());
             writeln!(out_writer, "{}", yaml_output)?;
+        }
+        OutputFormat::Pivot => {
+            // Pivot table: person vs weekday - hours matrix
+            let weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+            let mut by_person_weekday: BTreeMap<String, [i64; 7]> = BTreeMap::new();
+            let mut all_persons: BTreeSet<String> = BTreeSet::new();
+            
+            for event in &filtered {
+                if let Some(mins) = event_duration_minutes(event) {
+                    let person = extract_person(&event.summary).unwrap_or("(unknown)").to_string();
+                    let wd = event.start.weekday().num_days_from_monday() as usize;
+                    all_persons.insert(person.clone());
+                    by_person_weekday.entry(person).or_default()[wd] += mins;
+                }
+            }
+
+            // Header row
+            write!(out_writer, "{:<20}", "").ok();
+            for day in &weekday_names {
+                write!(out_writer, " {:>10}", day).ok();
+            }
+            writeln!(out_writer, " {:>10}", "Total").ok();
+            
+            // Separator
+            write!(out_writer, "{:<20}", "---").ok();
+            for _ in &weekday_names {
+                write!(out_writer, " {:>10}", "---").ok();
+            }
+            writeln!(out_writer, " {:>10}", "---").ok();
+
+            // Data rows
+            let mut grand_totals: [i64; 7] = [0; 7];
+            let mut grand_total: i64 = 0;
+            for person in &all_persons {
+                let hours = by_person_weekday.get(person).copied().unwrap_or([0; 7]);
+                let row_total: i64 = hours.iter().sum();
+                write!(out_writer, "{:<20}", person).ok();
+                for (i, day_hours) in hours.iter().enumerate() {
+                    grand_totals[i] += day_hours;
+                    if *day_hours > 0 {
+                        write!(out_writer, " {:>10}", format_hours(*day_hours)).ok();
+                    } else {
+                        write!(out_writer, " {:>10}", "-").ok();
+                    }
+                }
+                grand_total += row_total;
+                writeln!(out_writer, " {:>10}", format_hours(row_total)).ok();
+            }
+
+            // Grand total row
+            write!(out_writer, "{:<20}", colored(color::BOLD, "TOTAL")).ok();
+            for day_total in &grand_totals {
+                if *day_total > 0 {
+                    write!(out_writer, " {:>10}", colored(color::YELLOW, format_hours(*day_total))).ok();
+                } else {
+                    write!(out_writer, " {:>10}", "-").ok();
+                }
+            }
+            writeln!(out_writer, " {:>10}", colored(color::GREEN, format_hours(grand_total))).ok();
         }
         OutputFormat::Html => {
             // Build per-person summary
