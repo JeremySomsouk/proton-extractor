@@ -149,6 +149,14 @@ struct Args {
     /// Filter by day of week: MO,TU,WE,TH,FR,SA,SU (can be repeated, e.g., --weekdays MO --weekdays WE)
     #[arg(long, value_delimiter = ',', value_name = "DAYS")]
     weekdays: Option<Vec<String>>,
+
+    /// Exclude events whose summary contains this text (case-insensitive, can be repeated)
+    #[arg(long)]
+    exclude_summary: Vec<String>,
+
+    /// Enable compact JSON output (no pretty-printing)
+    #[arg(long, requires = "format")]
+    compact: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -392,6 +400,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     "WEEKLY" => Duration::weeks(interval.unwrap_or(1) as i64),
                     "DAILY" => Duration::days(interval.unwrap_or(1) as i64),
                     "MONTHLY" => Duration::days(0), // Placeholder - handled separately
+                    "YEARLY" => Duration::days(0),  // Placeholder - handled separately
                     _ => {
                         // Unsupported frequency, add single event
                         result.push(Event::new(event.summary, event.start, event.end));
@@ -461,6 +470,30 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                         } else {
                             // Fallback: shouldn't happen with our day calculation
                             current += Duration::days(30);
+                        }
+                    } else if freq == "YEARLY" {
+                        // Increment by one year
+                        let new_year = current.year() + 1;
+                        // Get the days in the target month/year to handle leap years
+                        let days_in_target_month = match current.month() {
+                            1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+                            4 | 6 | 9 | 11 => 30,
+                            2 => {
+                                if (new_year % 4 == 0 && new_year % 100 != 0) || (new_year % 400 == 0) {
+                                    29
+                                } else {
+                                    28
+                                }
+                            }
+                            _ => 31,
+                        };
+                        // Clamp original day to valid days in target month
+                        let new_day = original_day.min(days_in_target_month);
+                        if let Some(new_date) = NaiveDate::from_ymd_opt(new_year, current.month(), new_day) {
+                            current = new_date.and_hms_opt(current.hour(), current.minute(), current.second()).unwrap_or(current);
+                        } else {
+                            // Fallback: shouldn't happen with proper day calculation
+                            current += Duration::days(365);
                         }
                     } else {
                         current += step;
@@ -737,6 +770,14 @@ fn matches_weekday_filter(event: &Event, weekdays: &[String]) -> bool {
     })
 }
 
+fn matches_exclude_summary_filter(event: &Event, exclude_filters: &[String]) -> bool {
+    if exclude_filters.is_empty() {
+        return true;
+    }
+    let summary_lower = event.summary.to_lowercase();
+    !exclude_filters.iter().any(|f| summary_lower.contains(&f.to_lowercase()))
+}
+
 // JSON serialization structures
 #[derive(Serialize)]
 struct JsonEvent {
@@ -858,6 +899,9 @@ fn main() -> io::Result<()> {
         if !args.exclude_project.is_empty() {
             eprintln!("[verbose] Excluding projects: {:?}", args.exclude_project);
         }
+        if !args.exclude_summary.is_empty() {
+            eprintln!("[verbose] Excluding summaries containing: {:?}", args.exclude_summary);
+        }
         if let Some(ref f) = args.from {
             eprintln!("[verbose] From date: {}", f);
         }
@@ -945,6 +989,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_project_filter(e, &args.project))
         .filter(|e| matches_exclude_filter(e, &args.exclude_person))
         .filter(|e| matches_exclude_project_filter(e, &args.exclude_project))
+        .filter(|e| matches_exclude_summary_filter(e, &args.exclude_summary))
         .filter(|e| matches_date_range(e, &args.from, &args.to))
         .filter(|e| matches_year_filter(e, &args.year))
         .filter(|e| matches_month_filter(e, &args.month))
@@ -1145,7 +1190,12 @@ fn main() -> io::Result<()> {
                 grand_total_formatted: format_hours(grand_total_minutes),
                 months: months_json,
             };
-            writeln!(out_writer, "{}", serde_json::to_string_pretty(&json_output).unwrap_or_else(|_| "{}".to_string()))?;
+            let json_str = if args.compact {
+                serde_json::to_string(&json_output).unwrap_or_else(|_| "{}".to_string())
+            } else {
+                serde_json::to_string_pretty(&json_output).unwrap_or_else(|_| "{}".to_string())
+            };
+            writeln!(out_writer, "{}", json_str)?;
         }
         OutputFormat::Ical => {
             writeln!(out_writer, "BEGIN:VCALENDAR")?;
@@ -2029,5 +2079,72 @@ mod tests {
         // But XX alone doesn't match anyone
         assert!(!matches_weekday_filter(&wednesday, &["XX".to_string()]));
         assert!(!matches_weekday_filter(&friday, &["XX".to_string()]));
+    }
+
+    #[test]
+    fn test_matches_exclude_summary_filter() {
+        let event = Event::new(
+            "Team standup meeting [Alice] {Project}".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+
+        // Empty exclude list should include
+        assert!(matches_exclude_summary_filter(&event, &[]));
+
+        // Excluding text that appears in summary should exclude
+        assert!(!matches_exclude_summary_filter(&event, &["standup".to_string()]));
+        assert!(!matches_exclude_summary_filter(&event, &["meeting".to_string()]));
+        assert!(!matches_exclude_summary_filter(&event, &["TEAM".to_string()])); // case insensitive
+        assert!(!matches_exclude_summary_filter(&event, &["Alice".to_string()])); // partial match
+
+        // Multiple exclude filters (any match excludes)
+        assert!(!matches_exclude_summary_filter(&event, &["Alice".to_string(), "xyz".to_string()]));
+
+        // Excluding text that doesn't appear should include
+        assert!(matches_exclude_summary_filter(&event, &["vacation".to_string()]));
+    }
+
+    #[test]
+    fn test_expand_events_yearly_recurrence() {
+        let yearly = RawEvent {
+            summary: "Yearly [Eve]".to_string(),
+            start: NaiveDate::from_ymd_opt(2022, 6, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2022, 6, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            uid: "uid1".to_string(),
+            rrule: Some("FREQ=YEARLY;UNTIL=20251231T235959".to_string()),
+            exdates: vec![],
+            recurrence_id: None,
+        };
+        let expanded = expand_events(vec![yearly]);
+        // 4 years: 2022, 2023, 2024, 2025
+        assert_eq!(expanded.len(), 4);
+        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2022, 6, 15).unwrap());
+        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2023, 6, 15).unwrap());
+        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2024, 6, 15).unwrap());
+        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2025, 6, 15).unwrap());
+    }
+
+    #[test]
+    fn test_expand_events_yearly_leap_day() {
+        // Feb 29 on leap years - clamped to Feb 28 on non-leap years
+        let leap_day = RawEvent {
+            summary: "Leap day meeting [Frank]".to_string(),
+            start: NaiveDate::from_ymd_opt(2020, 2, 29).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2020, 2, 29).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            uid: "uid1".to_string(),
+            rrule: Some("FREQ=YEARLY;UNTIL=20251231T235959".to_string()),
+            exdates: vec![],
+            recurrence_id: None,
+        };
+        let expanded = expand_events(vec![leap_day]);
+        // Feb 29 gets clamped to Feb 28 in non-leap years
+        // Limited by 5-year recurrence limit: 2020-2024 = 5 occurrences
+        assert_eq!(expanded.len(), 5);
+        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2020, 2, 29).unwrap());
+        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2021, 2, 28).unwrap());
+        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2022, 2, 28).unwrap());
+        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2023, 2, 28).unwrap());
+        assert_eq!(expanded[4].start.date(), NaiveDate::from_ymd_opt(2024, 2, 29).unwrap());
     }
 }
