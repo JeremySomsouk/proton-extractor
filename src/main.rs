@@ -1267,7 +1267,7 @@ fn main() -> io::Result<()> {
             writeln!(out_writer, "</body>")?;
             writeln!(out_writer, "</html>")?;
         }
-        OutputFormat::Text | OutputFormat::Markdown => {
+        OutputFormat::Text => {
             // Build per-person summary across all events
             let all_by_person: BTreeMap<&str, i64> = filtered
                 .iter()
@@ -1311,6 +1311,60 @@ fn main() -> io::Result<()> {
                 writeln!(out_writer, "{}", colored(color::CYAN, "=== Hours per person ==="))?;
                 for (person, mins) in &all_by_person {
                     writeln!(out_writer, "  {}  {:>6}  {}", colored(color::YELLOW, format_hours(*mins)), colored(color::MAGENTA, format_percentage(*mins, grand_total_minutes)), person)?;
+                }
+            }
+        }
+        OutputFormat::Markdown => {
+            // Build per-person summary across all events
+            let all_by_person: BTreeMap<&str, i64> = filtered
+                .iter()
+                .filter_map(|e| {
+                    let mins = event_duration_minutes(e)?;
+                    Some((extract_person(&e.summary).unwrap_or("(unknown)"), mins))
+                })
+                .fold(BTreeMap::new(), |mut acc: BTreeMap<&str, i64>, (person, mins)| {
+                    *acc.entry(person).or_default() += mins;
+                    acc
+                });
+
+            for ((year, _month), summary) in &grouped {
+                writeln!(out_writer)?;
+                writeln!(out_writer, "## {} {}", summary.month_name, year)?;
+                writeln!(out_writer)?;
+
+                let month_by_person = summary.by_person();
+
+                if !args.quiet && !args.sum_only {
+                    writeln!(out_writer, "| Duration | Event |")?;
+                    writeln!(out_writer, "|----------|-------|")?;
+                    for event in &summary.events {
+                        if let Some(mins) = event_duration_minutes(event) {
+                            writeln!(out_writer, "| {} | {} |", format_hours(mins), event.summary)?;
+                        }
+                    }
+                    writeln!(out_writer)?;
+                }
+
+                writeln!(out_writer, "### {} By Person", "👤")?;
+                writeln!(out_writer)?;
+                writeln!(out_writer, "| Person | Hours | % |")?;
+                writeln!(out_writer, "|--------|-------|---|")?;
+                for (person, mins) in &month_by_person {
+                    writeln!(out_writer, "| {} | {} | {} |", person, format_hours(*mins), format_percentage(*mins, summary.total_minutes()))?;
+                }
+                writeln!(out_writer, "| **TOTAL** | **{}** | 100% |", format_hours(summary.total_minutes()))?;
+                writeln!(out_writer)?;
+            }
+
+            if grand_total_minutes > 0 && !all_by_person.is_empty() {
+                writeln!(out_writer, "## 🎯 Grand Total: {}", format_hours(grand_total_minutes))?;
+                writeln!(out_writer)?;
+                writeln!(out_writer, "### 👥 Hours per Person")?;
+                writeln!(out_writer)?;
+                writeln!(out_writer, "| Person | Hours | % |")?;
+                writeln!(out_writer, "|--------|-------|---|")?;
+                for (person, mins) in &all_by_person {
+                    writeln!(out_writer, "| {} | {} | {} |", person, format_hours(*mins), format_percentage(*mins, grand_total_minutes))?;
                 }
             }
         }
