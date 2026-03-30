@@ -161,7 +161,7 @@ struct Args {
     list_events: bool,
 
     /// Generate shell completion script for bash, zsh, fish, or powershell
-    #[arg(long, value_enum, hide = true, hide_possible_values = true)]
+    #[arg(long, value_enum)]
     generate_completion: Option<clap_complete::Shell>,
 
     /// Preview mode: show event count without processing output
