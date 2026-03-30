@@ -25,6 +25,10 @@ struct Args {
     /// Filter by month
     #[arg(short, long, value_enum, default_value = "all")]
     month: MonthFilter,
+
+    /// Only show totals, hide individual events
+    #[arg(short, long)]
+    quiet: bool,
 }
 
 #[derive(Clone)]
@@ -324,7 +328,9 @@ fn main() {
             month_minutes += mins;
             let person = extract_person(&event.summary).unwrap_or("(unknown)");
             *month_by_person.entry(person).or_default() += mins;
-            println!("  {:6}  {}", format_hours(mins), event.summary);
+            if !args.quiet {
+                println!("  {:6}  {}", format_hours(mins), event.summary);
+            }
         }
 
         println!("  ------");
@@ -353,5 +359,69 @@ fn main() {
         for (person, mins) in &by_person {
             println!("  {:6}  {}", format_hours(*mins), person);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Timelike;
+
+    #[test]
+    fn test_extract_person_valid() {
+        assert_eq!(extract_person("Meeting with [John Doe]"), Some("John Doe"));
+        assert_eq!(extract_person("[Alice] standup"), Some("Alice"));
+        assert_eq!(extract_person("  [  Bob  ]  report"), Some("  Bob  "));
+    }
+
+    #[test]
+    fn test_extract_person_no_brackets() {
+        assert_eq!(extract_person("Regular meeting"), None);
+        assert_eq!(extract_person("[Only opening"), None);
+        assert_eq!(extract_person("Only closing]"), None);
+    }
+
+    #[test]
+    fn test_extract_person_empty() {
+        assert_eq!(extract_person("[]"), None);
+        assert_eq!(extract_person("[ ]"), None);
+    }
+
+    #[test]
+    fn test_format_hours_whole() {
+        assert_eq!(format_hours(60), "1h");
+        assert_eq!(format_hours(120), "2h");
+        assert_eq!(format_hours(480), "8h");
+    }
+
+    #[test]
+    fn test_format_hours_with_minutes() {
+        assert_eq!(format_hours(90), "1h 30m");
+        assert_eq!(format_hours(45), "0h 45m");
+        assert_eq!(format_hours(150), "2h 30m");
+    }
+
+    #[test]
+    fn test_parse_ical_datetime() {
+        let dt = parse_ical_datetime("20240315T090000");
+        assert!(dt.is_some());
+        let dt = dt.unwrap();
+        assert_eq!(dt.year(), 2024);
+        assert_eq!(dt.month(), 3);
+        assert_eq!(dt.day(), 15);
+
+        // Z suffix should be handled
+        assert!(parse_ical_datetime("20240315T090000Z").is_some());
+
+        // Date-only format
+        let dt = parse_ical_datetime("20240315");
+        assert!(dt.is_some());
+        assert_eq!(dt.unwrap().hour(), 0);
+    }
+
+    #[test]
+    fn test_parse_rrule() {
+        assert!(parse_rrule("FREQ=WEEKLY;UNTIL=20240315T090000Z").is_some());
+        assert_eq!(parse_rrule("FREQ=DAILY"), None); // missing UNTIL
     }
 }
