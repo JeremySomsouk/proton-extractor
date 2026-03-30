@@ -182,6 +182,14 @@ struct Args {
     /// Quick filter: show only yesterday's events
     #[arg(long)]
     yesterday: bool,
+
+    /// Filter out events shorter than this duration (e.g., "30m", "1h", "2h30m")
+    #[arg(long)]
+    min_duration: Option<String>,
+
+    /// Filter out events longer than this duration (e.g., "8h", "4h30m")
+    #[arg(long)]
+    max_duration: Option<String>,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -333,6 +341,64 @@ fn parse_duration(duration: &str) -> Option<Duration> {
     }
     
     Some(Duration::days(days) + Duration::weeks(weeks) + Duration::hours(hours) + Duration::minutes(minutes))
+}
+
+/// Parse a human-readable duration string like "30m", "1h", "2h30m", "1d"
+pub fn parse_human_duration(s: &str) -> Option<Duration> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+
+    let mut total = Duration::zero();
+    let mut current_num = String::new();
+
+    for ch in s.chars() {
+        match ch {
+            '0'..='9' => current_num.push(ch),
+            'h' | 'H' => {
+                if let Ok(n) = current_num.parse() {
+                    total = total + Duration::hours(n);
+                }
+                current_num.clear();
+            }
+            'm' | 'M' => {
+                if let Ok(n) = current_num.parse() {
+                    total = total + Duration::minutes(n);
+                }
+                current_num.clear();
+            }
+            'd' | 'D' => {
+                if let Ok(n) = current_num.parse() {
+                    total = total + Duration::days(n);
+                }
+                current_num.clear();
+            }
+            'w' | 'W' => {
+                if let Ok(n) = current_num.parse() {
+                    total = total + Duration::weeks(n);
+                }
+                current_num.clear();
+            }
+            ' ' | '\t' => {} // ignore whitespace
+            _ => return None, // invalid character
+        }
+    }
+
+    // Handle trailing number without unit (treat as minutes)
+    if !current_num.is_empty() {
+        if let Ok(n) = current_num.parse() {
+            total = total + Duration::minutes(n);
+        } else {
+            return None;
+        }
+    }
+
+    if total.num_minutes() > 0 {
+        Some(total)
+    } else {
+        None
+    }
 }
 
 type RRuleParseResult = (String, NaiveDateTime, Option<Vec<String>>, Option<i32>, Option<i32>);
@@ -817,6 +883,30 @@ fn matches_exclude_summary_filter(event: &Event, exclude_filters: &[String]) -> 
     !exclude_filters.iter().any(|f| summary_lower.contains(&f.to_lowercase()))
 }
 
+fn matches_duration_filter(
+    event: &Event,
+    min_duration: &Option<Duration>,
+    max_duration: &Option<Duration>,
+) -> bool {
+    let Some(event_mins) = event_duration_minutes(event) else {
+        return false; // Skip events with invalid duration
+    };
+
+    if let Some(min) = min_duration {
+        if event_mins < min.num_minutes() {
+            return false;
+        }
+    }
+
+    if let Some(max) = max_duration {
+        if event_mins > max.num_minutes() {
+            return false;
+        }
+    }
+
+    true
+}
+
 // JSON serialization structures
 #[derive(Serialize)]
 struct JsonEvent {
@@ -1022,6 +1112,21 @@ fn main() -> io::Result<()> {
         eprintln!("[verbose] Expanded events: {}", all_events.len());
     }
 
+    // Parse duration filters
+    let min_duration = args.min_duration.as_ref()
+        .and_then(|s| parse_human_duration(s).or_else(|| parse_duration(s)));
+    let max_duration = args.max_duration.as_ref()
+        .and_then(|s| parse_human_duration(s).or_else(|| parse_duration(s)));
+
+    if args.verbose {
+        if let Some(ref d) = min_duration {
+            eprintln!("[verbose] Min duration filter: {} minutes", d.num_minutes());
+        }
+        if let Some(ref d) = max_duration {
+            eprintln!("[verbose] Max duration filter: {} minutes", d.num_minutes());
+        }
+    }
+
     // Setup output: file or stdout
     let out_writer: Box<dyn Write> = match &args.output {
         Some(path) => {
@@ -1057,6 +1162,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_month_filter(e, &args.month))
         .filter(|e| matches_weekday_filter(e, &weekdays_filter))
         .filter(|e| matches_exclude_weekday_filter(e, &exclude_weekdays_filter))
+        .filter(|e| matches_duration_filter(e, &min_duration, &max_duration))
         .take(args.limit.unwrap_or(usize::MAX))
         .collect();
 
@@ -2348,5 +2454,87 @@ mod tests {
         assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2022, 2, 28).unwrap());
         assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2023, 2, 28).unwrap());
         assert_eq!(expanded[4].start.date(), NaiveDate::from_ymd_opt(2024, 2, 29).unwrap());
+    }
+
+    #[test]
+    fn test_parse_human_duration() {
+        use super::parse_human_duration;
+
+        // Hours
+        assert_eq!(parse_human_duration("1h"), Some(Duration::hours(1)));
+        assert_eq!(parse_human_duration("2h"), Some(Duration::hours(2)));
+        assert_eq!(parse_human_duration("1H"), Some(Duration::hours(1))); // case insensitive
+
+        // Minutes
+        assert_eq!(parse_human_duration("30m"), Some(Duration::minutes(30)));
+        assert_eq!(parse_human_duration("90m"), Some(Duration::minutes(90)));
+        assert_eq!(parse_human_duration("30M"), Some(Duration::minutes(30)));
+
+        // Combined
+        assert_eq!(parse_human_duration("1h30m"), Some(Duration::hours(1) + Duration::minutes(30)));
+        assert_eq!(parse_human_duration("2h15m"), Some(Duration::hours(2) + Duration::minutes(15)));
+
+        // Days
+        assert_eq!(parse_human_duration("1d"), Some(Duration::days(1)));
+        assert_eq!(parse_human_duration("2d"), Some(Duration::days(2)));
+
+        // Weeks
+        assert_eq!(parse_human_duration("1w"), Some(Duration::weeks(1)));
+
+        // Trailing number (treated as minutes)
+        assert_eq!(parse_human_duration("45"), Some(Duration::minutes(45)));
+
+        // With spaces
+        assert_eq!(parse_human_duration("1h 30m"), Some(Duration::hours(1) + Duration::minutes(30)));
+
+        // Invalid
+        assert_eq!(parse_human_duration(""), None);
+        assert_eq!(parse_human_duration("xyz"), None);
+        assert_eq!(parse_human_duration("1x"), None);
+    }
+
+    #[test]
+    fn test_matches_duration_filter() {
+        let short_event = Event::new(
+            "Quick sync [Alice]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 15, 0).unwrap(), // 15 min
+        );
+        let medium_event = Event::new(
+            "Standard meeting [Bob]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(11, 0, 0).unwrap(), // 1 hour
+        );
+        let long_event = Event::new(
+            "Workshop [Charlie]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(13, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(17, 0, 0).unwrap(), // 4 hours
+        );
+
+        let none_filter: Option<Duration> = None;
+
+        // No filter = all pass
+        assert!(matches_duration_filter(&short_event, &none_filter, &none_filter));
+        assert!(matches_duration_filter(&medium_event, &none_filter, &none_filter));
+        assert!(matches_duration_filter(&long_event, &none_filter, &none_filter));
+
+        // Min duration filter
+        let min_1h = Some(Duration::hours(1));
+        assert!(!matches_duration_filter(&short_event, &min_1h, &none_filter)); // 15min < 1h
+        assert!(matches_duration_filter(&medium_event, &min_1h, &none_filter)); // 1h >= 1h
+        assert!(matches_duration_filter(&long_event, &min_1h, &none_filter)); // 4h >= 1h
+
+        // Max duration filter
+        let max_2h = Some(Duration::hours(2));
+        assert!(matches_duration_filter(&short_event, &none_filter, &max_2h)); // 15min <= 2h
+        assert!(matches_duration_filter(&medium_event, &none_filter, &max_2h)); // 1h <= 2h
+        assert!(!matches_duration_filter(&long_event, &none_filter, &max_2h)); // 4h > 2h
+
+        // Combined min and max
+        let min_30m = Some(Duration::minutes(30));
+        let max_3h = Some(Duration::hours(3));
+        assert!(!matches_duration_filter(&short_event, &min_30m, &max_3h)); // 15min < 30m
+        assert!(matches_duration_filter(&medium_event, &min_30m, &max_3h)); // 1h in range
+        assert!(!matches_duration_filter(&long_event, &min_30m, &max_3h)); // 4h > 3h
     }
 }
