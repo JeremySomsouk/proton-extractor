@@ -16,6 +16,7 @@ enum DateFilter {
     Previous,
     All,
     Today,
+    Week,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -464,7 +465,27 @@ fn matches_filter(event: &Event, filter: &DateFilter) -> bool {
         DateFilter::Today => {
             ev_year == now.year() && ev_month == now.month() && ev_day == now.day()
         }
+        DateFilter::Week => {
+            // Get ISO week number and year for both event and current date
+            let ev_week = (ev_year * 100) + ev_week_number(ev_year, ev_month, ev_day) as i32;
+            let now_week = (now.year() * 100) + now_week_number(now.year(), now.month(), now.day()) as i32;
+            ev_week == now_week
+        }
     }
+}
+
+// ISO week number calculation (Monday = 1, Sunday = 7)
+fn now_week_number(year: i32, month: u32, day: u32) -> u32 {
+    let date = NaiveDate::from_ymd_opt(year, month, day).unwrap_or_default();
+    let days_since_monday = date.weekday().num_days_from_monday();
+    let monday = date - Duration::days(days_since_monday as i64);
+    let week_start = NaiveDate::from_ymd_opt(monday.year(), monday.month(), monday.day()).unwrap_or_default();
+    let days_since_reference = week_start - NaiveDate::from_ymd_opt(2000, 1, 3).unwrap();
+    (days_since_reference.num_days() / 7) as u32 + 1
+}
+
+fn ev_week_number(year: i32, month: u32, day: u32) -> u32 {
+    now_week_number(year, month, day)
 }
 
 fn matches_person_filter(event: &Event, person_filter: &Option<String>) -> bool {
@@ -1016,6 +1037,25 @@ mod tests {
         assert!(!matches_filter(&yesterday_event, &DateFilter::Today));
         assert!(matches_filter(&today_event, &DateFilter::All));
         assert!(matches_filter(&yesterday_event, &DateFilter::All));
+    }
+
+    #[test]
+    fn test_matches_filter_week() {
+        let today = Local::now().naive_local().date();
+        let today_event = Event::new(
+            "Today meeting [Alice]".to_string(),
+            today.and_hms_opt(9, 0, 0).unwrap(),
+            today.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        let last_week = today - chrono::Duration::days(7);
+        let last_week_event = Event::new(
+            "Last week meeting [Bob]".to_string(),
+            last_week.and_hms_opt(9, 0, 0).unwrap(),
+            last_week.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        assert!(matches_filter(&today_event, &DateFilter::Week));
+        assert!(!matches_filter(&last_week_event, &DateFilter::Week));
     }
 
     #[test]
