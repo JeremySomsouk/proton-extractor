@@ -12,3 +12,7 @@ serde_json = "1.0"
 csv = "1"
 tracing = { version = "0.1.44", features = ["log"] }
 tracing-subscriber = "0.3.23"
+clap_complete = "4.6.0"
+
+[dev-dependencies]
+clap_complete = "4.6.0"

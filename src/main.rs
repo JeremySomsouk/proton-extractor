@@ -1,5 +1,6 @@
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveDateTime, Timelike};
-use clap::{Parser, ValueEnum};
+use clap::{CommandFactory, Parser, ValueEnum};
+use clap_complete;
 use ical::parser::ical::component::IcalEvent;
 use ical::IcalParser;
 use serde::Serialize;
@@ -83,6 +84,7 @@ enum OutputFormat {
 
 #[derive(Parser, Debug)]
 #[command(name = "proton-extractor", about = "Sum calendar event hours from ICS files", version = VERSION)]
+#[command(after_help = "For shell completion, run:\n  proton-extractor --generate-completion bash\n  proton-extractor --generate-completion zsh\n  proton-extractor --generate-completion fish\n  proton-extractor --generate-completion powershell\n\nOr source the output directly, e.g.:\n  source <(proton-extractor --generate-completion bash)")]
 struct Args {
     /// Paths to .ics files
     files: Vec<PathBuf>,
@@ -154,6 +156,10 @@ struct Args {
     /// List all unique events found (one per line with date and summary)
     #[arg(long)]
     list_events: bool,
+
+    /// Generate shell completion script for bash, zsh, fish, or powershell
+    #[arg(long, value_enum, hide = true, hide_possible_values = true)]
+    generate_completion: Option<clap_complete::Shell>,
 
     /// Preview mode: show event count without processing output
     #[arg(long)]
@@ -1041,6 +1047,14 @@ fn format_percentage(part: i64, total: i64) -> String {
 
 fn main() -> io::Result<()> {
     let args = Args::parse();
+
+    // Generate shell completion script and exit if requested
+    if let Some(shell) = &args.generate_completion {
+        let mut cmd = Args::command();
+        let name = env!("CARGO_PKG_NAME");
+        clap_complete::generate(shell.clone(), &mut cmd, name, &mut std::io::stdout());
+        return Ok(());
+    }
 
     // Initialize tracing/logging
     let log_level = if args.verbose { Level::DEBUG } else { Level::INFO };
