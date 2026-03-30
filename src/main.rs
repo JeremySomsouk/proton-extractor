@@ -150,6 +150,10 @@ struct Args {
     #[arg(long, value_delimiter = ',', value_name = "DAYS")]
     weekdays: Option<Vec<String>>,
 
+    /// Exclude events on these days of week: MO,TU,WE,TH,FR,SA,SU (can be repeated, complements --weekdays)
+    #[arg(long, value_delimiter = ',', value_name = "DAYS")]
+    exclude_weekdays: Option<Vec<String>>,
+
     /// Exclude events whose summary contains this text (case-insensitive, can be repeated)
     #[arg(long)]
     exclude_summary: Vec<String>,
@@ -770,6 +774,16 @@ fn matches_weekday_filter(event: &Event, weekdays: &[String]) -> bool {
     })
 }
 
+fn matches_exclude_weekday_filter(event: &Event, exclude_weekdays: &[String]) -> bool {
+    if exclude_weekdays.is_empty() {
+        return true;
+    }
+    let event_weekday = event.start.weekday().num_days_from_monday() + 1;
+    !exclude_weekdays.iter().any(|day| {
+        weekday_abbrev_to_num(day).map(|wd| wd == event_weekday).unwrap_or(false)
+    })
+}
+
 fn matches_exclude_summary_filter(event: &Event, exclude_filters: &[String]) -> bool {
     if exclude_filters.is_empty() {
         return true;
@@ -914,6 +928,9 @@ fn main() -> io::Result<()> {
         if let Some(ref wd) = args.weekdays {
             eprintln!("[verbose] Filter by weekdays: {:?}", wd);
         }
+        if let Some(ref wd) = args.exclude_weekdays {
+            eprintln!("[verbose] Exclude weekdays: {:?}", wd);
+        }
     }
 
     if args.files.is_empty() {
@@ -982,6 +999,7 @@ fn main() -> io::Result<()> {
     let mut out_writer = out_writer;
 
     let weekdays_filter = args.weekdays.unwrap_or_default();
+    let exclude_weekdays_filter = args.exclude_weekdays.unwrap_or_default();
     let filtered: Vec<&Event> = all_events
         .iter()
         .filter(|e| matches_filter(e, &args.date))
@@ -994,6 +1012,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_year_filter(e, &args.year))
         .filter(|e| matches_month_filter(e, &args.month))
         .filter(|e| matches_weekday_filter(e, &weekdays_filter))
+        .filter(|e| matches_exclude_weekday_filter(e, &exclude_weekdays_filter))
         .collect();
 
     if args.verbose {
@@ -2079,6 +2098,43 @@ mod tests {
         // But XX alone doesn't match anyone
         assert!(!matches_weekday_filter(&wednesday, &["XX".to_string()]));
         assert!(!matches_weekday_filter(&friday, &["XX".to_string()]));
+    }
+
+    #[test]
+    fn test_matches_exclude_weekday_filter() {
+        // Wednesday March 6, 2024
+        let wednesday = Event::new(
+            "Wednesday meeting [Alice]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 6).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 6).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        // Friday March 8, 2024
+        let friday = Event::new(
+            "Friday meeting [Bob]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 8).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 8).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+
+        // Empty exclude list includes all
+        assert!(matches_exclude_weekday_filter(&wednesday, &[]));
+        assert!(matches_exclude_weekday_filter(&friday, &[]));
+
+        // Excluding a day the event is NOT on keeps it
+        assert!(matches_exclude_weekday_filter(&wednesday, &["FR".to_string()]));
+
+        // Excluding a day the event IS on excludes it
+        assert!(!matches_exclude_weekday_filter(&wednesday, &["WE".to_string()]));
+        assert!(!matches_exclude_weekday_filter(&friday, &["FR".to_string()]));
+
+        // Multiple exclude days (OR logic - excluded if matches ANY)
+        assert!(!matches_exclude_weekday_filter(&wednesday, &["MO".to_string(), "WE".to_string(), "FR".to_string()]));
+
+        // Case insensitive
+        assert!(!matches_exclude_weekday_filter(&wednesday, &["we".to_string()]));
+
+        // Invalid weekday in exclude list is skipped
+        assert!(!matches_exclude_weekday_filter(&wednesday, &["WE".to_string(), "XX".to_string()]));
+        assert!(matches_exclude_weekday_filter(&wednesday, &["XX".to_string()])); // only invalid = include
     }
 
     #[test]
