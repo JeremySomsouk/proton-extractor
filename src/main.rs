@@ -59,6 +59,18 @@ struct Args {
     verbose: bool,
 }
 
+fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
+    if let (Some(from_date), Some(to_date)) = (from, to) {
+        if from_date > to_date {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("--from ({}) must be before or equal to --to ({})", from_date, to_date),
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone)]
 struct Event {
     summary: String,
@@ -359,6 +371,8 @@ fn main() -> io::Result<()> {
         std::process::exit(1);
     }
 
+    validate_date_range(&args.from, &args.to)?;
+
     let mut all_raw_events = Vec::new();
     for path in &args.files {
         if args.verbose {
@@ -655,5 +669,29 @@ mod tests {
         assert!(matches_date_range(&event, &None, &Some(NaiveDate::from_ymd_opt(2024, 3, 31).unwrap())));
         assert!(!matches_date_range(&event, &Some(NaiveDate::from_ymd_opt(2024, 4, 1).unwrap()), &None));
         assert!(!matches_date_range(&event, &None, &Some(NaiveDate::from_ymd_opt(2024, 3, 1).unwrap())));
+    }
+
+    #[test]
+    fn test_validate_date_range_valid() {
+        let from = NaiveDate::from_ymd_opt(2024, 3, 1).unwrap();
+        let to = NaiveDate::from_ymd_opt(2024, 3, 31).unwrap();
+        assert!(validate_date_range(&Some(from), &Some(to)).is_ok());
+        
+        // Same date is valid
+        let same = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        assert!(validate_date_range(&Some(same), &Some(same)).is_ok());
+        
+        // None values are valid
+        assert!(validate_date_range(&None, &None).is_ok());
+        assert!(validate_date_range(&Some(from), &None).is_ok());
+        assert!(validate_date_range(&None, &Some(to)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_date_range_invalid() {
+        let from = NaiveDate::from_ymd_opt(2024, 4, 1).unwrap();
+        let to = NaiveDate::from_ymd_opt(2024, 3, 1).unwrap();
+        let result = validate_date_range(&Some(from), &Some(to));
+        assert!(result.is_err());
     }
 }
