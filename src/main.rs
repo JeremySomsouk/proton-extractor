@@ -12,12 +12,22 @@ use tracing_subscriber::FmtSubscriber;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// Terminal colors - automatically disabled if not a TTY
+// Terminal colors - automatically disabled if not a TTY or when --no-color is set
 mod color {
     use std::io::IsTerminal;
     use std::fmt;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static NO_COLOR: AtomicBool = AtomicBool::new(false);
+
+    pub fn set_no_color(val: bool) {
+        NO_COLOR.store(val, Ordering::SeqCst);
+    }
 
     pub fn is_color_enabled() -> bool {
+        if NO_COLOR.load(Ordering::SeqCst) {
+            return false;
+        }
         std::io::stdout().is_terminal()
     }
 
@@ -196,6 +206,10 @@ struct Args {
     /// Filter out events longer than this duration (e.g., "8h", "4h30m")
     #[arg(long)]
     max_duration: Option<String>,
+
+    /// Disable colored output
+    #[arg(long)]
+    no_color: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -1038,6 +1052,9 @@ fn main() -> io::Result<()> {
         .with_line_number(false)
         .compact()
         .init();
+
+    // Apply --no-color flag before any output
+    color::set_no_color(args.no_color);
 
     debug!("proton-extractor v{} starting", VERSION);
     debug!("Processing {} file(s)", args.files.len());
