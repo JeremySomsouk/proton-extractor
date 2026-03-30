@@ -208,6 +208,10 @@ struct Args {
     #[arg(long)]
     top: Option<usize>,
 
+    /// Show bottom N events by duration (useful for finding shortest/phantom meetings)
+    #[arg(long, conflicts_with = "top")]
+    bottom: Option<usize>,
+
     /// Quick filter: show only today's events
     #[arg(long)]
     today: bool,
@@ -1503,7 +1507,7 @@ fn main() -> io::Result<()> {
         
         writeln!(out_writer, "{}", colored(color::CYAN, format!("Top {} events by duration:", top_count)))?;
         writeln!(out_writer, "{}", colored(color::CYAN, "=".repeat(40)))?;
-        for (_i, (mins, event)) in events_with_duration.iter().take(top_count).enumerate() {
+        for (mins, event) in events_with_duration.iter().take(top_count) {
             writeln!(out_writer, "  {}  {}  {}", 
                 colored(color::YELLOW, format_hours(*mins)),
                 event.start.format("%Y-%m-%d"),
@@ -1514,6 +1518,37 @@ fn main() -> io::Result<()> {
         writeln!(out_writer, "  {}  {}", 
             colored(color::GREEN, format_hours(top_total)), 
             colored(color::BOLD, "Top events total")
+        )?;
+        return Ok(());
+    }
+
+    // Show bottom N events by duration if --bottom is requested
+    if let Some(bottom_n) = args.bottom {
+        let mut events_with_duration: Vec<_> = filtered
+            .iter()
+            .filter_map(|e| {
+                event_duration_minutes(e).map(|mins| (mins, e))
+            })
+            .collect();
+
+        events_with_duration.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let bottom_count = bottom_n.min(events_with_duration.len());
+        let bottom_total: i64 = events_with_duration.iter().take(bottom_count).map(|(m, _)| m).sum();
+
+        writeln!(out_writer, "{}", colored(color::CYAN, format!("Bottom {} events by duration:", bottom_count)))?;
+        writeln!(out_writer, "{}", colored(color::CYAN, "=".repeat(40)))?;
+        for (mins, event) in events_with_duration.iter().take(bottom_count) {
+            writeln!(out_writer, "  {}  {}  {}",
+                colored(color::YELLOW, format_hours(*mins)),
+                event.start.format("%Y-%m-%d"),
+                event.summary
+            )?;
+        }
+        writeln!(out_writer)?;
+        writeln!(out_writer, "  {}  {}",
+            colored(color::GREEN, format_hours(bottom_total)),
+            colored(color::BOLD, "Bottom events total")
         )?;
         return Ok(());
     }
