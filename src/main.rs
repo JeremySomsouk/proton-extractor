@@ -21,6 +21,7 @@ enum MonthFilter {
 enum OutputFormat {
     Text,
     Json,
+    Csv,
 }
 
 #[derive(Parser, Debug)]
@@ -426,6 +427,31 @@ fn main() -> io::Result<()> {
     let mut grand_total_minutes: i64 = 0;
 
     match args.format {
+        OutputFormat::Csv => {
+            let mut wtr = csv::Writer::from_writer(std::io::stdout());
+            wtr.write_record(&["date", "start", "end", "duration_minutes", "person", "summary"])
+                .ok();
+            for event in &filtered {
+                let duration = event.end - event.start;
+                let mins = duration.num_minutes();
+                if mins <= 0 {
+                    continue;
+                }
+                grand_total_minutes += mins;
+                let person = extract_person(&event.summary).unwrap_or("(unknown)").to_string();
+                wtr.write_record(&[
+                    event.start.format("%Y-%m-%d").to_string(),
+                    event.start.format("%H:%M").to_string(),
+                    event.end.format("%H:%M").to_string(),
+                    mins.to_string(),
+                    person,
+                    event.summary.clone(),
+                ])
+                .ok();
+            }
+            wtr.flush().ok();
+            eprintln!("\nGrand Total: {}", format_hours(grand_total_minutes));
+        }
         OutputFormat::Json => {
             let mut months_json: Vec<JsonMonthSummary> = Vec::new();
             for ((year, month), events) in &by_month {
