@@ -170,6 +170,10 @@ struct Args {
     /// Reverse chronological order (newest first)
     #[arg(long)]
     reverse: bool,
+
+    /// Limit output to N events (useful for large datasets)
+    #[arg(long)]
+    limit: Option<usize>,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -944,6 +948,9 @@ fn main() -> io::Result<()> {
         if let Some(ref wd) = args.exclude_weekdays {
             eprintln!("[verbose] Exclude weekdays: {:?}", wd);
         }
+        if let Some(lim) = args.limit {
+            eprintln!("[verbose] Limit: {} events", lim);
+        }
     }
 
     if args.files.is_empty() {
@@ -1026,6 +1033,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_month_filter(e, &args.month))
         .filter(|e| matches_weekday_filter(e, &weekdays_filter))
         .filter(|e| matches_exclude_weekday_filter(e, &exclude_weekdays_filter))
+        .take(args.limit.unwrap_or(usize::MAX))
         .collect();
 
     if args.verbose {
