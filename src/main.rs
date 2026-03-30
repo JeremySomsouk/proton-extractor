@@ -33,7 +33,6 @@ mod color {
         std::io::stdout().is_terminal()
     }
     
-    pub const NO_COLOR: Color = Color(0);
     pub const CYAN: Color = Color(36);
     pub const GREEN: Color = Color(32);
     pub const YELLOW: Color = Color(33);
@@ -54,7 +53,6 @@ mod color {
         }
     }
     
-    pub const NO_COLOR: Color = Color(0);
     pub const CYAN: Color = Color(0);
     pub const GREEN: Color = Color(0);
     pub const YELLOW: Color = Color(0);
@@ -158,6 +156,10 @@ struct Args {
     /// List all unique projects found in events
     #[arg(long)]
     list_projects: bool,
+
+    /// List all unique events found (one per line with date and summary)
+    #[arg(long)]
+    list_events: bool,
 
     /// Preview mode: show event count without processing output
     #[arg(long)]
@@ -1044,6 +1046,14 @@ fn main() -> io::Result<()> {
         sorted.sort();
         for project in sorted {
             writeln!(out_writer, "{}", project)?;
+        }
+        return Ok(());
+    }
+
+    // List all unique events if --list-events is requested
+    if args.list_events {
+        for event in &filtered {
+            writeln!(out_writer, "{} | {} | {}", event.start.format("%Y-%m-%d %H:%M"), event.summary, format_hours(event_duration_minutes(event).unwrap_or(0)))?;
         }
         return Ok(());
     }
