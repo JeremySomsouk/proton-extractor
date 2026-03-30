@@ -5,7 +5,7 @@ use ical::IcalParser;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
-use std::io::{self, BufReader};
+use std::io::{self, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -614,6 +614,16 @@ fn main() -> io::Result<()> {
         eprintln!("[verbose] Expanded events: {}", all_events.len());
     }
 
+    // Setup output: file or stdout
+    let out_writer: Box<dyn Write> = match &args.output {
+        Some(path) => {
+            let file = File::create(path)?;
+            Box::new(file)
+        }
+        None => Box::new(std::io::stdout()),
+    };
+    let mut out_writer = out_writer;
+
     let filtered: Vec<&Event> = all_events
         .iter()
         .filter(|e| matches_filter(e, &args.date))
@@ -649,7 +659,7 @@ fn main() -> io::Result<()> {
         let mut sorted: Vec<_> = persons.into_iter().collect();
         sorted.sort();
         for person in sorted {
-            println!("{}", person);
+            writeln!(out_writer, "{}", person)?;
         }
         return Ok(());
     }
@@ -658,7 +668,7 @@ fn main() -> io::Result<()> {
 
     match args.format {
         OutputFormat::Csv => {
-            let mut wtr = csv::Writer::from_writer(std::io::stdout());
+            let mut wtr = csv::Writer::from_writer(out_writer);
             wtr.write_record(["date", "start", "end", "duration_minutes", "person", "summary"])
                 .ok();
             for event in &filtered {
@@ -725,33 +735,33 @@ fn main() -> io::Result<()> {
                 });
             }
             
-            let output = JsonOutput {
+            let json_output = JsonOutput {
                 grand_total_minutes,
                 grand_total_formatted: format_hours(grand_total_minutes),
                 months: months_json,
             };
-            println!("{}", serde_json::to_string_pretty(&output).unwrap_or_else(|_| "{}".to_string()));
+            writeln!(out_writer, "{}", serde_json::to_string_pretty(&json_output).unwrap_or_else(|_| "{}".to_string()))?;
         }
         OutputFormat::Ical => {
-            println!("BEGIN:VCALENDAR");
-            println!("VERSION:2.0");
-            println!("PRODID:-//proton-extractor//EN");
+            writeln!(out_writer, "BEGIN:VCALENDAR")?;
+            writeln!(out_writer, "VERSION:2.0")?;
+            writeln!(out_writer, "PRODID:-//proton-extractor//EN")?;
             for event in &filtered {
-                println!("BEGIN:VEVENT");
-                println!("UID:{}@proton-extractor", event.start.and_utc().timestamp());
-                println!("DTSTAMP:{}", event.start.format("%Y%m%dT%H%M%S"));
-                println!("DTSTART:{}", event.start.format("%Y%m%dT%H%M%S"));
-                println!("DTEND:{}", event.end.format("%Y%m%dT%H%M%S"));
+                writeln!(out_writer, "BEGIN:VEVENT")?;
+                writeln!(out_writer, "UID:{}@proton-extractor", event.start.and_utc().timestamp())?;
+                writeln!(out_writer, "DTSTAMP:{}", event.start.format("%Y%m%dT%H%M%S"))?;
+                writeln!(out_writer, "DTSTART:{}", event.start.format("%Y%m%dT%H%M%S"))?;
+                writeln!(out_writer, "DTEND:{}", event.end.format("%Y%m%dT%H%M%S"))?;
                 // Escape summary for iCal format
                 let summary_escaped = event.summary
                     .replace("\\", "\\\\")
                     .replace(";", "\\;")
                     .replace(",", "\\,")
                     .replace("\n", "\\n");
-                println!("SUMMARY:{}", summary_escaped);
-                println!("END:VEVENT");
+                writeln!(out_writer, "SUMMARY:{}", summary_escaped)?;
+                writeln!(out_writer, "END:VEVENT")?;
             }
-            println!("END:VCALENDAR");
+            writeln!(out_writer, "END:VCALENDAR")?;
         }
         OutputFormat::Text | OutputFormat::Markdown => {
             // Build per-person summary across all events
@@ -767,33 +777,36 @@ fn main() -> io::Result<()> {
                 });
 
             for ((year, _month), summary) in &grouped {
-                println!("\n--- {} {} ---", summary.month_name, year);
+                writeln!(out_writer)?;
+                writeln!(out_writer, "--- {} {} ---", summary.month_name, year)?;
 
                 let month_by_person = summary.by_person();
 
                 if !args.quiet && !args.sum_only {
                     for event in &summary.events {
                         if let Some(mins) = event_duration_minutes(event) {
-                            println!("  {:6}  {}", format_hours(mins), event.summary);
+                            writeln!(out_writer, "  {:6}  {}", format_hours(mins), event.summary)?;
                         }
                     }
                 }
 
-                println!("  ------");
+                writeln!(out_writer, "  ------")?;
                 for (person, mins) in &month_by_person {
-                    println!("  {:6}  {}", format_hours(*mins), person);
+                    writeln!(out_writer, "  {:6}  {}", format_hours(*mins), person)?;
                 }
-                println!("  {:6}  TOTAL", format_hours(summary.total_minutes()));
+                writeln!(out_writer, "  {:6}  TOTAL", format_hours(summary.total_minutes()))?;
             }
 
             if grand_total_minutes > 0 && grouped.len() > 1 {
-                println!("\n=== Grand Total: {} ===", format_hours(grand_total_minutes));
+                writeln!(out_writer)?;
+                writeln!(out_writer, "=== Grand Total: {} ===", format_hours(grand_total_minutes))?;
             }
 
             if !all_by_person.is_empty() && !args.sum_only {
-                println!("\n=== Hours per person ===");
+                writeln!(out_writer)?;
+                writeln!(out_writer, "=== Hours per person ===")?;
                 for (person, mins) in &all_by_person {
-                    println!("  {:6}  {:>6}  {}", format_hours(*mins), format_percentage(*mins, grand_total_minutes), person);
+                    writeln!(out_writer, "  {:6}  {:>6}  {}", format_hours(*mins), format_percentage(*mins, grand_total_minutes), person)?;
                 }
             }
         }
