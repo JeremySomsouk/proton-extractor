@@ -76,6 +76,7 @@ enum DateFilter {
 enum OutputFormat {
     Text,
     Json,
+    Jsonl,
     Csv,
     Markdown,
     Ical,
@@ -1490,6 +1491,26 @@ fn main() -> io::Result<()> {
                 serde_json::to_string_pretty(&json_output).unwrap_or_else(|_| "{}".to_string())
             };
             writeln!(out_writer, "{}", json_str)?;
+        }
+        OutputFormat::Jsonl => {
+            // JSON Lines format - one event per line, ideal for jq/stream processing
+            for event in &filtered {
+                if let Some(mins) = event_duration_minutes(event) {
+                    let person = extract_person(&event.summary).map(|s| s.to_string());
+                    let project = extract_project(&event.summary).map(|s| s.to_string());
+                    let json_event = serde_json::json!({
+                        "summary": event.summary,
+                        "person": person,
+                        "project": project,
+                        "start": event.start.format("%Y-%m-%d %H:%M").to_string(),
+                        "end": event.end.format("%Y-%m-%d %H:%M").to_string(),
+                        "date": event.start.format("%Y-%m-%d").to_string(),
+                        "duration_minutes": mins,
+                        "duration_formatted": format_hours(mins),
+                    });
+                    writeln!(out_writer, "{}", json_event)?;
+                }
+            }
         }
         OutputFormat::Ical => {
             writeln!(out_writer, "BEGIN:VCALENDAR")?;
