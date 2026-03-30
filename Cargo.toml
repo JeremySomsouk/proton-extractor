@@ -13,6 +13,7 @@ csv = "1"
 tracing = { version = "0.1.44", features = ["log"] }
 tracing-subscriber = "0.3.23"
 clap_complete = "4.6.0"
+serde_yaml = "0.9.34"
 
 [dev-dependencies]
 clap_complete = "4.6.0"

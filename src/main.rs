@@ -81,6 +81,7 @@ enum OutputFormat {
     Markdown,
     Ical,
     Html,
+    Yaml,
 }
 
 #[derive(Parser, Debug)]
@@ -143,7 +144,7 @@ struct Args {
     sum_only: bool,
 
     /// Output file path (default: stdout)
-    #[arg(short, long)]
+    #[arg(short = 'o', long)]
     output: Option<PathBuf>,
 
     /// List all unique persons found in events
@@ -1532,6 +1533,59 @@ fn main() -> io::Result<()> {
                 writeln!(out_writer, "END:VEVENT")?;
             }
             writeln!(out_writer, "END:VCALENDAR")?;
+        }
+        OutputFormat::Yaml => {
+            let yaml_output = serde_yaml::to_string(&JsonOutput {
+                grand_total_minutes,
+                grand_total_formatted: format_hours(grand_total_minutes),
+                months: {
+                    let mut months_json: Vec<JsonMonthSummary> = Vec::new();
+                    for ((year, month), summary) in &grouped {
+                        let mut month_minutes: i64 = 0;
+                        let mut month_by_person: BTreeMap<String, i64> = BTreeMap::new();
+                        let mut events_json: Vec<JsonEvent> = Vec::new();
+                        
+                        for event in &summary.events {
+                            if let Some(mins) = event_duration_minutes(event) {
+                                month_minutes += mins;
+                                let person = extract_person(&event.summary).map(|s| s.to_string());
+                                if let Some(ref p) = person {
+                                    *month_by_person.entry(p.clone()).or_default() += mins;
+                                }
+                                events_json.push(JsonEvent {
+                                    summary: event.summary.clone(),
+                                    person,
+                                    start: event.start.format("%Y-%m-%d %H:%M").to_string(),
+                                    end: event.end.format("%Y-%m-%d %H:%M").to_string(),
+                                    duration_minutes: mins,
+                                    duration_formatted: format_hours(mins),
+                                });
+                            }
+                        }
+                        
+                        let by_person: Vec<PersonHours> = month_by_person
+                            .into_iter()
+                            .map(|(p, m)| PersonHours {
+                                person: p,
+                                minutes: m,
+                                formatted: format_hours(m),
+                            })
+                            .collect();
+                        
+                        months_json.push(JsonMonthSummary {
+                            year: *year,
+                            month: *month,
+                            month_name: summary.month_name.clone(),
+                            total_minutes: month_minutes,
+                            total_formatted: format_hours(month_minutes),
+                            by_person,
+                            events: events_json,
+                        });
+                    }
+                    months_json
+                },
+            }).unwrap_or_else(|_| "{}".to_string());
+            writeln!(out_writer, "{}", yaml_output)?;
         }
         OutputFormat::Html => {
             // Build per-person summary
