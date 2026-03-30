@@ -2,9 +2,10 @@ use chrono::{Datelike, Duration, Local, NaiveDate, NaiveDateTime};
 use clap::{Parser, ValueEnum};
 use ical::parser::ical::component::IcalEvent;
 use ical::IcalParser;
+use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{self, BufReader};
 use std::path::PathBuf;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -14,6 +15,12 @@ enum MonthFilter {
     Current,
     Previous,
     All,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+enum OutputFormat {
+    Text,
+    Json,
 }
 
 #[derive(Parser, Debug)]
@@ -29,6 +36,26 @@ struct Args {
     /// Only show totals, hide individual events
     #[arg(short, long)]
     quiet: bool,
+
+    /// Output format
+    #[arg(short, long, value_enum, default_value = "text")]
+    format: OutputFormat,
+
+    /// Filter by person name (case-insensitive)
+    #[arg(long)]
+    person: Option<String>,
+
+    /// Start date (YYYY-MM-DD)
+    #[arg(long)]
+    from: Option<NaiveDate>,
+
+    /// End date (YYYY-MM-DD)
+    #[arg(long)]
+    to: Option<NaiveDate>,
+
+    /// Enable verbose output
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 #[derive(Clone)]
@@ -235,6 +262,59 @@ fn matches_filter(event: &Event, filter: &MonthFilter) -> bool {
     }
 }
 
+fn matches_person_filter(event: &Event, person_filter: &Option<String>) -> bool {
+    let Some(filter) = person_filter else {
+        return true;
+    };
+    extract_person(&event.summary)
+        .map(|p| p.to_lowercase().contains(&filter.to_lowercase()))
+        .unwrap_or(false)
+}
+
+fn matches_date_range(event: &Event, from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> bool {
+    let event_date = event.start.date();
+    if let Some(from_date) = from {
+        if event_date < *from_date {
+            return false;
+        }
+    }
+    if let Some(to_date) = to {
+        if event_date > *to_date {
+            return false;
+        }
+    }
+    true
+}
+
+// JSON serialization structures
+#[derive(Serialize)]
+struct JsonEvent {
+    summary: String,
+    person: Option<String>,
+    start: String,
+    end: String,
+    duration_minutes: i64,
+    duration_formatted: String,
+}
+
+#[derive(Serialize)]
+struct JsonMonthSummary {
+    year: i32,
+    month: u32,
+    month_name: String,
+    total_minutes: i64,
+    total_formatted: String,
+    by_person: Vec<(String, i64, String)>,
+    events: Vec<JsonEvent>,
+}
+
+#[derive(Serialize)]
+struct JsonOutput {
+    grand_total_minutes: i64,
+    grand_total_formatted: String,
+    months: Vec<JsonMonthSummary>,
+}
+
 fn extract_person(summary: &str) -> Option<&str> {
     let start = summary.rfind('[')?;
     let end = summary.find(']').filter(|&e| e > start)?;
@@ -257,8 +337,21 @@ fn format_hours(total_minutes: i64) -> String {
     }
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     let args = Args::parse();
+
+    if args.verbose {
+        eprintln!("[verbose] Processing {} file(s)", args.files.len());
+        if let Some(ref p) = args.person {
+            eprintln!("[verbose] Filtering by person: {}", p);
+        }
+        if let Some(ref f) = args.from {
+            eprintln!("[verbose] From date: {}", f);
+        }
+        if let Some(ref t) = args.to {
+            eprintln!("[verbose] To date: {}", t);
+        }
+    }
 
     if args.files.is_empty() {
         eprintln!("Error: no .ics files provided");
@@ -267,6 +360,9 @@ fn main() {
 
     let mut all_raw_events = Vec::new();
     for path in &args.files {
+        if args.verbose {
+            eprintln!("[verbose] Reading: {}", path.display());
+        }
         let file = match File::open(path) {
             Ok(f) => f,
             Err(e) => {
@@ -281,6 +377,10 @@ fn main() {
         for calendar in parser {
             match calendar {
                 Ok(cal) => {
+                    let count = cal.events.len();
+                    if args.verbose {
+                        eprintln!("[verbose] Found {} events in {}", count, path.display());
+                    }
                     all_raw_events.extend(extract_raw_events(cal.events));
                 }
                 Err(e) => {
@@ -290,16 +390,30 @@ fn main() {
         }
     }
 
+    if args.verbose {
+        eprintln!("[verbose] Total raw events: {}", all_raw_events.len());
+    }
+
     let all_events = expand_events(all_raw_events);
+
+    if args.verbose {
+        eprintln!("[verbose] Expanded events: {}", all_events.len());
+    }
 
     let filtered: Vec<&Event> = all_events
         .iter()
         .filter(|e| matches_filter(e, &args.month))
+        .filter(|e| matches_person_filter(e, &args.person))
+        .filter(|e| matches_date_range(e, &args.from, &args.to))
         .collect();
+
+    if args.verbose {
+        eprintln!("[verbose] Events after filtering: {}", filtered.len());
+    }
 
     if filtered.is_empty() {
         println!("No events found for the selected period.");
-        return;
+        return Ok(());
     }
 
     // Group by year-month
@@ -311,55 +425,118 @@ fn main() {
 
     let mut grand_total_minutes: i64 = 0;
 
-    for ((year, month), events) in &by_month {
-        let month_name = chrono::Month::try_from(u8::try_from(*month).unwrap_or(1))
-            .unwrap_or_else(|_| chrono::Month::January)
-            .name();
-        println!("\n--- {} {} ---", month_name, year);
-
-        let mut month_minutes: i64 = 0;
-        let mut month_by_person: BTreeMap<&str, i64> = BTreeMap::new();
-        for event in events {
-            let duration = event.end - event.start;
-            let mins = duration.num_minutes();
-            if mins <= 0 {
-                continue;
+    match args.format {
+        OutputFormat::Json => {
+            let mut months_json: Vec<JsonMonthSummary> = Vec::new();
+            for ((year, month), events) in &by_month {
+                let month_name = chrono::Month::try_from(u8::try_from(*month).unwrap_or(1))
+                    .unwrap_or_else(|_| chrono::Month::January)
+                    .name()
+                    .to_string();
+                
+                let mut month_minutes: i64 = 0;
+                let mut month_by_person: BTreeMap<String, i64> = BTreeMap::new();
+                let mut events_json: Vec<JsonEvent> = Vec::new();
+                
+                for event in events {
+                    let duration = event.end - event.start;
+                    let mins = duration.num_minutes();
+                    if mins <= 0 {
+                        continue;
+                    }
+                    month_minutes += mins;
+                    let person = extract_person(&event.summary).map(|s| s.to_string());
+                    if let Some(ref p) = person {
+                        *month_by_person.entry(p.clone()).or_default() += mins;
+                    }
+                    events_json.push(JsonEvent {
+                        summary: event.summary.clone(),
+                        person,
+                        start: event.start.format("%Y-%m-%d %H:%M").to_string(),
+                        end: event.end.format("%Y-%m-%d %H:%M").to_string(),
+                        duration_minutes: mins,
+                        duration_formatted: format_hours(mins),
+                    });
+                }
+                
+                let by_person: Vec<(String, i64, String)> = month_by_person
+                    .into_iter()
+                    .map(|(p, m)| (p.clone(), m, format_hours(m)))
+                    .collect();
+                
+                months_json.push(JsonMonthSummary {
+                    year: *year,
+                    month: *month,
+                    month_name,
+                    total_minutes: month_minutes,
+                    total_formatted: format_hours(month_minutes),
+                    by_person,
+                    events: events_json,
+                });
+                grand_total_minutes += month_minutes;
             }
-            month_minutes += mins;
-            let person = extract_person(&event.summary).unwrap_or("(unknown)");
-            *month_by_person.entry(person).or_default() += mins;
-            if !args.quiet {
-                println!("  {:6}  {}", format_hours(mins), event.summary);
+            
+            let output = JsonOutput {
+                grand_total_minutes,
+                grand_total_formatted: format_hours(grand_total_minutes),
+                months: months_json,
+            };
+            println!("{}", serde_json::to_string_pretty(&output).unwrap_or_else(|_| "{}".to_string()));
+        }
+        OutputFormat::Text => {
+            for ((year, month), events) in &by_month {
+                let month_name = chrono::Month::try_from(u8::try_from(*month).unwrap_or(1))
+                    .unwrap_or_else(|_| chrono::Month::January)
+                    .name();
+                println!("\n--- {} {} ---", month_name, year);
+
+                let mut month_minutes: i64 = 0;
+                let mut month_by_person: BTreeMap<&str, i64> = BTreeMap::new();
+                for event in events {
+                    let duration = event.end - event.start;
+                    let mins = duration.num_minutes();
+                    if mins <= 0 {
+                        continue;
+                    }
+                    month_minutes += mins;
+                    let person = extract_person(&event.summary).unwrap_or("(unknown)");
+                    *month_by_person.entry(person).or_default() += mins;
+                    if !args.quiet {
+                        println!("  {:6}  {}", format_hours(mins), event.summary);
+                    }
+                }
+
+                println!("  ------");
+                for (person, mins) in &month_by_person {
+                    println!("  {:6}  {}", format_hours(*mins), person);
+                }
+                println!("  {:6}  TOTAL", format_hours(month_minutes));
+                grand_total_minutes += month_minutes;
+            }
+
+            if grand_total_minutes > 0 && by_month.len() > 1 {
+                println!("\n=== Grand Total: {} ===", format_hours(grand_total_minutes));
+            }
+
+            // Per-person summary
+            let mut by_person: BTreeMap<&str, i64> = BTreeMap::new();
+            for event in &filtered {
+                let mins = (event.end - event.start).num_minutes();
+                debug_assert!(mins > 0, "Event with non-positive duration should have been filtered");
+                let person = extract_person(&event.summary).unwrap_or("(unknown)");
+                *by_person.entry(person).or_default() += mins;
+            }
+
+            if !by_person.is_empty() {
+                println!("\n=== Hours per person ===");
+                for (person, mins) in &by_person {
+                    println!("  {:6}  {}", format_hours(*mins), person);
+                }
             }
         }
-
-        println!("  ------");
-        for (person, mins) in &month_by_person {
-            println!("  {:6}  {}", format_hours(*mins), person);
-        }
-        println!("  {:6}  TOTAL", format_hours(month_minutes));
-        grand_total_minutes += month_minutes;
     }
 
-    if grand_total_minutes > 0 && by_month.len() > 1 {
-        println!("\n=== Grand Total: {} ===", format_hours(grand_total_minutes));
-    }
-
-    // Per-person summary
-    let mut by_person: BTreeMap<&str, i64> = BTreeMap::new();
-    for event in &filtered {
-        let mins = (event.end - event.start).num_minutes();
-        debug_assert!(mins > 0, "Event with non-positive duration should have been filtered");
-        let person = extract_person(&event.summary).unwrap_or("(unknown)");
-        *by_person.entry(person).or_default() += mins;
-    }
-
-    if !by_person.is_empty() {
-        println!("\n=== Hours per person ===");
-        for (person, mins) in &by_person {
-            println!("  {:6}  {}", format_hours(*mins), person);
-        }
-    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -423,5 +600,34 @@ mod tests {
     fn test_parse_rrule() {
         assert!(parse_rrule("FREQ=WEEKLY;UNTIL=20240315T090000Z").is_some());
         assert_eq!(parse_rrule("FREQ=DAILY"), None); // missing UNTIL
+    }
+
+    #[test]
+    fn test_matches_person_filter() {
+        let event = Event::new(
+            "Meeting with [John Doe]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        assert!(matches_person_filter(&event, &None));
+        assert!(matches_person_filter(&event, &Some("John".to_string())));
+        assert!(matches_person_filter(&event, &Some("john".to_string())));
+        assert!(!matches_person_filter(&event, &Some("Jane".to_string())));
+    }
+
+    #[test]
+    fn test_matches_date_range() {
+        let event = Event::new(
+            "Test [Event]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        assert!(matches_date_range(&event, &None, &None));
+        assert!(matches_date_range(&event, &Some(NaiveDate::from_ymd_opt(2024, 3, 1).unwrap()), &None));
+        assert!(matches_date_range(&event, &None, &Some(NaiveDate::from_ymd_opt(2024, 3, 31).unwrap())));
+        assert!(!matches_date_range(&event, &Some(NaiveDate::from_ymd_opt(2024, 4, 1).unwrap()), &None));
+        assert!(!matches_date_range(&event, &None, &Some(NaiveDate::from_ymd_opt(2024, 3, 1).unwrap())));
     }
 }
