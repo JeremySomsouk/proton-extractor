@@ -42,6 +42,10 @@ struct Args {
     #[arg(long)]
     year: Option<i32>,
 
+    /// Filter by a specific month (1-12, requires --year)
+    #[arg(long, requires = "year")]
+    month: Option<u32>,
+
     /// Only show totals, hide individual events
     #[arg(short, long)]
     quiet: bool,
@@ -95,6 +99,18 @@ fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::
     Ok(())
 }
 
+fn validate_month(month: Option<u32>) -> io::Result<()> {
+    if let Some(m) = month {
+        if m < 1 || m > 12 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("--month must be between 1 and 12, got {}", m),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_ics_file(path: &Path) -> io::Result<()> {
     let extension = path
         .extension()
@@ -131,8 +147,6 @@ struct RawEvent {
     summary: String,
     start: NaiveDateTime,
     end: NaiveDateTime,
-    #[allow(dead_code)]
-    duration: Option<Duration>,
     uid: String,
     rrule: Option<String>,
     exdates: Vec<NaiveDate>,
@@ -431,7 +445,6 @@ fn extract_raw_events(ical_events: Vec<IcalEvent>) -> Vec<RawEvent> {
                 summary,
                 start,
                 end,
-                duration,
                 uid,
                 rrule,
                 exdates,
@@ -511,14 +524,10 @@ fn matches_filter(event: &Event, filter: &DateFilter) -> bool {
     }
 }
 
-// ISO week number calculation (Monday = 1, Sunday = 7)
+// ISO week number calculation using chrono's built-in support
 fn week_number(year: i32, month: u32, day: u32) -> u32 {
     let date = NaiveDate::from_ymd_opt(year, month, day).unwrap_or_default();
-    let days_since_monday = date.weekday().num_days_from_monday();
-    let monday = date - Duration::days(days_since_monday as i64);
-    let week_start = NaiveDate::from_ymd_opt(monday.year(), monday.month(), monday.day()).unwrap_or_default();
-    let days_since_reference = week_start - NaiveDate::from_ymd_opt(2000, 1, 3).unwrap();
-    (days_since_reference.num_days() / 7) as u32 + 1
+    date.iso_week().week()
 }
 
 fn matches_person_filter(event: &Event, person_filter: &Option<String>) -> bool {
@@ -556,6 +565,14 @@ fn matches_date_range(event: &Event, from: &Option<NaiveDate>, to: &Option<Naive
 fn matches_year_filter(event: &Event, year: &Option<i32>) -> bool {
     if let Some(y) = year {
         event.start.year() == *y
+    } else {
+        true
+    }
+}
+
+fn matches_month_filter(event: &Event, month: &Option<u32>) -> bool {
+    if let Some(m) = month {
+        event.start.month() == *m
     } else {
         true
     }
@@ -672,6 +689,7 @@ fn main() -> io::Result<()> {
     }
 
     validate_date_range(&args.from, &args.to)?;
+    validate_month(args.month)?;
 
     // Validate file extensions before processing
     for path in &args.files {
@@ -737,6 +755,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_exclude_filter(e, &args.exclude_person))
         .filter(|e| matches_date_range(e, &args.from, &args.to))
         .filter(|e| matches_year_filter(e, &args.year))
+        .filter(|e| matches_month_filter(e, &args.month))
         .collect();
 
     if args.verbose {
@@ -1257,7 +1276,6 @@ mod tests {
             summary: "Meeting [Alice]".to_string(),
             start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
             end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-            duration: None,
             uid: "uid1".to_string(),
             rrule: None,
             exdates: vec![],
@@ -1274,7 +1292,6 @@ mod tests {
             summary: "Zero [Bob]".to_string(),
             start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
             end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            duration: None,
             uid: "uid1".to_string(),
             rrule: None,
             exdates: vec![],
@@ -1290,7 +1307,6 @@ mod tests {
             summary: "Daily [Carol]".to_string(),
             start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
             end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-            duration: None,
             uid: "uid1".to_string(),
             rrule: Some("FREQ=DAILY;UNTIL=20240305T235959".to_string()),
             exdates: vec![],
@@ -1309,7 +1325,6 @@ mod tests {
             summary: "Weekly [Dave]".to_string(),
             start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
             end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-            duration: None,
             uid: "uid1".to_string(),
             rrule: Some("FREQ=WEEKLY;UNTIL=20240315T235959".to_string()),
             exdates: vec![NaiveDate::from_ymd_opt(2024, 3, 8).unwrap()],
@@ -1327,7 +1342,6 @@ mod tests {
             summary: "Biweekly [Carol]".to_string(),
             start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
             end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-            duration: None,
             uid: "uid1".to_string(),
             rrule: Some("FREQ=WEEKLY;INTERVAL=2;UNTIL=20240331T235959".to_string()),
             exdates: vec![],
@@ -1347,7 +1361,6 @@ mod tests {
             summary: "Daily 5 times [Eve]".to_string(),
             start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
             end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-            duration: None,
             uid: "uid1".to_string(),
             rrule: Some("FREQ=DAILY;COUNT=5".to_string()),
             exdates: vec![],
@@ -1367,7 +1380,6 @@ mod tests {
             summary: "Every 3 days [Frank]".to_string(),
             start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
             end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-            duration: None,
             uid: "uid1".to_string(),
             rrule: Some("FREQ=DAILY;INTERVAL=3;COUNT=4".to_string()),
             exdates: vec![],
@@ -1417,7 +1429,6 @@ mod tests {
             summary: "Monthly [Eve]".to_string(),
             start: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
             end: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-            duration: None,
             uid: "uid1".to_string(),
             rrule: Some("FREQ=MONTHLY;UNTIL=20240615T235959".to_string()),
             exdates: vec![],
@@ -1438,7 +1449,6 @@ mod tests {
             summary: "Monthly 31st [Frank]".to_string(),
             start: NaiveDate::from_ymd_opt(2023, 1, 31).unwrap().and_hms_opt(9, 0, 0).unwrap(),
             end: NaiveDate::from_ymd_opt(2023, 1, 31).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-            duration: None,
             uid: "uid1".to_string(),
             rrule: Some("FREQ=MONTHLY;UNTIL=20230430T235959".to_string()),
             exdates: vec![],
@@ -1451,5 +1461,43 @@ mod tests {
         assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2023, 2, 28).unwrap()); // 31st -> 28th
         assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2023, 3, 31).unwrap());
         assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2023, 4, 30).unwrap()); // 31st -> 30th
+    }
+
+    #[test]
+    fn test_validate_month_valid() {
+        assert!(validate_month(None).is_ok());
+        assert!(validate_month(Some(1)).is_ok());
+        assert!(validate_month(Some(6)).is_ok());
+        assert!(validate_month(Some(12)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_month_invalid() {
+        assert!(validate_month(Some(0)).is_err());
+        assert!(validate_month(Some(13)).is_err());
+        let err = validate_month(Some(0)).unwrap_err();
+        assert!(err.to_string().contains("between 1 and 12"));
+    }
+
+    #[test]
+    fn test_matches_month_filter() {
+        let event = Event::new(
+            "Test [Event]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        assert!(matches_month_filter(&event, &None));
+        assert!(matches_month_filter(&event, &Some(3)));
+        assert!(!matches_month_filter(&event, &Some(1)));
+        assert!(!matches_month_filter(&event, &Some(12)));
+    }
+
+    #[test]
+    fn test_week_number_iso() {
+        // ISO week numbers - chrono handles these correctly
+        assert_eq!(week_number(2024, 1, 1), 1);  // Jan 1, 2024 is week 1
+        assert_eq!(week_number(2024, 3, 15), 11); // March 15, 2024
+        assert_eq!(week_number(2024, 12, 30), 1); // Dec 30, 2024 is week 1 of 2025
     }
 }
