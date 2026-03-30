@@ -204,6 +204,10 @@ struct Args {
     #[arg(long)]
     limit: Option<usize>,
 
+    /// Show top N events by duration (useful for finding longest meetings)
+    #[arg(long)]
+    top: Option<usize>,
+
     /// Quick filter: show only today's events
     #[arg(long)]
     today: bool,
@@ -1482,6 +1486,37 @@ fn main() -> io::Result<()> {
     let grand_total_minutes: i64 = filtered.iter()
         .filter_map(|e| event_duration_minutes(e))
         .sum();
+
+    // Show top N events by duration if --top is requested
+    if let Some(top_n) = args.top {
+        let mut events_with_duration: Vec<_> = filtered
+            .iter()
+            .filter_map(|e| {
+                event_duration_minutes(e).map(|mins| (mins, e))
+            })
+            .collect();
+        
+        events_with_duration.sort_by(|a, b| b.0.cmp(&a.0));
+        
+        let top_count = top_n.min(events_with_duration.len());
+        let top_total: i64 = events_with_duration.iter().take(top_count).map(|(m, _)| m).sum();
+        
+        writeln!(out_writer, "{}", colored(color::CYAN, format!("Top {} events by duration:", top_count)))?;
+        writeln!(out_writer, "{}", colored(color::CYAN, "=".repeat(40)))?;
+        for (_i, (mins, event)) in events_with_duration.iter().take(top_count).enumerate() {
+            writeln!(out_writer, "  {}  {}  {}", 
+                colored(color::YELLOW, format_hours(*mins)),
+                event.start.format("%Y-%m-%d"),
+                event.summary
+            )?;
+        }
+        writeln!(out_writer)?;
+        writeln!(out_writer, "  {}  {}", 
+            colored(color::GREEN, format_hours(top_total)), 
+            colored(color::BOLD, "Top events total")
+        )?;
+        return Ok(());
+    }
 
     // Show statistics if --stats is requested
     if args.stats {
