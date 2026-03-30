@@ -480,7 +480,7 @@ fn matches_filter(event: &Event, filter: &DateFilter) -> bool {
     let now = Local::now().naive_local();
     let (ev_year, ev_month, ev_day) = (event.start.year(), event.start.month(), event.start.day());
     match filter {
-        DateFilter::All => (ev_year, ev_month, ev_day) <= (now.year(), now.month(), now.day()),
+        DateFilter::All => true, // Show all events regardless of date
         DateFilter::Current => ev_year == now.year() && ev_month == now.month(),
         DateFilter::Previous => {
             let (y, m) = if now.month() == 1 {
