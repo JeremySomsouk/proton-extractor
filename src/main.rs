@@ -596,19 +596,24 @@ fn matches_filter(event: &Event, filter: &DateFilter) -> bool {
             ev_year == now.year() && ev_month == now.month() && ev_day == now.day()
         }
         DateFilter::Week => {
-            // Get ISO week number and year for both event and current date
-            let ev_week = (ev_year * 100) + week_number(ev_year, ev_month, ev_day) as i32;
-            let now_week = (now.year() * 100) + week_number(now.year(), now.month(), now.day()) as i32;
-            ev_week == now_week
+            // Get ISO week number AND ISO week year for both event and current date
+            // This correctly handles year boundaries (e.g., Dec 30, 2024 is ISO week 1 of 2025)
+            let ev_date = NaiveDate::from_ymd_opt(ev_year, ev_month, ev_day).unwrap_or_default();
+            let ev_iso_week = ev_date.iso_week();
+            let ev_iso_year = ev_iso_week.year();
+            let ev_week = ev_iso_week.week();
+
+            let now_date = now.date();
+            let now_iso_week = now_date.iso_week();
+            let now_iso_year = now_iso_week.year();
+            let now_week = now_iso_week.week();
+
+            ev_iso_year == now_iso_year && ev_week == now_week
         }
     }
 }
 
 // ISO week number calculation using chrono's built-in support
-fn week_number(year: i32, month: u32, day: u32) -> u32 {
-    let date = NaiveDate::from_ymd_opt(year, month, day).unwrap_or_default();
-    date.iso_week().week()
-}
 
 fn matches_person_filter(event: &Event, person_filter: &Option<String>) -> bool {
     let Some(filter) = person_filter else {
@@ -1834,8 +1839,17 @@ mod tests {
     #[test]
     fn test_week_number_iso() {
         // ISO week numbers - chrono handles these correctly
-        assert_eq!(week_number(2024, 1, 1), 1);  // Jan 1, 2024 is week 1
-        assert_eq!(week_number(2024, 3, 15), 11); // March 15, 2024
-        assert_eq!(week_number(2024, 12, 30), 1); // Dec 30, 2024 is week 1 of 2025
+        let date = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+        assert_eq!(date.iso_week().week(), 1);  // Jan 1, 2024 is week 1
+        
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        assert_eq!(date.iso_week().week(), 11); // March 15, 2024
+        
+        let date = NaiveDate::from_ymd_opt(2024, 12, 30).unwrap();
+        assert_eq!(date.iso_week().week(), 1);  // Dec 30, 2024 is week 1 of 2025
+        
+        // Verify ISO year at year boundary
+        let date = NaiveDate::from_ymd_opt(2024, 12, 30).unwrap();
+        assert_eq!(date.iso_week().year(), 2025); // ISO year is 2025
     }
 }
