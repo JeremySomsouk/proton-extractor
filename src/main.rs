@@ -180,6 +180,10 @@ struct Args {
     #[arg(long)]
     exclude_summary: Vec<String>,
 
+    /// Filter events whose summary contains this text (case-insensitive, can be repeated)
+    #[arg(long)]
+    search: Vec<String>,
+
     /// Enable compact JSON output (no pretty-printing)
     #[arg(long, requires = "format")]
     compact: bool,
@@ -939,6 +943,16 @@ fn matches_exclude_summary_filter(event: &Event, exclude_filters: &[String]) -> 
     !exclude_filters.iter().any(|f| summary_lower.contains(&f.to_lowercase()))
 }
 
+/// Returns true if event matches ALL search terms (case-insensitive, AND logic).
+/// Empty search list matches everything.
+fn matches_search_filter(event: &Event, search_terms: &[String]) -> bool {
+    if search_terms.is_empty() {
+        return true;
+    }
+    let summary_lower = event.summary.to_lowercase();
+    search_terms.iter().all(|term| summary_lower.contains(&term.to_lowercase()))
+}
+
 fn matches_duration_filter(
     event: &Event,
     min_duration: &Option<Duration>,
@@ -1343,6 +1357,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_exclude_filter(e, &args.exclude_person))
         .filter(|e| matches_exclude_project_filter(e, &args.exclude_project))
         .filter(|e| matches_exclude_summary_filter(e, &args.exclude_summary))
+        .filter(|e| matches_search_filter(e, &args.search))
         .filter(|e| matches_date_range(e, &args.from, &args.to))
         .filter(|e| matches_year_filter(e, &args.year))
         .filter(|e| matches_month_filter(e, &args.month))
@@ -2734,6 +2749,38 @@ mod tests {
 
         // Excluding text that doesn't appear should include
         assert!(matches_exclude_summary_filter(&event, &["vacation".to_string()]));
+    }
+
+    #[test]
+    fn test_matches_search_filter() {
+        let event = Event::new(
+            "Team standup meeting [Alice] {Project}".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+
+        // Empty search list matches everything
+        assert!(matches_search_filter(&event, &[]));
+
+        // Single term matching
+        assert!(matches_search_filter(&event, &["standup".to_string()]));
+        assert!(matches_search_filter(&event, &["meeting".to_string()]));
+        assert!(matches_search_filter(&event, &["TEAM".to_string()])); // case insensitive
+        assert!(matches_search_filter(&event, &["Alice".to_string()])); // partial match
+
+        // Multiple terms (AND logic - all must match)
+        assert!(matches_search_filter(&event, &["standup".to_string(), "Alice".to_string()]));
+        assert!(matches_search_filter(&event, &["team".to_string(), "meeting".to_string()]));
+
+        // Multiple terms but one doesn't match
+        assert!(!matches_search_filter(&event, &["standup".to_string(), "vacation".to_string()]));
+
+        // Term that doesn't appear at all
+        assert!(!matches_search_filter(&event, &["vacation".to_string()]));
+
+        // Case insensitive matching
+        assert!(matches_search_filter(&event, &["standup meeting".to_string()]));
+        assert!(matches_search_filter(&event, &["TEAM".to_string(), "meeting".to_string()]));
     }
 
     #[test]
