@@ -116,7 +116,7 @@ struct Args {
     from: Option<NaiveDate>,
 
     /// End date (YYYY-MM-DD)
-    #[arg(long)]
+    #[arg(long, alias = "until")]
     to: Option<NaiveDate>,
 
     /// Enable verbose output
@@ -174,6 +174,14 @@ struct Args {
     /// Limit output to N events (useful for large datasets)
     #[arg(long)]
     limit: Option<usize>,
+
+    /// Quick filter: show only today's events
+    #[arg(long)]
+    today: bool,
+
+    /// Quick filter: show only yesterday's events
+    #[arg(long)]
+    yesterday: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -951,6 +959,12 @@ fn main() -> io::Result<()> {
         if let Some(lim) = args.limit {
             eprintln!("[verbose] Limit: {} events", lim);
         }
+        if args.today {
+            eprintln!("[verbose] Quick filter --today: enabled");
+        }
+        if args.yesterday {
+            eprintln!("[verbose] Quick filter --yesterday: enabled");
+        }
     }
 
     if args.files.is_empty() {
@@ -1020,9 +1034,19 @@ fn main() -> io::Result<()> {
 
     let weekdays_filter = args.weekdays.unwrap_or_default();
     let exclude_weekdays_filter = args.exclude_weekdays.unwrap_or_default();
+    
+    // Determine effective date filter: explicit flags override --date
+    let effective_date = if args.today {
+        DateFilter::Today
+    } else if args.yesterday {
+        DateFilter::Yesterday
+    } else {
+        args.date.clone()
+    };
+    
     let filtered: Vec<&Event> = all_events
         .iter()
-        .filter(|e| matches_filter(e, &args.date))
+        .filter(|e| matches_filter(e, &effective_date))
         .filter(|e| matches_person_filter(e, &args.person))
         .filter(|e| matches_project_filter(e, &args.project))
         .filter(|e| matches_exclude_filter(e, &args.exclude_person))
