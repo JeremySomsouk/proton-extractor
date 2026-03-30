@@ -11,28 +11,33 @@ use std::path::{Path, PathBuf};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Terminal colors - automatically disabled if not a TTY
-#[cfg(feature = "color")]
 mod color {
     use std::io::IsTerminal;
     use std::fmt;
 
-    #[derive(Clone, Copy)]
-    pub struct Color(u8);
-    
-    impl fmt::Display for Color {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            if is_color_enabled() {
-                write!(f, "\x1b[{}m", self.0)
-            } else {
-                write!(f, "")
-            }
-        }
-    }
-    
     pub fn is_color_enabled() -> bool {
         std::io::stdout().is_terminal()
     }
-    
+
+    #[derive(Clone, Copy)]
+    pub struct Color(u8);
+
+    impl Color {
+        pub fn display(&self) -> impl fmt::Display + '_ {
+            if is_color_enabled() {
+                format!("\x1b[{}m", self.0)
+            } else {
+                String::new()
+            }
+        }
+    }
+
+    impl fmt::Display for Color {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.display())
+        }
+    }
+
     pub const CYAN: Color = Color(36);
     pub const GREEN: Color = Color(32);
     pub const YELLOW: Color = Color(33);
@@ -40,32 +45,8 @@ mod color {
     pub const BOLD: Color = Color(1);
 }
 
-#[cfg(not(feature = "color"))]
-mod color {
-    use std::fmt;
-
-    #[derive(Clone, Copy)]
-    pub struct Color(u8);
-    
-    impl fmt::Display for Color {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "")
-        }
-    }
-    
-    pub const CYAN: Color = Color(0);
-    pub const GREEN: Color = Color(0);
-    pub const YELLOW: Color = Color(0);
-    pub const MAGENTA: Color = Color(0);
-    pub const BOLD: Color = Color(0);
-}
-
 fn colored<S: AsRef<str>>(c: color::Color, text: S) -> String {
-    if color::is_color_enabled() {
-        format!("{}{}{}", c, text.as_ref(), c)
-    } else {
-        text.as_ref().to_string()
-    }
+    format!("{}{}{}", c, text.as_ref(), c)
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -380,20 +361,6 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
         }
     }));
 
-    // Map day abbreviation to weekday number (Monday = 1)
-    let day_to_weekday = |day: &str| -> Option<u32> {
-        match day {
-            "MO" => Some(1),
-            "TU" => Some(2),
-            "WE" => Some(3),
-            "TH" => Some(4),
-            "FR" => Some(5),
-            "SA" => Some(6),
-            "SU" => Some(7),
-            _ => None,
-        }
-    };
-
     // Expand base events
     for event in base_events {
         let exdate_set: HashSet<NaiveDate> = event.exdates.into_iter().collect();
@@ -451,7 +418,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     // BYDAY filter: only include if no BYDAY specified or date matches one of the days
                     let include_byday = byday.as_ref().is_none_or(|days| {
                         days.iter().any(|d| {
-                            day_to_weekday(d)
+                            weekday_abbrev_to_num(d)
                                 .map(|wd| date.weekday().num_days_from_monday() + 1 == wd)
                                 .unwrap_or(false)
                         })
