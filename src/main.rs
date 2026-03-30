@@ -55,6 +55,7 @@ enum DateFilter {
     Previous,
     All,
     Today,
+    Yesterday,
     Week,
 }
 
@@ -658,6 +659,7 @@ fn group_by_month(events: &[&Event]) -> BTreeMap<(i32, u32), MonthSummary> {
 
 fn matches_filter(event: &Event, filter: &DateFilter) -> bool {
     let now = Local::now().naive_local();
+    let yesterday = now - Duration::days(1);
     let (ev_year, ev_month, ev_day) = (event.start.year(), event.start.month(), event.start.day());
     match filter {
         DateFilter::All => true, // Show all events regardless of date
@@ -672,6 +674,9 @@ fn matches_filter(event: &Event, filter: &DateFilter) -> bool {
         }
         DateFilter::Today => {
             ev_year == now.year() && ev_month == now.month() && ev_day == now.day()
+        }
+        DateFilter::Yesterday => {
+            ev_year == yesterday.year() && ev_month == yesterday.month() && ev_day == yesterday.day()
         }
         DateFilter::Week => {
             // Get ISO week number AND ISO week year for both event and current date
@@ -1144,7 +1149,7 @@ fn main() -> io::Result<()> {
         writeln!(out_writer, "Total hours:    {}", colored(color::YELLOW, format_hours(total_mins)))?;
         if let (Some(min_d), Some(max_d)) = (min_date, max_date) {
             let days_span = (*max_d - *min_d).num_days() + 1;
-            let avg_per_day = if days_span > 0 { total_mins / days_span as i64 } else { total_mins };
+            let avg_per_day = if days_span > 0 { total_mins / days_span } else { total_mins };
             writeln!(out_writer, "Date range:     {} to {} ({} days)", min_d, max_d, days_span)?;
             writeln!(out_writer, "Avg per day:    {}", colored(color::YELLOW, format_hours(avg_per_day)))?;
         }
@@ -1745,6 +1750,32 @@ mod tests {
         assert!(!matches_filter(&yesterday_event, &DateFilter::Today));
         assert!(matches_filter(&today_event, &DateFilter::All));
         assert!(matches_filter(&yesterday_event, &DateFilter::All));
+    }
+
+    #[test]
+    fn test_matches_filter_yesterday() {
+        let today = Local::now().naive_local().date();
+        let yesterday = today - chrono::Duration::days(1);
+        let today_event = Event::new(
+            "Today meeting [Alice]".to_string(),
+            today.and_hms_opt(9, 0, 0).unwrap(),
+            today.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        let yesterday_event = Event::new(
+            "Yesterday meeting [Bob]".to_string(),
+            yesterday.and_hms_opt(9, 0, 0).unwrap(),
+            yesterday.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        let two_days_ago = today - chrono::Duration::days(2);
+        let two_days_ago_event = Event::new(
+            "Two days ago [Carol]".to_string(),
+            two_days_ago.and_hms_opt(9, 0, 0).unwrap(),
+            two_days_ago.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        assert!(matches_filter(&yesterday_event, &DateFilter::Yesterday));
+        assert!(!matches_filter(&today_event, &DateFilter::Yesterday));
+        assert!(!matches_filter(&two_days_ago_event, &DateFilter::Yesterday));
     }
 
     #[test]
