@@ -1,4 +1,4 @@
-use chrono::{Datelike, Duration, Local, NaiveDate, NaiveDateTime};
+use chrono::{Datelike, Duration, Local, NaiveDate, NaiveDateTime, Timelike};
 use clap::{Parser, ValueEnum};
 use ical::parser::ical::component::IcalEvent;
 use ical::IcalParser;
@@ -267,6 +267,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                 let step = match freq.as_str() {
                     "WEEKLY" => Duration::weeks(1),
                     "DAILY" => Duration::days(1),
+                    "MONTHLY" => Duration::days(0), // Placeholder - handled separately
                     _ => {
                         // Unsupported frequency, add single event
                         result.push(Event::new(event.summary, event.start, event.end));
@@ -279,6 +280,8 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                 let limit_date = start_date.and_hms_opt(23, 59, 59).unwrap().and_utc().naive_local() + Duration::days(RECURRENCE_LIMIT_DAYS);
                 let until = if until > limit_date { limit_date } else { until };
 
+                // For MONTHLY recurrence, track original day to maintain consistency
+                let original_day = event.start.day();
                 let mut current = event.start;
                 let mut instances = 0;
                 while current <= until {
@@ -291,7 +294,41 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     {
                         result.push(Event::new(event.summary.clone(), current, current + duration));
                     }
-                    current += step;
+
+                    // Increment to next occurrence
+                    if freq == "MONTHLY" {
+                        // Increment by one month, keeping same day/time
+                        let (year, month) = (current.year(), current.month());
+                        let (new_year, new_month) = if month == 12 {
+                            (year + 1, 1)
+                        } else {
+                            (year, month + 1)
+                        };
+                        // Days in each month
+                        let days_in_month = match new_month {
+                            1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+                            4 | 6 | 9 | 11 => 30,
+                            2 => {
+                                // Check for leap year
+                                if (new_year % 4 == 0 && new_year % 100 != 0) || (new_year % 400 == 0) {
+                                    29
+                                } else {
+                                    28
+                                }
+                            }
+                            _ => 31,
+                        };
+                        // Use original day (clamped to max days in target month)
+                        let new_day = original_day.min(days_in_month);
+                        if let Some(new_date) = NaiveDate::from_ymd_opt(new_year, new_month, new_day) {
+                            current = new_date.and_hms_opt(current.hour(), current.minute(), current.second()).unwrap_or(current);
+                        } else {
+                            // Fallback: shouldn't happen with our day calculation
+                            current += Duration::days(30);
+                        }
+                    } else {
+                        current += step;
+                    }
                     instances += 1;
                 }
             }
@@ -1145,5 +1182,47 @@ mod tests {
             NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
         );
         assert!(matches_exclude_filter(&event_no_person, &["anything".to_string()]));
+    }
+
+    #[test]
+    fn test_expand_events_monthly_recurrence() {
+        let monthly = RawEvent {
+            summary: "Monthly [Eve]".to_string(),
+            start: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            duration: None,
+            uid: "uid1".to_string(),
+            rrule: Some("FREQ=MONTHLY;UNTIL=20240615T235959".to_string()),
+            exdates: vec![],
+            recurrence_id: None,
+        };
+        let expanded = expand_events(vec![monthly]);
+        // 6 months: Jan, Feb, Mar, Apr, May, Jun
+        assert_eq!(expanded.len(), 6);
+        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 1, 15).unwrap());
+        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2024, 2, 15).unwrap());
+        assert_eq!(expanded[5].start.date(), NaiveDate::from_ymd_opt(2024, 6, 15).unwrap());
+    }
+
+    #[test]
+    fn test_expand_events_monthly_day_overflow() {
+        // Test day overflow handling: Jan 31 -> Feb 28 (non-leap year 2023)
+        let monthly_31st = RawEvent {
+            summary: "Monthly 31st [Frank]".to_string(),
+            start: NaiveDate::from_ymd_opt(2023, 1, 31).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2023, 1, 31).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            duration: None,
+            uid: "uid1".to_string(),
+            rrule: Some("FREQ=MONTHLY;UNTIL=20230430T235959".to_string()),
+            exdates: vec![],
+            recurrence_id: None,
+        };
+        let expanded = expand_events(vec![monthly_31st]);
+        // 4 months: Jan 31, Feb 28 (clamped), Mar 31, Apr 30 (clamped)
+        assert_eq!(expanded.len(), 4);
+        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2023, 1, 31).unwrap());
+        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2023, 2, 28).unwrap()); // 31st -> 28th
+        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2023, 3, 31).unwrap());
+        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2023, 4, 30).unwrap()); // 31st -> 30th
     }
 }
