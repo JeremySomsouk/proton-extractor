@@ -3,6 +3,10 @@ name = "proton-extractor"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["color"]
+color = []
+
 [dependencies]
 ical = "0.11"
 chrono = "0.4"

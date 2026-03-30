@@ -10,6 +10,66 @@ use std::path::{Path, PathBuf};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+// Terminal colors - automatically disabled if not a TTY
+#[cfg(feature = "color")]
+mod color {
+    use std::io::IsTerminal;
+    use std::fmt;
+
+    #[derive(Clone, Copy)]
+    pub struct Color(u8);
+    
+    impl fmt::Display for Color {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            if is_color_enabled() {
+                write!(f, "\x1b[{}m", self.0)
+            } else {
+                write!(f, "")
+            }
+        }
+    }
+    
+    pub fn is_color_enabled() -> bool {
+        std::io::stdout().is_terminal()
+    }
+    
+    pub const NO_COLOR: Color = Color(0);
+    pub const CYAN: Color = Color(36);
+    pub const GREEN: Color = Color(32);
+    pub const YELLOW: Color = Color(33);
+    pub const MAGENTA: Color = Color(35);
+    pub const BOLD: Color = Color(1);
+}
+
+#[cfg(not(feature = "color"))]
+mod color {
+    use std::fmt;
+
+    #[derive(Clone, Copy)]
+    pub struct Color(u8);
+    
+    impl fmt::Display for Color {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "")
+        }
+    }
+    
+    pub const NO_COLOR: Color = Color(0);
+    pub const CYAN: Color = Color(0);
+    pub const GREEN: Color = Color(0);
+    pub const YELLOW: Color = Color(0);
+    pub const MAGENTA: Color = Color(0);
+    pub const BOLD: Color = Color(0);
+}
+
+fn colored<S: AsRef<str>>(c: color::Color, text: S) -> String {
+    if color::is_color_enabled() {
+        format!("{}{}{}", c, text.as_ref(), c)
+    } else {
+        text.as_ref().to_string()
+    }
+}
+
 #[derive(Debug, Clone, ValueEnum)]
 enum DateFilter {
     Current,
@@ -1212,35 +1272,35 @@ fn main() -> io::Result<()> {
 
             for ((year, _month), summary) in &grouped {
                 writeln!(out_writer)?;
-                writeln!(out_writer, "--- {} {} ---", summary.month_name, year)?;
+                writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {} {} ---", summary.month_name, year)))?;
 
                 let month_by_person = summary.by_person();
 
                 if !args.quiet && !args.sum_only {
                     for event in &summary.events {
                         if let Some(mins) = event_duration_minutes(event) {
-                            writeln!(out_writer, "  {:6}  {}", format_hours(mins), event.summary)?;
+                            writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
                         }
                     }
                 }
 
-                writeln!(out_writer, "  ------")?;
+                writeln!(out_writer, "  {}", colored(color::MAGENTA, "------"))?;
                 for (person, mins) in &month_by_person {
-                    writeln!(out_writer, "  {:6}  {}", format_hours(*mins), person)?;
+                    writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(*mins)), person)?;
                 }
-                writeln!(out_writer, "  {:6}  TOTAL", format_hours(summary.total_minutes()))?;
+                writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(summary.total_minutes())), colored(color::BOLD, "TOTAL"))?;
             }
 
             if grand_total_minutes > 0 && grouped.len() > 1 {
                 writeln!(out_writer)?;
-                writeln!(out_writer, "=== Grand Total: {} ===", format_hours(grand_total_minutes))?;
+                writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
             }
 
             if !all_by_person.is_empty() && !args.sum_only {
                 writeln!(out_writer)?;
-                writeln!(out_writer, "=== Hours per person ===")?;
+                writeln!(out_writer, "{}", colored(color::CYAN, "=== Hours per person ==="))?;
                 for (person, mins) in &all_by_person {
-                    writeln!(out_writer, "  {:6}  {:>6}  {}", format_hours(*mins), format_percentage(*mins, grand_total_minutes), person)?;
+                    writeln!(out_writer, "  {}  {:>6}  {}", colored(color::YELLOW, format_hours(*mins)), colored(color::MAGENTA, format_percentage(*mins, grand_total_minutes)), person)?;
                 }
             }
         }
