@@ -200,10 +200,12 @@ fn parse_duration(duration: &str) -> Option<Duration> {
     Some(Duration::days(days) + Duration::weeks(weeks) + Duration::hours(hours) + Duration::minutes(minutes))
 }
 
-fn parse_rrule(rrule: &str) -> Option<(String, NaiveDateTime, Option<Vec<String>>)> {
+fn parse_rrule(rrule: &str) -> Option<(String, NaiveDateTime, Option<Vec<String>>, Option<i32>, Option<i32>)> {
     let mut freq = None;
     let mut until = None;
     let mut byday = None;
+    let mut interval: Option<i32> = None;
+    let mut count: Option<i32> = None;
     for part in rrule.split(';') {
         if let Some(v) = part.strip_prefix("FREQ=") {
             freq = Some(v.to_string());
@@ -211,9 +213,14 @@ fn parse_rrule(rrule: &str) -> Option<(String, NaiveDateTime, Option<Vec<String>
             until = parse_ical_datetime(v);
         } else if let Some(v) = part.strip_prefix("BYDAY=") {
             byday = Some(v.split(',').map(|s| s.to_string()).collect());
+        } else if let Some(v) = part.strip_prefix("INTERVAL=") {
+            interval = v.parse().ok().filter(|&i| i > 0);
+        } else if let Some(v) = part.strip_prefix("COUNT=") {
+            count = v.parse().ok().filter(|&c| c > 0);
         }
     }
-    Some((freq?, until.or(Some(NaiveDate::from_ymd_opt(2099, 12, 31).unwrap().and_hms_opt(23, 59, 59).unwrap()))?, byday))
+    let default_until = NaiveDate::from_ymd_opt(2099, 12, 31).unwrap().and_hms_opt(23, 59, 59).unwrap();
+    Some((freq?, until.unwrap_or(default_until), byday, interval, count))
 }
 
 const RECURRENCE_LIMIT_DAYS: i64 = 365 * 5; // 5 year limit for recurrence expansion
@@ -272,7 +279,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                 }
             }
             Some(rrule) => {
-                let Some((freq, until, byday)) = parse_rrule(rrule) else {
+                let Some((freq, until, byday, interval, count)) = parse_rrule(rrule) else {
                     // Can't parse RRULE, just add the single event
                     let duration = event.end - event.start;
                     if duration.num_minutes() > 0 {
@@ -286,9 +293,10 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     continue;
                 }
 
+                // INTERVAL defaults to 1 if not specified
                 let step = match freq.as_str() {
-                    "WEEKLY" => Duration::weeks(1),
-                    "DAILY" => Duration::days(1),
+                    "WEEKLY" => Duration::weeks(interval.unwrap_or(1) as i64),
+                    "DAILY" => Duration::days(interval.unwrap_or(1) as i64),
                     "MONTHLY" => Duration::days(0), // Placeholder - handled separately
                     _ => {
                         // Unsupported frequency, add single event
@@ -307,7 +315,8 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                 let mut current = event.start;
                 let mut instances = 0;
                 while current <= until {
-                    if instances >= MAX_RECURRENCE_INSTANCES {
+                    let max_instances = count.unwrap_or(MAX_RECURRENCE_INSTANCES as i32) as usize;
+                    if instances >= max_instances {
                         break;
                     }
                     let date = current.date();
@@ -985,23 +994,38 @@ mod tests {
     fn test_parse_rrule() {
         let result = parse_rrule("FREQ=WEEKLY;UNTIL=20240315T090000Z");
         assert!(result.is_some());
-        let (freq, until, byday) = result.unwrap();
+        let (freq, until, byday, interval, count) = result.unwrap();
         assert_eq!(freq, "WEEKLY");
         assert_eq!(until.format("%Y%m%d").to_string(), "20240315"); // Date only, time is 00:00:00
         assert!(byday.is_none());
+        assert_eq!(interval, None);
+        assert_eq!(count, None);
         
         // BYDAY extraction
         let result = parse_rrule("FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20240315T090000Z");
         assert!(result.is_some());
-        let (freq, _, byday) = result.unwrap();
+        let (freq, _, byday, _, _) = result.unwrap();
         assert_eq!(freq, "WEEKLY");
         assert_eq!(byday, Some(vec!["MO".to_string(), "WE".to_string(), "FR".to_string()]));
         
         // Missing UNTIL gets a default
         let result = parse_rrule("FREQ=DAILY");
         assert!(result.is_some());
-        let (_, until, _) = result.unwrap();
+        let (_, until, _, _, _) = result.unwrap();
         assert_eq!(until.format("%Y").to_string(), "2099"); // Should have default date
+        
+        // INTERVAL extraction
+        let result = parse_rrule("FREQ=WEEKLY;INTERVAL=2;UNTIL=20240315T090000Z");
+        assert!(result.is_some());
+        let (freq, _, _, interval, _) = result.unwrap();
+        assert_eq!(freq, "WEEKLY");
+        assert_eq!(interval, Some(2));
+        
+        // COUNT extraction
+        let result = parse_rrule("FREQ=DAILY;COUNT=10");
+        assert!(result.is_some());
+        let (_, _, _, _, count) = result.unwrap();
+        assert_eq!(count, Some(10));
     }
 
     #[test]
@@ -1249,6 +1273,67 @@ mod tests {
         let expanded = expand_events(vec![with_exdate]);
         // 3 weeks, minus 1 exdate = 2 events (March 1, 15)
         assert_eq!(expanded.len(), 2);
+    }
+
+    #[test]
+    fn test_expand_events_with_interval() {
+        // Every 2 weeks: March 1, March 15, March 29
+        let biweekly = RawEvent {
+            summary: "Biweekly [Carol]".to_string(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            duration: None,
+            uid: "uid1".to_string(),
+            rrule: Some("FREQ=WEEKLY;INTERVAL=2;UNTIL=20240331T235959".to_string()),
+            exdates: vec![],
+            recurrence_id: None,
+        };
+        let expanded = expand_events(vec![biweekly]);
+        assert_eq!(expanded.len(), 3);
+        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
+        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2024, 3, 15).unwrap());
+        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2024, 3, 29).unwrap());
+    }
+
+    #[test]
+    fn test_expand_events_with_count() {
+        // Daily for 5 occurrences
+        let daily_count = RawEvent {
+            summary: "Daily 5 times [Eve]".to_string(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            duration: None,
+            uid: "uid1".to_string(),
+            rrule: Some("FREQ=DAILY;COUNT=5".to_string()),
+            exdates: vec![],
+            recurrence_id: None,
+        };
+        let expanded = expand_events(vec![daily_count]);
+        // Should only produce 5 events despite no UNTIL
+        assert_eq!(expanded.len(), 5);
+        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
+        assert_eq!(expanded[4].start.date(), NaiveDate::from_ymd_opt(2024, 3, 5).unwrap());
+    }
+
+    #[test]
+    fn test_expand_events_interval_and_count_combined() {
+        // Every 3 days, 4 occurrences max
+        let combined = RawEvent {
+            summary: "Every 3 days [Frank]".to_string(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            duration: None,
+            uid: "uid1".to_string(),
+            rrule: Some("FREQ=DAILY;INTERVAL=3;COUNT=4".to_string()),
+            exdates: vec![],
+            recurrence_id: None,
+        };
+        let expanded = expand_events(vec![combined]);
+        assert_eq!(expanded.len(), 4);
+        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
+        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2024, 3, 4).unwrap());
+        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2024, 3, 7).unwrap());
+        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2024, 3, 10).unwrap());
     }
 
     #[test]
