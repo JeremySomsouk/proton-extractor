@@ -80,13 +80,14 @@ proton-extractor ~/Downloads/*-calendar.ics
 | Flag | Values | Description |
 |------|--------|-------------|
 | `-d, --date` | `all`, `current`, `previous`, `today`, `week` | Filter by date period |
-| `-f, --format` | `text`, `json`, `csv`, `markdown`, `ical` | Output format |
+| `-f, --format` | `text`, `json`, `csv`, `markdown`, `ical`, `html` | Output format |
 | `--exclude-person` | name | Exclude events by person |
 | `-p, --person` | name | Filter by person |
 | `--project` | name | Filter by project (see {project} tags) |
 | `--from` | YYYY-MM-DD | Start date |
 | `--to` | YYYY-MM-DD | End date |
 | `--list-persons` | | List all unique persons found in events |
+| `--list-projects` | | List all unique projects found in events |
 
 ### Event Format
 
