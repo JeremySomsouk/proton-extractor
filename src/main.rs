@@ -7,6 +7,8 @@ use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufReader, Write};
 use std::path::{Path, PathBuf};
+use tracing::{debug, warn, Level};
+use tracing_subscriber::FmtSubscriber;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -1014,51 +1016,61 @@ fn format_percentage(part: i64, total: i64) -> String {
 fn main() -> io::Result<()> {
     let args = Args::parse();
 
-    if args.verbose {
-        eprintln!("[verbose] Processing {} file(s)", args.files.len());
-        if let Some(ref p) = args.person {
-            eprintln!("[verbose] Filtering by person: {}", p);
-        }
-        if let Some(ref p) = args.project {
-            eprintln!("[verbose] Filtering by project: {}", p);
-        }
-        if !args.exclude_person.is_empty() {
-            eprintln!("[verbose] Excluding persons: {:?}", args.exclude_person);
-        }
-        if !args.exclude_project.is_empty() {
-            eprintln!("[verbose] Excluding projects: {:?}", args.exclude_project);
-        }
-        if !args.exclude_summary.is_empty() {
-            eprintln!("[verbose] Excluding summaries containing: {:?}", args.exclude_summary);
-        }
-        if let Some(ref f) = args.from {
-            eprintln!("[verbose] From date: {}", f);
-        }
-        if let Some(ref t) = args.to {
-            eprintln!("[verbose] To date: {}", t);
-        }
-        if let Some(ref y) = args.year {
-            eprintln!("[verbose] Filter by year: {}", y);
-        }
-        if let Some(ref wd) = args.weekdays {
-            eprintln!("[verbose] Filter by weekdays: {:?}", wd);
-        }
-        if let Some(ref wd) = args.exclude_weekdays {
-            eprintln!("[verbose] Exclude weekdays: {:?}", wd);
-        }
-        if let Some(lim) = args.limit {
-            eprintln!("[verbose] Limit: {} events", lim);
-        }
-        if args.today {
-            eprintln!("[verbose] Quick filter --today: enabled");
-        }
-        if args.yesterday {
-            eprintln!("[verbose] Quick filter --yesterday: enabled");
-        }
+    // Initialize tracing/logging
+    let log_level = if args.verbose { Level::DEBUG } else { Level::INFO };
+    FmtSubscriber::builder()
+        .with_max_level(log_level)
+        .with_target(false)
+        .with_thread_ids(false)
+        .with_file(false)
+        .with_line_number(false)
+        .compact()
+        .init();
+
+    debug!("proton-extractor v{} starting", VERSION);
+    debug!("Processing {} file(s)", args.files.len());
+    if let Some(ref p) = args.person {
+        debug!("Filtering by person: {}", p);
+    }
+    if let Some(ref p) = args.project {
+        debug!("Filtering by project: {}", p);
+    }
+    if !args.exclude_person.is_empty() {
+        debug!("Excluding persons: {:?}", args.exclude_person);
+    }
+    if !args.exclude_project.is_empty() {
+        debug!("Excluding projects: {:?}", args.exclude_project);
+    }
+    if !args.exclude_summary.is_empty() {
+        debug!("Excluding summaries containing: {:?}", args.exclude_summary);
+    }
+    if let Some(ref f) = args.from {
+        debug!("From date: {}", f);
+    }
+    if let Some(ref t) = args.to {
+        debug!("To date: {}", t);
+    }
+    if let Some(ref y) = args.year {
+        debug!("Filter by year: {}", y);
+    }
+    if let Some(ref wd) = args.weekdays {
+        debug!("Filter by weekdays: {:?}", wd);
+    }
+    if let Some(ref wd) = args.exclude_weekdays {
+        debug!("Exclude weekdays: {:?}", wd);
+    }
+    if let Some(lim) = args.limit {
+        debug!("Limit: {} events", lim);
+    }
+    if args.today {
+        debug!("Quick filter --today: enabled");
+    }
+    if args.yesterday {
+        debug!("Quick filter --yesterday: enabled");
     }
 
     if args.files.is_empty() {
-        eprintln!("Error: no .ics files provided");
+        warn!("No .ics files provided");
         std::process::exit(1);
     }
 
@@ -1068,16 +1080,14 @@ fn main() -> io::Result<()> {
     // Validate file extensions before processing
     for path in &args.files {
         if let Err(e) = validate_ics_file(path) {
-            eprintln!("Error: {}", e);
+            warn!("Invalid file: {}", e);
             std::process::exit(1);
         }
     }
 
     let mut all_raw_events = Vec::new();
     for path in &args.files {
-        if args.verbose {
-            eprintln!("[verbose] Reading: {}", path.display());
-        }
+        debug!("Reading: {}", path.display());
         let file = File::open(path)
             .map_err(|e| io::Error::new(io::ErrorKind::NotFound, format!("Failed to open {}: {}", path.display(), e)))?;
 
@@ -1087,8 +1097,8 @@ fn main() -> io::Result<()> {
         for calendar in parser {
             match calendar {
                 Ok(cal) => {
-                    if args.verbose && !cal.events.is_empty() {
-                        eprintln!("[verbose] Found {} events in {}", cal.events.len(), path.display());
+                    if !cal.events.is_empty() {
+                        debug!("Found {} events in {}", cal.events.len(), path.display());
                     }
                     all_raw_events.extend(extract_raw_events(cal.events));
                 }
@@ -1096,21 +1106,17 @@ fn main() -> io::Result<()> {
                     // Suppress parse errors in quiet mode
                 }
                 Err(e) => {
-                    eprintln!("Warning: failed to parse {}: {}", path.display(), e);
+                    warn!("Failed to parse {}: {}", path.display(), e);
                 }
             }
         }
     }
 
-    if args.verbose {
-        eprintln!("[verbose] Total raw events: {}", all_raw_events.len());
-    }
+    debug!("Total raw events: {}", all_raw_events.len());
 
     let all_events = expand_events(all_raw_events);
 
-    if args.verbose {
-        eprintln!("[verbose] Expanded events: {}", all_events.len());
-    }
+    debug!("Expanded events: {}", all_events.len());
 
     // Parse duration filters
     let min_duration = args.min_duration.as_ref()
@@ -1118,13 +1124,11 @@ fn main() -> io::Result<()> {
     let max_duration = args.max_duration.as_ref()
         .and_then(|s| parse_human_duration(s).or_else(|| parse_duration(s)));
 
-    if args.verbose {
-        if let Some(ref d) = min_duration {
-            eprintln!("[verbose] Min duration filter: {} minutes", d.num_minutes());
-        }
-        if let Some(ref d) = max_duration {
-            eprintln!("[verbose] Max duration filter: {} minutes", d.num_minutes());
-        }
+    if let Some(ref d) = min_duration {
+        debug!("Min duration filter: {} minutes", d.num_minutes());
+    }
+    if let Some(ref d) = max_duration {
+        debug!("Max duration filter: {} minutes", d.num_minutes());
     }
 
     // Setup output: file or stdout
@@ -1166,9 +1170,7 @@ fn main() -> io::Result<()> {
         .take(args.limit.unwrap_or(usize::MAX))
         .collect();
 
-    if args.verbose {
-        eprintln!("[verbose] Events after filtering: {}", filtered.len());
-    }
+    debug!("Events after filtering: {}", filtered.len());
 
     // Apply reverse order if requested
     let filtered: Vec<&Event> = if args.reverse {
