@@ -59,7 +59,7 @@ struct Args {
     person: Option<String>,
 
     /// Start date (YYYY-MM-DD)
-    #[arg(long)]
+    #[arg(long, alias = "since")]
     from: Option<NaiveDate>,
 
     /// End date (YYYY-MM-DD)
@@ -200,17 +200,20 @@ fn parse_duration(duration: &str) -> Option<Duration> {
     Some(Duration::days(days) + Duration::weeks(weeks) + Duration::hours(hours) + Duration::minutes(minutes))
 }
 
-fn parse_rrule(rrule: &str) -> Option<(String, NaiveDateTime)> {
+fn parse_rrule(rrule: &str) -> Option<(String, NaiveDateTime, Option<Vec<String>>)> {
     let mut freq = None;
     let mut until = None;
+    let mut byday = None;
     for part in rrule.split(';') {
         if let Some(v) = part.strip_prefix("FREQ=") {
             freq = Some(v.to_string());
         } else if let Some(v) = part.strip_prefix("UNTIL=") {
             until = parse_ical_datetime(v);
+        } else if let Some(v) = part.strip_prefix("BYDAY=") {
+            byday = Some(v.split(',').map(|s| s.to_string()).collect());
         }
     }
-    Some((freq?, until?))
+    Some((freq?, until.or(Some(NaiveDate::from_ymd_opt(2099, 12, 31).unwrap().and_hms_opt(23, 59, 59).unwrap()))?, byday))
 }
 
 const RECURRENCE_LIMIT_DAYS: i64 = 365 * 5; // 5 year limit for recurrence expansion
@@ -243,6 +246,20 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
         }
     }));
 
+    // Map day abbreviation to weekday number (Monday = 1)
+    let day_to_weekday = |day: &str| -> Option<u32> {
+        match day {
+            "MO" => Some(1),
+            "TU" => Some(2),
+            "WE" => Some(3),
+            "TH" => Some(4),
+            "FR" => Some(5),
+            "SA" => Some(6),
+            "SU" => Some(7),
+            _ => None,
+        }
+    };
+
     // Expand base events
     for event in base_events {
         let exdate_set: HashSet<NaiveDate> = event.exdates.into_iter().collect();
@@ -255,7 +272,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                 }
             }
             Some(rrule) => {
-                let Some((freq, until)) = parse_rrule(rrule) else {
+                let Some((freq, until, byday)) = parse_rrule(rrule) else {
                     // Can't parse RRULE, just add the single event
                     let duration = event.end - event.start;
                     if duration.num_minutes() > 0 {
@@ -294,7 +311,18 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                         break;
                     }
                     let date = current.date();
-                    if !exdate_set.contains(&date)
+                    
+                    // BYDAY filter: only include if no BYDAY specified or date matches one of the days
+                    let include_byday = byday.as_ref().map_or(true, |days| {
+                        days.iter().any(|d| {
+                            day_to_weekday(d)
+                                .map(|wd| date.weekday().num_days_from_monday() + 1 == wd)
+                                .unwrap_or(false)
+                        })
+                    });
+                    
+                    if include_byday
+                        && !exdate_set.contains(&date)
                         && !overrides.contains(&(event.uid.clone(), date))
                     {
                         result.push(Event::new(event.summary.clone(), current, current + duration));
@@ -467,25 +495,21 @@ fn matches_filter(event: &Event, filter: &DateFilter) -> bool {
         }
         DateFilter::Week => {
             // Get ISO week number and year for both event and current date
-            let ev_week = (ev_year * 100) + ev_week_number(ev_year, ev_month, ev_day) as i32;
-            let now_week = (now.year() * 100) + now_week_number(now.year(), now.month(), now.day()) as i32;
+            let ev_week = (ev_year * 100) + week_number(ev_year, ev_month, ev_day) as i32;
+            let now_week = (now.year() * 100) + week_number(now.year(), now.month(), now.day()) as i32;
             ev_week == now_week
         }
     }
 }
 
 // ISO week number calculation (Monday = 1, Sunday = 7)
-fn now_week_number(year: i32, month: u32, day: u32) -> u32 {
+fn week_number(year: i32, month: u32, day: u32) -> u32 {
     let date = NaiveDate::from_ymd_opt(year, month, day).unwrap_or_default();
     let days_since_monday = date.weekday().num_days_from_monday();
     let monday = date - Duration::days(days_since_monday as i64);
     let week_start = NaiveDate::from_ymd_opt(monday.year(), monday.month(), monday.day()).unwrap_or_default();
     let days_since_reference = week_start - NaiveDate::from_ymd_opt(2000, 1, 3).unwrap();
     (days_since_reference.num_days() / 7) as u32 + 1
-}
-
-fn ev_week_number(year: i32, month: u32, day: u32) -> u32 {
-    now_week_number(year, month, day)
 }
 
 fn matches_person_filter(event: &Event, person_filter: &Option<String>) -> bool {
@@ -959,8 +983,25 @@ mod tests {
 
     #[test]
     fn test_parse_rrule() {
-        assert!(parse_rrule("FREQ=WEEKLY;UNTIL=20240315T090000Z").is_some());
-        assert_eq!(parse_rrule("FREQ=DAILY"), None); // missing UNTIL
+        let result = parse_rrule("FREQ=WEEKLY;UNTIL=20240315T090000Z");
+        assert!(result.is_some());
+        let (freq, until, byday) = result.unwrap();
+        assert_eq!(freq, "WEEKLY");
+        assert_eq!(until.format("%Y%m%d").to_string(), "20240315"); // Date only, time is 00:00:00
+        assert!(byday.is_none());
+        
+        // BYDAY extraction
+        let result = parse_rrule("FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20240315T090000Z");
+        assert!(result.is_some());
+        let (freq, _, byday) = result.unwrap();
+        assert_eq!(freq, "WEEKLY");
+        assert_eq!(byday, Some(vec!["MO".to_string(), "WE".to_string(), "FR".to_string()]));
+        
+        // Missing UNTIL gets a default
+        let result = parse_rrule("FREQ=DAILY");
+        assert!(result.is_some());
+        let (_, until, _) = result.unwrap();
+        assert_eq!(until.format("%Y").to_string(), "2099"); // Should have default date
     }
 
     #[test]
