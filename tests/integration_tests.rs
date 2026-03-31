@@ -990,9 +990,9 @@ fn test_cli_invalid_duration_format() {
 
     cmd.arg(ics_path).arg("--min-duration").arg("invalid");
 
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("invalid 'invalid' for --min-duration"));
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "invalid 'invalid' for --min-duration",
+    ));
 }
 
 #[test]

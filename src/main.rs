@@ -12,6 +12,19 @@ use tracing_subscriber::FmtSubscriber;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Exit codes for CLI - enables scripted/CI/CD handling of specific errors
+#[allow(dead_code)]
+mod exit_codes {
+    pub const SUCCESS: i32 = 0;
+    pub const FILE_ERROR: i32 = 1; // Generic file errors
+    pub const FILE_NOT_FOUND: i32 = 2; // Input file missing
+    pub const INVALID_ARGS: i32 = 3; // Invalid CLI arguments
+    pub const VALIDATION_FAILED: i32 = 4; // --validate found errors
+    pub const NO_EVENTS: i32 = 5; // No events found (not an error per se, but distinct)
+    pub const PERMISSION_DENIED: i32 = 6; // File permission issues
+    pub const OUTPUT_ERROR: i32 = 7; // Couldn't write output
+}
+
 // Terminal colors - automatically disabled if not a TTY or when --no-color is set
 mod color {
     use std::fmt;
@@ -95,14 +108,31 @@ fn print_exported(count: usize, path: &Path) {
 /// Styled hint message output - helpful suggestions with user's specific values
 /// Use for actionable tips after errors
 fn print_hint<S: AsRef<str>>(msg: S) {
-    eprintln!("{} {}", colored(color::DIM, "hint:"), colored(color::CYAN, msg.as_ref()));
+    eprintln!(
+        "{} {}",
+        colored(color::DIM, "hint:"),
+        colored(color::CYAN, msg.as_ref())
+    );
 }
 
 /// Multiple hints at once - accepts slice of &str
 fn print_hints(hints: &[&str]) {
     for hint in hints {
-        eprintln!("  {} {}", colored(color::DIM, "→"), colored(color::CYAN, *hint));
+        eprintln!(
+            "  {} {}",
+            colored(color::DIM, "→"),
+            colored(color::CYAN, *hint)
+        );
     }
+}
+
+/// Styled info banner - for startup/version banners
+fn print_banner(message: &str) {
+    println!(
+        "{} {}",
+        colored(color::CYAN, "━━━"),
+        colored(color::CYAN, message)
+    );
 }
 
 /// Styled notice message output - neutral notices that aren't errors
@@ -113,7 +143,11 @@ fn print_notice<S: AsRef<str>>(msg: S) {
 
 /// Styled info message for successful list operations
 fn print_list_summary(count: usize, label: &str) {
-    let item = if count == 1 { label } else { &format!("{}s", label) };
+    let item = if count == 1 {
+        label
+    } else {
+        &format!("{}s", label)
+    };
     eprintln!(
         "{} {} {} found",
         colored(color::GREEN, "✓"),
@@ -136,7 +170,12 @@ fn confirm(prompt: &str) -> bool {
         return false;
     }
 
-    eprint!("  {} {} [{}/n] ", colored(color::CYAN, "?"), prompt, colored(color::GREEN, "Y"));
+    eprint!(
+        "  {} {} [{}/n] ",
+        colored(color::CYAN, "?"),
+        prompt,
+        colored(color::GREEN, "Y")
+    );
     io::stderr().flush().ok();
     let mut response = String::new();
     if io::stdin().read_line(&mut response).is_err() {
@@ -187,10 +226,7 @@ impl Spinner {
         self.finish();
         eprintln!("{} {}", colored(color::RED, "error:"), message);
     }
-
 }
-
-
 
 #[derive(Debug, Clone, ValueEnum)]
 enum DateFilter {
@@ -524,11 +560,21 @@ struct Args {
     dry_run: bool,
 
     /// Filter by day of week: MO,TU,WE,TH,FR,SA,SU (can be repeated, e.g., --weekdays MO --weekdays WE)
-    #[arg(long = "weekdays", alias = "weekday", value_delimiter = ',', value_name = "DAYS")]
+    #[arg(
+        long = "weekdays",
+        alias = "weekday",
+        value_delimiter = ',',
+        value_name = "DAYS"
+    )]
     weekdays: Option<Vec<String>>,
 
     /// Exclude events on these days of week: MO,TU,WE,TH,FR,SA,SU (can be repeated, complements --weekdays)
-    #[arg(long = "exclude-weekdays", alias = "exclude-weekday", value_delimiter = ',', value_name = "DAYS")]
+    #[arg(
+        long = "exclude-weekdays",
+        alias = "exclude-weekday",
+        value_delimiter = ',',
+        value_name = "DAYS"
+    )]
     exclude_weekdays: Option<Vec<String>>,
 
     /// Exclude events whose summary contains this text (case-insensitive, can be repeated)
@@ -770,7 +816,10 @@ fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
             let hint = if week.chars().all(|c| c.is_ascii_digit()) && week.len() <= 2 {
                 format!("did you mean 'W{}'? (add 'W' prefix for ISO week)", week)
             } else if week.starts_with("W") && week.len() <= 3 {
-                format!("did you mean '{}'? (include year, e.g., 2024-{})", week, week)
+                format!(
+                    "did you mean '{}'? (include year, e.g., 2024-{})",
+                    week, week
+                )
             } else {
                 String::new()
             };
@@ -797,7 +846,15 @@ fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
 fn validate_weekdays(weekdays: &Option<Vec<String>>, flag_name: &str) -> io::Result<()> {
     if let Some(ref days) = weekdays {
         let valid_abbrevs = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
-        let valid_full = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+        let valid_full = [
+            "MONDAY",
+            "TUESDAY",
+            "WEDNESDAY",
+            "THURSDAY",
+            "FRIDAY",
+            "SATURDAY",
+            "SUNDAY",
+        ];
 
         for day in days {
             let upper = day.to_uppercase();
@@ -805,7 +862,8 @@ fn validate_weekdays(weekdays: &Option<Vec<String>>, flag_name: &str) -> io::Res
             if !valid_abbrevs.contains(&upper.as_str()) {
                 // Check if it's a full day name (common mistake)
                 if valid_full.contains(&upper.as_str()) {
-                    let suggested = valid_abbrevs[valid_full.iter().position(|&d| d == upper).unwrap()];
+                    let suggested =
+                        valid_abbrevs[valid_full.iter().position(|&d| d == upper).unwrap()];
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!(
@@ -816,11 +874,13 @@ fn validate_weekdays(weekdays: &Option<Vec<String>>, flag_name: &str) -> io::Res
                 }
 
                 // Check for common typos
-                let typo_suggestions: Vec<&str> = valid_abbrevs.iter()
+                let typo_suggestions: Vec<&str> = valid_abbrevs
+                    .iter()
                     .filter(|&&abbr| {
                         // Check Levenshtein distance of 1 or same starting letter
                         abbr.chars().next() == upper.chars().next()
-                        || levenshtein_distance(&upper.to_lowercase(), &abbr.to_lowercase()) <= 2
+                            || levenshtein_distance(&upper.to_lowercase(), &abbr.to_lowercase())
+                                <= 2
                     })
                     .copied()
                     .collect();
@@ -840,7 +900,9 @@ fn validate_weekdays(weekdays: &Option<Vec<String>>, flag_name: &str) -> io::Res
                 } else {
                     format!(
                         "invalid weekday '{}' for --{}: valid values are {}",
-                        day, flag_name, valid_abbrevs.join(", ")
+                        day,
+                        flag_name,
+                        valid_abbrevs.join(", ")
                     )
                 };
 
@@ -858,20 +920,32 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
     let len1 = s1_chars.len();
     let len2 = s2_chars.len();
 
-    if len1 == 0 { return len2; }
-    if len2 == 0 { return len1; }
+    if len1 == 0 {
+        return len2;
+    }
+    if len2 == 0 {
+        return len1;
+    }
 
     let mut matrix = vec![vec![0usize; len2 + 1]; len1 + 1];
 
-    for i in 0..=len1 { matrix[i][0] = i; }
-    for j in 0..=len2 { matrix[0][j] = j; }
+    for i in 0..=len1 {
+        matrix[i][0] = i;
+    }
+    for j in 0..=len2 {
+        matrix[0][j] = j;
+    }
 
     for i in 1..=len1 {
         for j in 1..=len2 {
-            let cost = if s1_chars[i-1] == s2_chars[j-1] { 0 } else { 1 };
+            let cost = if s1_chars[i - 1] == s2_chars[j - 1] {
+                0
+            } else {
+                1
+            };
             matrix[i][j] = std::cmp::min(
-                std::cmp::min(matrix[i-1][j] + 1, matrix[i][j-1] + 1),
-                matrix[i-1][j-1] + cost
+                std::cmp::min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1),
+                matrix[i - 1][j - 1] + cost,
             );
         }
     }
@@ -2507,7 +2581,11 @@ fn build_json_output(
 /// Print usage examples - shown with --examples flag
 fn print_examples() {
     println!();
-    println!("{} {}", colored(color::CYAN, "━━━"), colored(color::CYAN, "Usage Examples"));
+    println!(
+        "{} {}",
+        colored(color::CYAN, "━━━"),
+        colored(color::CYAN, "Usage Examples")
+    );
     println!();
     println!("  {} Getting Started", colored(color::BOLD, "›"));
     println!("    proton-extractor calendar.ics");
@@ -2542,7 +2620,11 @@ fn print_examples() {
     println!("    --yes                    # Auto-confirm prompts");
     println!("    --no-color               # Disable colors");
     println!();
-    println!("  {} Run {} for full help", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --help"));
+    println!(
+        "  {} Run {} for full help",
+        colored(color::DIM, "→"),
+        colored(color::CYAN, "proton-extractor --help")
+    );
     println!();
 }
 
@@ -2639,7 +2721,7 @@ fn main() -> io::Result<()> {
     if args.validate {
         let mut has_errors = false;
         let mut validated_count = 0;
-        
+
         // Validate date range
         validated_count += 1;
         if let Err(e) = validate_date_range(&args.from, &args.to) {
@@ -2647,7 +2729,7 @@ fn main() -> io::Result<()> {
             print_error(e.to_string());
             print_hints(&["--from must be before or equal to --to"][..]);
         }
-        
+
         // Validate month
         validated_count += 1;
         if let Err(e) = validate_month(args.month) {
@@ -2655,7 +2737,7 @@ fn main() -> io::Result<()> {
             print_error(e.to_string());
             print_hints(&["Month must be 1-12 (e.g., --month 3 for March)"][..]);
         }
-        
+
         // Validate week number
         validated_count += 1;
         if let Err(e) = validate_week_number(&args.week_number) {
@@ -2663,7 +2745,7 @@ fn main() -> io::Result<()> {
             print_error(e.to_string());
             print_hints(&["Format: W10 (current year) or 2024-W10 (specific year)"][..]);
         }
-        
+
         // Validate weekdays
         validated_count += 2;
         if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
@@ -2712,7 +2794,7 @@ fn main() -> io::Result<()> {
                 print_error(format!("invalid '{}' for --min-duration", s));
                 print_hints(&[
                     "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                    "Examples: --min-duration 30m  --min-duration 1h30m"
+                    "Examples: --min-duration 30m  --min-duration 1h30m",
                 ]);
             }
         }
@@ -2722,11 +2804,11 @@ fn main() -> io::Result<()> {
                 print_error(format!("invalid '{}' for --max-duration", s));
                 print_hints(&[
                     "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                    "Examples: --max-duration 4h  --max-duration 8h"
+                    "Examples: --max-duration 4h  --max-duration 8h",
                 ]);
             }
         }
-        
+
         // Validate --compact flag (only applies to JSON/YAML formats)
         validated_count += 1;
         if args.compact {
@@ -2734,41 +2816,69 @@ fn main() -> io::Result<()> {
                 OutputFormat::Json | OutputFormat::Yaml | OutputFormat::Jsonl => {}
                 _ => {
                     has_errors = true;
-                    print_error(format!("--compact only applies to JSON/YAML formats, not '{}'", args.format));
+                    print_error(format!(
+                        "--compact only applies to JSON/YAML formats, not '{}'",
+                        args.format
+                    ));
                     print_hints(&["Remove --compact or use -f json/yaml"][..]);
                 }
             }
         }
-        
+
         if has_errors {
             eprintln!();
             print_error("Validation failed");
-            std::process::exit(1);
+            std::process::exit(exit_codes::VALIDATION_FAILED);
         }
-        
+
         // Success output
         print_success("All arguments validated successfully");
         println!();
-        println!("  {} {} argument constraint(s) checked", colored(color::DIM, "→"), validated_count);
-        
+        println!(
+            "  {} {} argument constraint(s) checked",
+            colored(color::DIM, "→"),
+            validated_count
+        );
+        print_banner("Validation Complete");
+
         // Show effective filters in verbose mode
         if args.verbose {
             println!();
             println!("  {} Effective filters:", colored(color::CYAN, "→"));
-            if args.quiet { println!("    {:<22} quiet mode", colored(color::DIM, "-q,")); }
-            if args.silent { println!("    {:<22} silent mode", colored(color::DIM, "--silent")); }
-            if args.today { println!("    {:<22} today", colored(color::DIM, "-t,")); }
-            if args.yesterday { println!("    {:<22} yesterday", colored(color::DIM, "--yesterday")); }
-            if args.weekly { println!("    {:<22} this week", colored(color::DIM, "-w,")); }
-            if args.last_week { println!("    {:<22} last week", colored(color::DIM, "-l,")); }
+            if args.quiet {
+                println!("    {:<22} quiet mode", colored(color::DIM, "-q,"));
+            }
+            if args.silent {
+                println!("    {:<22} silent mode", colored(color::DIM, "--silent"));
+            }
+            if args.today {
+                println!("    {:<22} today", colored(color::DIM, "-t,"));
+            }
+            if args.yesterday {
+                println!("    {:<22} yesterday", colored(color::DIM, "--yesterday"));
+            }
+            if args.weekly {
+                println!("    {:<22} this week", colored(color::DIM, "-w,"));
+            }
+            if args.last_week {
+                println!("    {:<22} last week", colored(color::DIM, "-l,"));
+            }
             if !matches!(args.date, DateFilter::All) {
-                println!("    {:<22} date filter: {:?}", colored(color::DIM, "-d,"), args.date);
+                println!(
+                    "    {:<22} date filter: {:?}",
+                    colored(color::DIM, "-d,"),
+                    args.date
+                );
             }
             if let Some(ref p) = args.person {
                 println!("    {:<22} person: {}", colored(color::DIM, "--person"), p);
             }
             if let Some(ref p) = args.project {
-                println!("    {:<22} project: {}", colored(color::DIM, "--project"), p);
+                println!(
+                    "    {:<22} project: {}",
+                    colored(color::DIM, "--project"),
+                    p
+                );
             }
             if let Some(ref t) = args.tag {
                 println!("    {:<22} tag: {}", colored(color::DIM, "--tag"), t);
@@ -2780,7 +2890,7 @@ fn main() -> io::Result<()> {
                 println!("    {:<22} to: {}", colored(color::DIM, "--to"), t);
             }
         }
-        
+
         return Ok(());
     }
 
@@ -2811,7 +2921,7 @@ fn main() -> io::Result<()> {
         print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
         std::process::exit(1);
     }
-    
+
     // Validate time filters
     if let Some(ref t) = args.start_after {
         if let Err(e) = validate_time_filter(t, "start-after") {
@@ -2841,13 +2951,16 @@ fn main() -> io::Result<()> {
             std::process::exit(1);
         }
     }
-    
+
     // Validate --compact flag (only applies to JSON/YAML formats)
     if args.compact {
         match args.format {
             OutputFormat::Json | OutputFormat::Yaml | OutputFormat::Jsonl => {}
             _ => {
-                print_warn(format!("--compact has no effect with {} format (only affects JSON/YAML)", args.format));
+                print_warn(format!(
+                    "--compact has no effect with {} format (only affects JSON/YAML)",
+                    args.format
+                ));
                 print_hints(&["Remove --compact or use -f json/yaml"][..]);
             }
         }
@@ -2859,7 +2972,7 @@ fn main() -> io::Result<()> {
             print_error(format!("invalid '{}' for --min-duration", s));
             print_hints(&[
                 "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                "Examples: --min-duration 30m  --min-duration 1h30m"
+                "Examples: --min-duration 30m  --min-duration 1h30m",
             ]);
             std::process::exit(1);
         }
@@ -2869,7 +2982,7 @@ fn main() -> io::Result<()> {
             print_error(format!("invalid '{}' for --max-duration", s));
             print_hints(&[
                 "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                "Examples: --max-duration 4h  --max-duration 8h"
+                "Examples: --max-duration 4h  --max-duration 8h",
             ]);
             std::process::exit(1);
         }
@@ -2881,7 +2994,7 @@ fn main() -> io::Result<()> {
             "Provide file paths: proton-extractor calendar.ics",
             "Or pipe ICS content: proton-extractor --stdin < calendar.ics",
             "Validate args (CI/CD): proton-extractor --validate [args]",
-            "Get help: proton-extractor --help"
+            "Get help: proton-extractor --help",
         ]);
         std::process::exit(1);
     }
@@ -2891,7 +3004,7 @@ fn main() -> io::Result<()> {
         print_hints(&["Use either --stdin OR file paths, not both"][..]);
         std::process::exit(1);
     }
-    
+
     let mut all_raw_events = Vec::new();
 
     if has_stdin {
@@ -2918,10 +3031,14 @@ fn main() -> io::Result<()> {
         // Detect empty stdin early
         if !found_content && !parse_warnings.is_empty() && !args.quiet && !args.silent {
             print_warn("stdin appears to be empty or not valid ICS content");
-            print_hints(&["Provide ICS content via pipe: proton-extractor --stdin < calendar.ics"][..]);
+            print_hints(
+                &["Provide ICS content via pipe: proton-extractor --stdin < calendar.ics"][..],
+            );
         } else if !found_content && !args.quiet && !args.silent && parse_warnings.is_empty() {
             print_warn("stdin is empty");
-            print_hints(&["Provide ICS content via pipe: proton-extractor --stdin < calendar.ics"][..]);
+            print_hints(
+                &["Provide ICS content via pipe: proton-extractor --stdin < calendar.ics"][..],
+            );
         }
     } else {
         // Validate file extensions before processing
@@ -2969,21 +3086,24 @@ fn main() -> io::Result<()> {
                 Ok(f) => f,
                 Err(e) => {
                     let path_str = path.display().to_string();
-                    let (msg, hints) = match e.kind() {
+                    let (msg, hints, exit_code) = match e.kind() {
                         std::io::ErrorKind::NotFound => (
                             format!("'{}' not found", path_str),
                             vec![
                                 format!("Verify the path is correct: ls -la {}", path_str),
                                 "Check that the file exists and is readable".to_string(),
                             ],
+                            exit_codes::FILE_NOT_FOUND,
                         ),
                         std::io::ErrorKind::PermissionDenied => (
                             format!("Permission denied: '{}'", path_str),
                             vec![format!("Run: chmod +r {}", path_str)],
+                            exit_codes::PERMISSION_DENIED,
                         ),
                         _ => (
                             format!("Failed to open '{}': {}", path_str, e),
                             vec![],
+                            exit_codes::FILE_ERROR,
                         ),
                     };
                     // Use spinner error finish if spinner exists, otherwise just print error
@@ -2995,7 +3115,7 @@ fn main() -> io::Result<()> {
                     if !hints.is_empty() {
                         print_hints(&hints.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                     }
-                    std::process::exit(1);
+                    std::process::exit(exit_code);
                 }
             };
 
@@ -3037,7 +3157,7 @@ fn main() -> io::Result<()> {
     let all_events = expand_events(all_raw_events);
 
     debug!("Expanded events: {}", all_events.len());
-    
+
     // Show verbose progress for event expansion (recurring events)
     if args.verbose && total_raw_events < all_events.len() {
         eprintln!(
@@ -3091,7 +3211,7 @@ fn main() -> io::Result<()> {
                 print_error(format!("invalid '{}' for --min-duration", s));
                 print_hints(&[
                     "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                    "Examples: --min-duration 30m  --min-duration 1h30m"
+                    "Examples: --min-duration 30m  --min-duration 1h30m",
                 ]);
                 std::process::exit(1);
             }
@@ -3107,7 +3227,7 @@ fn main() -> io::Result<()> {
                 print_error(format!("invalid '{}' for --max-duration", s));
                 print_hints(&[
                     "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                    "Examples: --max-duration 4h  --max-duration 8h"
+                    "Examples: --max-duration 4h  --max-duration 8h",
                 ]);
                 std::process::exit(1);
             }
@@ -3121,8 +3241,13 @@ fn main() -> io::Result<()> {
         if min.num_minutes() > max.num_minutes() {
             let min_str = format!("{}h {}m", min.num_minutes() / 60, min.num_minutes() % 60);
             let max_str = format!("{}h {}m", max.num_minutes() / 60, max.num_minutes() % 60);
-            print_error(format!("--min-duration ({}) must be ≤ --max-duration ({})", min_str, max_str));
-            print_hints(&["Ensure --min-duration value is less than or equal to --max-duration"][..]);
+            print_error(format!(
+                "--min-duration ({}) must be ≤ --max-duration ({})",
+                min_str, max_str
+            ));
+            print_hints(
+                &["Ensure --min-duration value is less than or equal to --max-duration"][..],
+            );
             std::process::exit(1);
         }
     }
@@ -3154,15 +3279,20 @@ fn main() -> io::Result<()> {
                         eprintln!(
                             "{} {}",
                             colored(color::YELLOW, "warning:"),
-                            colored(color::BOLD, format!("'{}' is not empty", output_dir.display()))
+                            colored(
+                                color::BOLD,
+                                format!("'{}' is not empty", output_dir.display())
+                            )
                         );
                         if !confirm("Continue?") {
                             eprintln!();
                             eprintln!("{} Operation cancelled", colored(color::YELLOW, "○"));
-                            eprintln!("  {} Use {} or {} to auto-confirm",
+                            eprintln!(
+                                "  {} Use {} or {} to auto-confirm",
                                 colored(color::DIM, "→"),
                                 colored(color::CYAN, "--yes"),
-                                colored(color::CYAN, "--force"));
+                                colored(color::CYAN, "--force")
+                            );
                             std::process::exit(1);
                         }
                     }
@@ -3226,15 +3356,21 @@ fn main() -> io::Result<()> {
                 if !confirm("Overwrite?") {
                     eprintln!();
                     eprintln!("{} Operation cancelled", colored(color::YELLOW, "○"));
-                    eprintln!("  {} Use {} or {} to auto-confirm",
+                    eprintln!(
+                        "  {} Use {} or {} to auto-confirm",
                         colored(color::DIM, "→"),
                         colored(color::CYAN, "--yes"),
-                        colored(color::CYAN, "--force"));
+                        colored(color::CYAN, "--force")
+                    );
                     std::process::exit(1);
                 }
             }
             let file = File::create(path).map_err(|e| {
-                io::Error::other(format!("Failed to create output file '{}': {}", path.display(), e))
+                io::Error::other(format!(
+                    "Failed to create output file '{}': {}",
+                    path.display(),
+                    e
+                ))
             })?;
             Box::new(file)
         }
@@ -3368,32 +3504,76 @@ fn main() -> io::Result<()> {
         if !args.quiet && !args.silent {
             eprintln!();
             print_notice("No events found");
-            
+
             // Show what date context is active
             match &effective_date {
-                DateFilter::Today => eprintln!("  {} showing today ({})", colored(color::DIM, "→"), now.format("%Y-%m-%d")),
-                DateFilter::Yesterday => eprintln!("  {} showing yesterday ({})", colored(color::DIM, "→"), yesterday.format("%Y-%m-%d")),
-                DateFilter::Tomorrow => eprintln!("  {} showing tomorrow ({})", colored(color::DIM, "→"), tomorrow.format("%Y-%m-%d")),
-                DateFilter::Week => eprintln!("  {} showing ISO week {}", colored(color::DIM, "→"), now.format("%V")),
-                DateFilter::LastWeek => eprintln!("  {} showing last week", colored(color::DIM, "→")),
-                DateFilter::Current => eprintln!("  {} showing {}", colored(color::DIM, "→"), now.format("%B")),
+                DateFilter::Today => eprintln!(
+                    "  {} showing today ({})",
+                    colored(color::DIM, "→"),
+                    now.format("%Y-%m-%d")
+                ),
+                DateFilter::Yesterday => eprintln!(
+                    "  {} showing yesterday ({})",
+                    colored(color::DIM, "→"),
+                    yesterday.format("%Y-%m-%d")
+                ),
+                DateFilter::Tomorrow => eprintln!(
+                    "  {} showing tomorrow ({})",
+                    colored(color::DIM, "→"),
+                    tomorrow.format("%Y-%m-%d")
+                ),
+                DateFilter::Week => eprintln!(
+                    "  {} showing ISO week {}",
+                    colored(color::DIM, "→"),
+                    now.format("%V")
+                ),
+                DateFilter::LastWeek => {
+                    eprintln!("  {} showing last week", colored(color::DIM, "→"))
+                }
+                DateFilter::Current => eprintln!(
+                    "  {} showing {}",
+                    colored(color::DIM, "→"),
+                    now.format("%B")
+                ),
                 DateFilter::Previous => {
-                    let (y, m) = if now.month() == 1 { (now.year() - 1, 12) } else { (now.year(), now.month() - 1) };
-                    eprintln!("  {} showing {} {}", colored(color::DIM, "→"), chrono::Month::try_from(u8::try_from(m).unwrap_or(1)).unwrap_or(chrono::Month::January).name(), y);
-                },
+                    let (y, m) = if now.month() == 1 {
+                        (now.year() - 1, 12)
+                    } else {
+                        (now.year(), now.month() - 1)
+                    };
+                    eprintln!(
+                        "  {} showing {} {}",
+                        colored(color::DIM, "→"),
+                        chrono::Month::try_from(u8::try_from(m).unwrap_or(1))
+                            .unwrap_or(chrono::Month::January)
+                            .name(),
+                        y
+                    );
+                }
                 DateFilter::All => {}
             }
-            
+
             // Show date range if --from/--to is set
             if let (Some(from), Some(to)) = (&args.from, &args.to) {
-                eprintln!("  {} date range: {} to {}", colored(color::DIM, "→"), from, to);
+                eprintln!(
+                    "  {} date range: {} to {}",
+                    colored(color::DIM, "→"),
+                    from,
+                    to
+                );
             }
 
             // Context-aware quick fixes
             eprintln!();
             eprintln!("  {} Quick fixes:", colored(color::CYAN, "→"));
             // Show -d all when date filter is active (explicit flags OR -d filter)
-            if args.today || args.yesterday || args.tomorrow || args.weekly || args.last_week || !matches!(args.date, DateFilter::All) {
+            if args.today
+                || args.yesterday
+                || args.tomorrow
+                || args.weekly
+                || args.last_week
+                || !matches!(args.date, DateFilter::All)
+            {
                 eprintln!("    {} -d all  Show all events", colored(color::DIM, "•"));
             }
             if args.person.is_some() || !args.persons.clone().unwrap_or_default().is_empty() {
@@ -3403,16 +3583,29 @@ fn main() -> io::Result<()> {
                 eprintln!("    {} Remove project filter", colored(color::DIM, "•"));
             }
             if args.exclude_recurring {
-                eprintln!("    {} --include-recurring  Include recurring", colored(color::DIM, "•"));
+                eprintln!(
+                    "    {} --include-recurring  Include recurring",
+                    colored(color::DIM, "•")
+                );
             }
             if args.recent.is_some() {
-                eprintln!("    {} --recent 30  Show last 30 days", colored(color::DIM, "•"));
+                eprintln!(
+                    "    {} --recent 30  Show last 30 days",
+                    colored(color::DIM, "•")
+                );
             }
             if args.from.is_none() && args.to.is_none() {
-                eprintln!("    {} --from/--to  Filter by date range", colored(color::DIM, "•"));
+                eprintln!(
+                    "    {} --from/--to  Filter by date range",
+                    colored(color::DIM, "•")
+                );
             }
             eprintln!();
-            eprintln!("  {} See {} for all options", colored(color::DIM, "→"), colored(color::CYAN, "--help"));
+            eprintln!(
+                "  {} See {} for all options",
+                colored(color::DIM, "→"),
+                colored(color::CYAN, "--help")
+            );
         }
         return Ok(());
     }
@@ -3426,25 +3619,48 @@ fn main() -> io::Result<()> {
         if total_raw == 0 {
             // No events in files at all
             print_warn("No calendar events found in the input files");
-            eprintln!("  {} Check that your .ics files contain valid VEVENT components", colored(color::DIM, "→"));
+            eprintln!(
+                "  {} Check that your .ics files contain valid VEVENT components",
+                colored(color::DIM, "→")
+            );
         } else {
             // Events exist but were filtered out
-            print_notice(format!("No events match your filters ({} events in {} files)",
+            print_notice(format!(
+                "No events match your filters ({} events in {} files)",
                 colored(color::YELLOW, total_raw.to_string()),
-                colored(color::YELLOW, args.files.len().to_string())));
+                colored(color::YELLOW, args.files.len().to_string())
+            ));
             eprintln!();
             eprintln!("  {} Suggestions:", colored(color::CYAN, "→"));
-            eprintln!("    {} {:<28} Show all events", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
+            eprintln!(
+                "    {} {:<28} Show all events",
+                colored(color::DIM, "•"),
+                colored(color::CYAN, "-d all")
+            );
             if args.person.is_none() && args.project.is_none() && args.tag.is_none() {
-                eprintln!("    {} {:<28} List available persons", colored(color::DIM, "•"), colored(color::CYAN, "-P"));
+                eprintln!(
+                    "    {} {:<28} List available persons",
+                    colored(color::DIM, "•"),
+                    colored(color::CYAN, "-P")
+                );
             }
-            eprintln!("    {} {:<28} Last 30 days", colored(color::DIM, "•"), colored(color::CYAN, "--recent 30"));
-            eprintln!("    {} {:<28} Include recurring", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
+            eprintln!(
+                "    {} {:<28} Last 30 days",
+                colored(color::DIM, "•"),
+                colored(color::CYAN, "--recent 30")
+            );
+            eprintln!(
+                "    {} {:<28} Include recurring",
+                colored(color::DIM, "•"),
+                colored(color::CYAN, "--include-recurring")
+            );
         }
         eprintln!();
-        eprintln!("  {} Run {} for filter options",
+        eprintln!(
+            "  {} Run {} for filter options",
             colored(color::DIM, "→"),
-            colored(color::CYAN, "proton-extractor --help"));
+            colored(color::CYAN, "proton-extractor --help")
+        );
         return Ok(());
     }
 
@@ -3455,7 +3671,7 @@ fn main() -> io::Result<()> {
             let person = extract_person(&event.summary).unwrap_or("(unknown)");
             *by_person.entry(person).or_default() += 1;
         }
-        println!("{}", colored(color::CYAN, "━━━ Dry Run Results ━━━"));
+        print_banner("Dry Run Results");
         println!(
             "Total events: {}",
             colored(color::YELLOW, filtered.len().to_string())
