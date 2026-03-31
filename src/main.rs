@@ -98,10 +98,11 @@ fn print_success<S: AsRef<str>>(msg: S) {
 fn print_saved(count: usize, path: &Path) {
     let event_label = if count == 1 { "event" } else { "events" };
     println!(
-        "{} Saved {} {} → {}",
+        "{} Saved {} {} {} {}",
         colored(color::GREEN, "✓"),
         colored(color::YELLOW, count.to_string()),
         event_label,
+        colored(color::DIM, "→"),
         colored(color::CYAN, path.display().to_string())
     );
 }
@@ -168,7 +169,7 @@ fn confirm(prompt: &str) -> bool {
 
     eprint!(
         "  {} {} [{}/n] ",
-        colored(color::CYAN, "?"),
+        colored(color::YELLOW, "?"),
         prompt,
         colored(color::GREEN, "Y")
     );
@@ -242,7 +243,8 @@ impl Spinner {
     /// Finish with an error message (consistent with print_error style)
     fn finish_with_error(&self, message: &str) {
         self.finish();
-        eprintln!("{} {}", colored(color::RED, "error:"), message);
+        // Use same stream as print_error for consistency
+        let _ = std::io::stderr().write_all(format!("{} {}\n", colored(color::RED, "error:"), message).as_bytes());
     }
 }
 
@@ -3295,14 +3297,14 @@ fn main() -> io::Result<()> {
 
         // Detect empty stdin early
         if !found_content && !parse_warnings.is_empty() && !args.quiet && !args.silent {
-            print_warn("stdin appears to be empty or not valid ICS content");
+            print_notice("stdin appears to be empty or not valid ICS content");
             print_hints(
-                &["Provide ICS content via pipe: proton-extractor --stdin < calendar.ics"][..],
+                &["Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin"][..],
             );
         } else if !found_content && !args.quiet && !args.silent && parse_warnings.is_empty() {
-            print_warn("stdin is empty");
+            print_notice("stdin is empty");
             print_hints(
-                &["Provide ICS content via pipe: proton-extractor --stdin < calendar.ics"][..],
+                &["Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin"][..],
             );
         }
     } else {
