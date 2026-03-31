@@ -1798,7 +1798,12 @@ fn main() -> io::Result<()> {
     // Validate min < max if both are set
     if let (Some(min), Some(max)) = (&min_duration, &max_duration) {
         if min.num_minutes() > max.num_minutes() {
-            warn!("--min-duration ({}) is greater than --max-duration ({})", min.num_minutes(), max.num_minutes());
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("--min-duration ({}h {}m) must be less than or equal to --max-duration ({}h {}m)", 
+                    min.num_minutes() / 60, min.num_minutes() % 60,
+                    max.num_minutes() / 60, max.num_minutes() % 60),
+            ));
         }
     }
 
@@ -3709,6 +3714,10 @@ mod tests {
         let err = validate_month(Some(0)).unwrap_err();
         assert!(err.to_string().contains("between 1 and 12"));
     }
+
+    // Note: validate_duration_range cannot be tested in isolation as it operates
+    // on parsed Duration values, not raw strings. Duration validation happens
+    // during CLI argument parsing via parse_human_duration / parse_duration.
 
     #[test]
     fn test_matches_month_filter() {
