@@ -2628,6 +2628,8 @@ fn main() -> io::Result<()> {
             colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [args]"));
         eprintln!("  {} Run {} for usage information", 
             colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --help"));
+        eprintln!("  {} Version: {}", 
+            colored(color::DIM, "→"), colored(color::CYAN, VERSION));
         std::process::exit(1);
     }
 
