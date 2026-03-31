@@ -167,22 +167,30 @@ impl Spinner {
     }
 
     fn tick(&mut self) {
+        // Use carriage return and clear to end of line for smooth animation
+        eprint!("\r{}{}\r{}", self.chars[self.current], self.message, " ".repeat(self.message.len().saturating_sub(1)));
         eprint!("\r{}{}", self.chars[self.current], self.message);
+        io::stderr().flush().ok();
         self.current = (self.current + 1) % self.chars.len();
     }
 
     fn finish(&self) {
+        // Clear the current line and reset cursor
+        eprint!("\r{}\r", " ".repeat(80));
         eprint!("\r");
-        eprint!("{}", " ".repeat(80));
-        eprint!("\r");
+        io::stderr().flush().ok();
     }
 
     /// Finish with a success message
     fn finish_with_success(&self, message: &str) {
-        eprint!("\r");
-        eprint!("{}", " ".repeat(80));
-        eprint!("\r");
+        self.finish();
         println!("{} {}", colored(color::GREEN, "✓"), message);
+    }
+    
+    /// Finish with an error message
+    fn finish_with_error(&self, message: &str) {
+        self.finish();
+        eprintln!("{} {}", colored(color::RED, "✗"), message);
     }
 }
 
@@ -2531,82 +2539,137 @@ fn main() -> io::Result<()> {
 
     // --validate is a pre-flight check that doesn't require files
     if args.validate {
-        // Validate all arguments without requiring files
+        let mut has_errors = false;
+        let mut validated_count = 0;
+        
+        // Validate date range
+        validated_count += 1;
         if let Err(e) = validate_date_range(&args.from, &args.to) {
+            has_errors = true;
             print_error(&e.to_string());
             print_hints(&["--from must be before or equal to --to"][..]);
-            std::process::exit(1);
         }
+        
+        // Validate month
+        validated_count += 1;
         if let Err(e) = validate_month(args.month) {
+            has_errors = true;
             print_error(&e.to_string());
             print_hints(&["Month must be 1-12 (e.g., --month 3 for March)"][..]);
-            std::process::exit(1);
         }
+        
+        // Validate week number
+        validated_count += 1;
         if let Err(e) = validate_week_number(&args.week_number) {
+            has_errors = true;
             print_error(&e.to_string());
             print_hints(&["Format: W10 (current year) or 2024-W10 (specific year)"][..]);
-            std::process::exit(1);
         }
+        
+        // Validate weekdays
+        validated_count += 2;
         if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
+            has_errors = true;
             print_error(&e.to_string());
             print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
-            std::process::exit(1);
         }
         if let Err(e) = validate_weekdays(&args.exclude_weekdays, "exclude-weekdays") {
+            has_errors = true;
             print_error(&e.to_string());
             print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
-            std::process::exit(1);
         }
 
         // Validate time filters
+        validated_count += 4;
         if let Some(ref t) = args.start_after {
             if let Err(e) = validate_time_filter(t, "start-after") {
+                has_errors = true;
                 print_error(&e.to_string());
-                std::process::exit(1);
             }
         }
         if let Some(ref t) = args.start_before {
             if let Err(e) = validate_time_filter(t, "start-before") {
+                has_errors = true;
                 print_error(&e.to_string());
-                std::process::exit(1);
             }
         }
         if let Some(ref t) = args.end_after {
             if let Err(e) = validate_time_filter(t, "end-after") {
+                has_errors = true;
                 print_error(&e.to_string());
-                std::process::exit(1);
             }
         }
         if let Some(ref t) = args.end_before {
             if let Err(e) = validate_time_filter(t, "end-before") {
+                has_errors = true;
                 print_error(&e.to_string());
-                std::process::exit(1);
             }
         }
 
         // Validate duration filters
+        validated_count += 2;
         if let Some(ref s) = args.min_duration {
             if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
+                has_errors = true;
                 print_error(&format!("invalid '{}' for --min-duration", s));
                 print_hints(&[
                     "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
                     "Examples: --min-duration 30m  --min-duration 1h30m"
                 ]);
-                std::process::exit(1);
             }
         }
         if let Some(ref s) = args.max_duration {
             if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
+                has_errors = true;
                 print_error(&format!("invalid '{}' for --max-duration", s));
                 print_hints(&[
                     "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
                     "Examples: --max-duration 4h  --max-duration 8h"
                 ]);
-                std::process::exit(1);
             }
         }
-
+        
+        if has_errors {
+            eprintln!();
+            print_error("Validation failed");
+            std::process::exit(1);
+        }
+        
+        // Success output
         print_success("All arguments validated successfully");
+        eprintln!();
+        eprintln!("  {} Validated {} argument constraint(s)", colored(color::DIM, "→"), validated_count);
+        
+        // Show effective filters in verbose mode
+        if args.verbose {
+            eprintln!();
+            eprintln!("  {} Effective filters:", colored(color::CYAN, "→"));
+            if args.quiet { eprintln!("    {:<22} quiet mode", colored(color::DIM, "-q,")); }
+            if args.silent { eprintln!("    {:<22} silent mode", colored(color::DIM, "--silent")); }
+            if args.today { eprintln!("    {:<22} today", colored(color::DIM, "-t,")); }
+            if args.yesterday { eprintln!("    {:<22} yesterday", colored(color::DIM, "--yesterday")); }
+            if args.weekly { eprintln!("    {:<22} this week", colored(color::DIM, "-w,")); }
+            if args.last_week { eprintln!("    {:<22} last week", colored(color::DIM, "-l,")); }
+            if !matches!(args.date, DateFilter::All) {
+                eprintln!("    {:<22} date filter: {:?}", colored(color::DIM, "-d,"), args.date);
+            }
+            if let Some(ref p) = args.person {
+                eprintln!("    {:<22} person: {}", colored(color::DIM, "--person"), p);
+            }
+            if let Some(ref p) = args.project {
+                eprintln!("    {:<22} project: {}", colored(color::DIM, "--project"), p);
+            }
+            if let Some(ref t) = args.tag {
+                eprintln!("    {:<22} tag: {}", colored(color::DIM, "--tag"), t);
+            }
+            if let Some(ref f) = args.from {
+                eprintln!("    {:<22} from: {}", colored(color::DIM, "--from"), f);
+            }
+            if let Some(ref t) = args.to {
+                eprintln!("    {:<22} to: {}", colored(color::DIM, "--to"), t);
+            }
+        }
+        
         return Ok(());
     }
 
@@ -3171,7 +3234,10 @@ fn main() -> io::Result<()> {
     if filtered.is_empty() {
         if !args.quiet && !args.silent {
             eprintln!();
-            print_notice("No events found matching your criteria");
+            eprintln!("{}  {}", colored(color::YELLOW, "╭─"), colored(color::DIM, "─".repeat(30)));
+            eprintln!("{}  {}", colored(color::YELLOW, "│"), colored(color::CYAN, "no events found"));
+            eprintln!("{}  {}", colored(color::YELLOW, "╰─"), colored(color::DIM, "─".repeat(30)));
+            eprintln!();
             eprintln!("  {} Use {} to debug argument issues", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [your args]"));
         }
 
