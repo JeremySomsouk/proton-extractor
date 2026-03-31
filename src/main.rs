@@ -189,6 +189,10 @@ struct Args {
     #[arg(long)]
     exclude_location: Vec<String>,
 
+    /// Exclude recurring events (events with RRULE)
+    #[arg(long)]
+    exclude_recurring: bool,
+
     /// Generate shell completion script for bash, zsh, fish, or powershell
     #[arg(long, value_enum)]
     generate_completion: Option<clap_complete::Shell>,
@@ -340,16 +344,17 @@ struct Event {
     end: NaiveDateTime,
     location: Option<String>,
     categories: Vec<String>,
+    is_recurring: bool,
 }
 
 impl Event {
     #[allow(dead_code)]
     fn new(summary: String, start: NaiveDateTime, end: NaiveDateTime) -> Self {
-        Self { summary, start, end, location: None, categories: vec![] }
+        Self { summary, start, end, location: None, categories: vec![], is_recurring: false }
     }
 
-    fn with_metadata(summary: String, start: NaiveDateTime, end: NaiveDateTime, location: Option<String>, categories: Vec<String>) -> Self {
-        Self { summary, start, end, location, categories }
+    fn with_recurring(summary: String, start: NaiveDateTime, end: NaiveDateTime, location: Option<String>, categories: Vec<String>, is_recurring: bool) -> Self {
+        Self { summary, start, end, location, categories, is_recurring }
     }
 }
 
@@ -561,7 +566,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
     result.extend(override_events.into_iter().filter_map(|e| {
         let duration = e.end - e.start;
         if duration.num_minutes() > 0 {
-            Some(Event::with_metadata(e.summary, e.start, e.end, e.location, e.categories))
+            Some(Event::with_recurring(e.summary, e.start, e.end, e.location, e.categories, e.rrule.is_some()))
         } else {
             None
         }
@@ -575,7 +580,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
             None => {
                 let duration = event.end - event.start;
                 if duration.num_minutes() > 0 {
-                    result.push(Event::with_metadata(event.summary, event.start, event.end, event.location, event.categories.clone()));
+                    result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), false));
                 }
             }
             Some(rrule) => {
@@ -583,7 +588,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     // Can't parse RRULE, just add the single event
                     let duration = event.end - event.start;
                     if duration.num_minutes() > 0 {
-                        result.push(Event::with_metadata(event.summary, event.start, event.end, event.location, event.categories.clone()));
+                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true));
                     }
                     continue;
                 };
@@ -601,7 +606,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     "YEARLY" => Duration::days(0),  // Placeholder - handled separately
                     _ => {
                         // Unsupported frequency, add single event
-                        result.push(Event::with_metadata(event.summary, event.start, event.end, event.location, event.categories.clone()));
+                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true));
                         continue;
                     }
                 };
@@ -635,7 +640,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                         && !exdate_set.contains(&date)
                         && !overrides.contains(&(event.uid.clone(), date))
                     {
-                        result.push(Event::with_metadata(event.summary.clone(), current, current + duration, event.location.clone(), event.categories.clone()));
+                        result.push(Event::with_recurring(event.summary.clone(), current, current + duration, event.location.clone(), event.categories.clone(), true));
                     }
 
                     // Increment to next occurrence
@@ -1153,6 +1158,17 @@ fn matches_search_filter(event: &Event, search_terms: &[String]) -> bool {
     search_terms.iter().all(|term| summary_lower.contains(&term.to_lowercase()))
 }
 
+/// Returns true if event should NOT be excluded as recurring.
+/// Returns true if --exclude-recurring is not set (filter not active).
+/// Returns true for non-recurring events even if filter is active.
+fn matches_exclude_recurring_filter(event: &Event, exclude_recurring: bool) -> bool {
+    if exclude_recurring {
+        !event.is_recurring
+    } else {
+        true
+    }
+}
+
 fn matches_duration_filter(
     event: &Event,
     min_duration: &Option<Duration>,
@@ -1582,6 +1598,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_location_filter(e, &args.location))
         .filter(|e| matches_exclude_location_filter(e, &args.exclude_location))
         .filter(|e| matches_duration_filter(e, &min_duration, &max_duration))
+        .filter(|e| matches_exclude_recurring_filter(e, args.exclude_recurring))
         .take(args.limit.unwrap_or(usize::MAX))
         .collect();
 
