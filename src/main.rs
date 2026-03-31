@@ -136,6 +136,10 @@ struct Args {
     #[arg(long)]
     project: Option<String>,
 
+    /// Filter by tag (matches both [person] OR {project}, case-insensitive)
+    #[arg(long)]
+    tag: Option<String>,
+
     /// Exclude events matching this project name in {project} tags (case-insensitive, can be repeated)
     #[arg(long)]
     exclude_project: Vec<String>,
@@ -1077,6 +1081,26 @@ fn matches_project_filter(event: &Event, project_filter: &Option<String>) -> boo
         .unwrap_or(false)
 }
 
+/// Returns true if event matches a tag filter (matches person OR project, case-insensitive).
+/// Returns true if no filter is set.
+fn matches_tag_filter(event: &Event, tag_filter: &Option<String>) -> bool {
+    let Some(filter) = tag_filter else {
+        return true;
+    };
+    let filter_lower = filter.to_lowercase();
+    // Check person
+    if extract_person(&event.summary)
+        .map(|p| p.to_lowercase().contains(&filter_lower))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    // Check project
+    extract_project(&event.summary)
+        .map(|p| p.to_lowercase().contains(&filter_lower))
+        .unwrap_or(false)
+}
+
 /// Returns true if event should NOT be excluded based on project exclude filters.
 /// Returns true if no exclude filters are set.
 fn matches_exclude_project_filter(event: &Event, exclude_filters: &[String]) -> bool {
@@ -1567,6 +1591,9 @@ fn main() -> io::Result<()> {
     if let Some(ref p) = args.project {
         debug!("Filtering by project: {}", p);
     }
+    if let Some(ref t) = args.tag {
+        debug!("Filtering by tag: {}", t);
+    }
     if !args.exclude_person.is_empty() {
         debug!("Excluding persons: {:?}", args.exclude_person);
     }
@@ -1776,6 +1803,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_person_filter(e, &args.person))
         .filter(|e| matches_persons_filter(e, &args.persons.clone().unwrap_or_default()))
         .filter(|e| matches_project_filter(e, &args.project))
+        .filter(|e| matches_tag_filter(e, &args.tag))
         .filter(|e| matches_exclude_filter(e, &args.exclude_person))
         .filter(|e| matches_exclude_project_filter(e, &args.exclude_project))
         .filter(|e| matches_exclude_summary_filter(e, &args.exclude_summary))
@@ -2959,6 +2987,61 @@ mod tests {
             NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
         );
         assert!(!matches_project_filter(&no_project, &Some("anything".to_string())));
+    }
+
+    #[test]
+    fn test_matches_tag_filter() {
+        // Event with person only
+        let person_event = Event::new(
+            "Meeting with [John Doe]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        // Event with project only
+        let project_event = Event::new(
+            "Meeting {Alpha}".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        // Event with both
+        let both_event = Event::new(
+            "Meeting [Alice] {Beta}".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        // Event with neither
+        let neither_event = Event::new(
+            "Regular meeting".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        // No filter = all match
+        assert!(matches_tag_filter(&person_event, &None));
+        assert!(matches_tag_filter(&project_event, &None));
+        assert!(matches_tag_filter(&both_event, &None));
+        assert!(matches_tag_filter(&neither_event, &None));
+        
+        // Tag matches person
+        assert!(matches_tag_filter(&person_event, &Some("John".to_string())));
+        assert!(matches_tag_filter(&person_event, &Some("john".to_string()))); // case insensitive
+        assert!(!matches_tag_filter(&person_event, &Some("Alice".to_string())));
+        
+        // Tag matches project
+        assert!(matches_tag_filter(&project_event, &Some("Alpha".to_string())));
+        assert!(matches_tag_filter(&project_event, &Some("alpha".to_string()))); // case insensitive
+        assert!(!matches_tag_filter(&project_event, &Some("Beta".to_string())));
+        
+        // Tag matches either person or project
+        assert!(matches_tag_filter(&both_event, &Some("Alice".to_string())));
+        assert!(matches_tag_filter(&both_event, &Some("Beta".to_string())));
+        assert!(!matches_tag_filter(&both_event, &Some("Charlie".to_string()))); // not in either
+        
+        // No person or project = no match
+        assert!(!matches_tag_filter(&neither_event, &Some("anything".to_string())));
     }
 
     #[test]
