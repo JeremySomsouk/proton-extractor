@@ -107,6 +107,30 @@ fn print_success(msg: &str) {
     println!("{} {}", colored(color::GREEN, "✓"), msg);
 }
 
+/// Show export completion message with file path
+fn print_export_done(count: usize, path: &Path) {
+    let event_label = if count == 1 { "event" } else { "events" };
+    eprintln!(
+        "{} Exported {} {} → {}",
+        colored(color::GREEN, "✓"),
+        colored(color::YELLOW, count.to_string()),
+        event_label,
+        colored(color::CYAN, path.display().to_string())
+    );
+}
+
+/// Prompt user for confirmation in interactive mode
+fn confirm(prompt: &str) -> bool {
+    eprint!("  {} {} [{}/N] ", colored(color::CYAN, "→"), prompt, colored(color::GREEN, "y"));
+    io::stderr().flush().ok();
+    let mut response = String::new();
+    if io::stdin().read_line(&mut response).is_err() {
+        return false;
+    }
+    let response = response.trim().to_lowercase();
+    response.is_empty() || response.eq("y") || response.eq("yes")
+}
+
 /// Animated progress indicator for long-running operations
 struct Spinner {
     message: String,
@@ -2700,7 +2724,8 @@ fn main() -> io::Result<()> {
             }
         }
 
-        let mut spinner = if args.files.len() > 1 && !args.quiet {
+        let is_large_batch = args.files.len() > 1 || args.dry_run;
+        let mut spinner = if is_large_batch && !args.quiet {
             Some(Spinner::new("Processing files..."))
         } else {
             None
@@ -2709,16 +2734,24 @@ fn main() -> io::Result<()> {
         for (i, path) in args.files.iter().enumerate() {
             debug!("Reading: {}", path.display());
             
-            // Show progress for multiple files
+            // Show progress for multiple files or dry-run
             if let Some(ref mut s) = spinner {
                 s.tick();
-                eprint!(
-                    "\r{} [{}/{}] {}",
-                    colored(color::DIM, "→"),
-                    i + 1,
-                    args.files.len(),
-                    colored(color::CYAN, path.display().to_string())
-                );
+                if args.files.len() > 1 {
+                    eprint!(
+                        "\r{} [{}/{}] {}",
+                        colored(color::DIM, "→"),
+                        i + 1,
+                        args.files.len(),
+                        colored(color::CYAN, path.display().to_string())
+                    );
+                } else {
+                    eprint!(
+                        "\r{} {}",
+                        colored(color::DIM, "→"),
+                        colored(color::CYAN, path.display().to_string())
+                    );
+                }
                 io::stderr().flush().ok();
             }
             
@@ -2886,14 +2919,7 @@ fn main() -> io::Result<()> {
                             colored(color::YELLOW, "warning:"),
                             colored(color::BOLD, format!("'{}' is not empty", output_dir.display()))
                         );
-                        eprint!("  {} Continue? [{}/N] ", colored(color::CYAN, "→"), colored(color::GREEN, "y"));
-                        io::stderr().flush().ok();
-                        let mut response = String::new();
-                        if io::stdin().read_line(&mut response).is_err() {
-                            std::process::exit(1);
-                        }
-                        let response = response.trim().to_lowercase();
-                        if !response.is_empty() && !response.eq("y") && !response.eq("yes") {
+                        if !confirm("Continue?") {
                             eprintln!();
                             print_info("Operation cancelled");
                             eprintln!("  {} Use {} or {} to skip this prompt",
@@ -2960,14 +2986,7 @@ fn main() -> io::Result<()> {
                     colored(color::YELLOW, "warning:"),
                     colored(color::BOLD, format!("'{}' already exists", path.display()))
                 );
-                eprint!("  {} Overwrite? [{}/N] ", colored(color::CYAN, "→"), colored(color::GREEN, "y"));
-                io::stderr().flush().ok();
-                let mut response = String::new();
-                if io::stdin().read_line(&mut response).is_err() {
-                    std::process::exit(1);
-                }
-                let response = response.trim().to_lowercase();
-                if !response.is_empty() && !response.eq("y") && !response.eq("yes") {
+                if !confirm("Overwrite?") {
                     eprintln!();
                     print_info("Operation cancelled");
                     eprintln!("  {} Use {} or {} to skip this prompt",
@@ -3678,6 +3697,14 @@ fn main() -> io::Result<()> {
                     }
                     StatsFormat::Text => unreachable!(),
                 }
+            }
+        }
+
+        // Show export confirmation for file outputs
+        if write_to_file {
+            if let Some(ref path) = output_file_path {
+                let count = filtered.len();
+                print_export_done(count, path);
             }
         }
 
