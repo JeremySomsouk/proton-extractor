@@ -877,16 +877,19 @@ fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
 fn validate_weekdays(weekdays: &Option<Vec<String>>, _flag_name: &str) -> io::Result<()> {
     if let Some(ref days) = weekdays {
         let valid_abbrevs = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+        let full_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
         for day in days {
             let upper = day.to_uppercase();
             if !valid_abbrevs.contains(&upper.as_str()) {
-                // Check for full day name typo
+                // Check for full day name typo - map full name to abbrev directly
                 if ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"].contains(&upper.as_str()) {
-                    let suggested = valid_abbrevs[["MON","TUE","WED","THU","FRI","SAT","SUN"]
-                        .iter().position(|&d| d == &upper[..2]).unwrap_or(0)];
+                    let idx = ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"]
+                        .iter().position(|&d| d == upper.as_str()).unwrap_or(0);
+                    let suggested = valid_abbrevs[idx];
+                    let full_name = full_names[idx];
                     return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                        format!("'{}': use '{}' (not '{}')", day, suggested, day)));
+                        format!("'{}' ({}) — use '{}' (not '{}')", day, full_name, suggested, day)));
                 }
 
                 // Levenshtein-based typo suggestions
@@ -895,8 +898,12 @@ fn validate_weekdays(weekdays: &Option<Vec<String>>, _flag_name: &str) -> io::Re
                     .copied();
 
                 let msg = match typo {
-                    Some(s) => format!("'{}': did you mean '{}'? Valid: {}", day, s, valid_abbrevs.join(",")),
-                    None => format!("'{}': invalid. Valid: {}", day, valid_abbrevs.join(",")),
+                    Some(s) => {
+                        let idx = valid_abbrevs.iter().position(|&d| d == s).unwrap_or(0);
+                        let full_name = full_names[idx];
+                        format!("'{}': did you mean '{}' ({})? Valid: {}", day, s, full_name, valid_abbrevs.join(","))
+                    }
+                    None => format!("'{}': invalid. Valid: MO,TU,WE,TH,FR,SA,SU (e.g., --weekdays MO,WE,FR)", day),
                 };
                 return Err(io::Error::new(io::ErrorKind::InvalidInput, msg));
             }
@@ -3618,6 +3625,11 @@ fn main() -> io::Result<()> {
         if !args.quiet && !args.silent {
             eprintln!();
             print_notice("No events found");
+            eprintln!(
+                "  {} Exit code: {} (no events)",
+                colored(color::DIM, "→"),
+                colored(color::YELLOW, exit_codes::NO_EVENTS.to_string())
+            );
 
             // Show date context
             match &effective_date {
