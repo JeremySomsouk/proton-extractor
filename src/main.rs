@@ -64,13 +64,21 @@ fn colored<S: AsRef<str>>(c: color::Color, text: S) -> String {
 }
 
 /// Styled error message output - clear, actionable, and consistent
-fn print_error(msg: &str) {
-    eprintln!("{} {}", colored(color::RED, "error:"), msg);
+/// Accepts format args for cleaner error construction
+fn print_error<S: AsRef<str>>(msg: S) {
+    eprintln!("{} {}", colored(color::RED, "error:"), msg.as_ref());
+}
+
+/// Convenience: print error with a hint/suggestion (kept for future use)
+#[allow(dead_code)]
+fn print_error_with_hint<S: AsRef<str>, H: AsRef<str>>(msg: S, hint: H) {
+    eprintln!("{} {}", colored(color::RED, "error:"), msg.as_ref());
+    eprintln!("  {} {}", colored(color::DIM, "→"), colored(color::CYAN, hint.as_ref()));
 }
 
 /// Styled warning message output - non-blocking feedback
-fn print_warn(msg: &str) {
-    eprintln!("{} {}", colored(color::YELLOW, "warning:"), msg);
+fn print_warn<S: AsRef<str>>(msg: S) {
+    eprintln!("{} {}", colored(color::YELLOW, "warning:"), msg.as_ref());
 }
 
 /// Styled success with count - for export operations
@@ -92,8 +100,16 @@ fn print_info(msg: &str) {
 }
 
 /// Styled hint message output - helpful suggestions with user's specific values
+/// Use for actionable tips after errors
 fn print_hint<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::DIM, "hint:"), colored(color::CYAN, msg.as_ref()));
+}
+
+/// Multiple hints at once - accepts slice of &str
+fn print_hints(hints: &[&str]) {
+    for hint in hints {
+        eprintln!("  {} {}", colored(color::DIM, "→"), colored(color::CYAN, *hint));
+    }
 }
 
 /// Styled notice message output - neutral notices that aren't errors
@@ -2534,17 +2550,17 @@ fn main() -> io::Result<()> {
         // Validate all arguments without requiring files
         if let Err(e) = validate_date_range(&args.from, &args.to) {
             print_error(&e.to_string());
-            eprintln!("  {} --from must be before or equal to --to", colored(color::DIM, "→"));
+            print_hints(&["--from must be before or equal to --to"][..]);
             std::process::exit(1);
         }
         if let Err(e) = validate_month(args.month) {
             print_error(&e.to_string());
-            eprintln!("  {} Month must be 1-12 (e.g., --month 3 for March)", colored(color::DIM, "→"));
+            print_hints(&["Month must be 1-12 (e.g., --month 3 for March)"][..]);
             std::process::exit(1);
         }
         if let Err(e) = validate_week_number(&args.week_number) {
             print_error(&e.to_string());
-            eprintln!("  {} Format: W10 (current year) or 2024-W10 (specific year)", colored(color::DIM, "→"));
+            print_hints(&["Format: W10 (current year) or 2024-W10 (specific year)"][..]);
             std::process::exit(1);
         }
         if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
@@ -2586,16 +2602,20 @@ fn main() -> io::Result<()> {
         if let Some(ref s) = args.min_duration {
             if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
                 print_error(&format!("invalid '{}' for --min-duration", s));
-                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
-                eprintln!("  {} Examples: --min-duration 30m  --min-duration 1h30m", colored(color::DIM, "→"));
+                print_hints(&[
+                    "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
+                    "Examples: --min-duration 30m  --min-duration 1h30m"
+                ]);
                 std::process::exit(1);
             }
         }
         if let Some(ref s) = args.max_duration {
             if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
                 print_error(&format!("invalid '{}' for --max-duration", s));
-                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
-                eprintln!("  {} Examples: --max-duration 4h  --max-duration 8h", colored(color::DIM, "→"));
+                print_hints(&[
+                    "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
+                    "Examples: --max-duration 4h  --max-duration 8h"
+                ]);
                 std::process::exit(1);
             }
         }
@@ -2606,38 +2626,36 @@ fn main() -> io::Result<()> {
 
     if !has_stdin && !has_files {
         print_error("No .ics files provided");
-        eprintln!("  {} Use {} to pipe ICS content, or provide file paths as arguments", 
-            colored(color::DIM, "→"), colored(color::CYAN, "--stdin"));
-        eprintln!("  {} Validate your args (CI/CD): {}", 
-            colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [args]"));
-        eprintln!("  {} Run {} for usage information", 
-            colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --help"));
-        eprintln!("  {} Version: {}", 
-            colored(color::DIM, "→"), colored(color::CYAN, VERSION));
+        print_hints(&[
+            "Provide file paths: proton-extractor calendar.ics",
+            "Or pipe ICS content: cat calendar.ics | proton-extractor --stdin",
+            "Validate args (CI/CD): proton-extractor --validate [args]",
+            "Get help: proton-extractor --help"
+        ]);
         std::process::exit(1);
     }
 
     if has_files && has_stdin {
-        print_warn("Cannot use both --stdin and file arguments simultaneously");
-        eprintln!("  {} Use either --stdin OR file paths, not both", colored(color::DIM, "→"));
+        print_error("Cannot use both --stdin and file arguments simultaneously");
+        print_hints(&["Use either --stdin OR file paths, not both"][..]);
         std::process::exit(1);
     }
 
     if let Err(e) = validate_date_range(&args.from, &args.to) {
         print_error(&e.to_string());
-        eprintln!("  {} --from must be before or equal to --to", colored(color::DIM, "→"));
+        print_hints(&["--from must be before or equal to --to"][..]);
         std::process::exit(1);
     }
     if let Err(e) = validate_month(args.month) {
         print_error(&e.to_string());
-        eprintln!("  {} Month must be 1-12 (e.g., --month 3 for March)", colored(color::DIM, "→"));
+        print_hints(&["Month must be 1-12 (e.g., --month 3 for March)"][..]);
         std::process::exit(1);
     }
 
     // Validate week number format
     if let Err(e) = validate_week_number(&args.week_number) {
         print_error(&e.to_string());
-        eprintln!("  {} Format: W10 (current year) or 2024-W10 (specific year)", colored(color::DIM, "→"));
+        print_hints(&["Format: W10 (current year) or 2024-W10 (specific year)"][..]);
         std::process::exit(1);
     }
 
@@ -2655,28 +2673,28 @@ fn main() -> io::Result<()> {
     if let Some(ref t) = args.start_after {
         if let Err(e) = validate_time_filter(t, "start-after") {
             print_error(&e.to_string());
-            eprintln!("  {} Use HH:MM format (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
+            print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.start_before {
         if let Err(e) = validate_time_filter(t, "start-before") {
             print_error(&e.to_string());
-            eprintln!("  {} Use HH:MM format (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
+            print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.end_after {
         if let Err(e) = validate_time_filter(t, "end-after") {
             print_error(&e.to_string());
-            eprintln!("  {} Use HH:MM format (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
+            print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.end_before {
         if let Err(e) = validate_time_filter(t, "end-before") {
             print_error(&e.to_string());
-            eprintln!("  {} Use HH:MM format (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
+            print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
             std::process::exit(1);
         }
     }
@@ -2707,17 +2725,17 @@ fn main() -> io::Result<()> {
         // Detect empty stdin early
         if !found_content && !parse_warnings.is_empty() && !args.quiet {
             print_warn("stdin appears to be empty or not valid ICS content");
-            eprintln!("  {} Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin", colored(color::DIM, "→"));
+            print_hints(&["Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin"][..]);
         } else if !found_content && !args.quiet && parse_warnings.is_empty() {
             print_warn("stdin is empty");
-            eprintln!("  {} Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin", colored(color::DIM, "→"));
+            print_hints(&["Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin"][..]);
         }
     } else {
         // Validate file extensions before processing
         for path in &args.files {
             if let Err(e) = validate_ics_file(path) {
                 print_error(&format!("'{}': {}", path.display(), e));
-                eprintln!("  {} Expected: .ics file", colored(color::DIM, "→"));
+                print_hints(&["Expected: .ics file"][..]);
                 std::process::exit(1);
             }
         }
@@ -2758,13 +2776,17 @@ fn main() -> io::Result<()> {
                 match e.kind() {
                     std::io::ErrorKind::NotFound => {
                         print_error(&format!("'{}' not found", path_str));
-                        eprintln!("  {} Verify the path is correct", colored(color::DIM, "→"));
-                        eprintln!("  {} Check file permissions with: ls -la {}", colored(color::DIM, "→"), path_str);
+                        print_hints(&[
+                            &format!("Verify the path is correct: ls -la {}", path_str)[..],
+                            "Check that the file exists and is readable"
+                        ]);
                         std::process::exit(1);
                     }
                     std::io::ErrorKind::PermissionDenied => {
                         print_error(&format!("Permission denied: '{}'", path_str));
-                        eprintln!("  {} Run: chmod +r {}", colored(color::DIM, "→"), path_str);
+                        print_hints(&[
+                            &format!("Run: chmod +r {}", path_str)[..]
+                        ]);
                         std::process::exit(1);
                     }
                     _ => io::Error::new(
@@ -2854,8 +2876,10 @@ fn main() -> io::Result<()> {
             Some(d) => Some(d),
             None => {
                 print_error(&format!("invalid '{}' for --min-duration", s));
-                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
-                eprintln!("  {} Examples: --min-duration 30m  --min-duration 1h30m", colored(color::DIM, "→"));
+                print_hints(&[
+                    "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
+                    "Examples: --min-duration 30m  --min-duration 1h30m"
+                ]);
                 std::process::exit(1);
             }
         }
@@ -2868,8 +2892,10 @@ fn main() -> io::Result<()> {
             Some(d) => Some(d),
             None => {
                 print_error(&format!("invalid '{}' for --max-duration", s));
-                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
-                eprintln!("  {} Examples: --max-duration 4h  --max-duration 8h", colored(color::DIM, "→"));
+                print_hints(&[
+                    "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
+                    "Examples: --max-duration 4h  --max-duration 8h"
+                ]);
                 std::process::exit(1);
             }
         }
@@ -2883,7 +2909,7 @@ fn main() -> io::Result<()> {
             let min_str = format!("{}h {}m", min.num_minutes() / 60, min.num_minutes() % 60);
             let max_str = format!("{}h {}m", max.num_minutes() / 60, max.num_minutes() % 60);
             print_error(&format!("--min-duration ({}) must be ≤ --max-duration ({})", min_str, max_str));
-            eprintln!("  {} Ensure min-duration value is less than or equal to max-duration", colored(color::DIM, "→"));
+            print_hints(&["Ensure --min-duration value is less than or equal to --max-duration"][..]);
             std::process::exit(1);
         }
     }
