@@ -166,6 +166,9 @@ impl std::fmt::Display for EventStatus {
   # Show only this week's events
   proton-extractor calendar.ics --weekly
 
+  # Show statistics with text output
+  proton-extractor calendar.ics --stats
+
   # Show statistics with JSON output
   proton-extractor calendar.ics --stats --stats-format json
 
@@ -181,14 +184,23 @@ impl std::fmt::Display for EventStatus {
   # Export to CSV for spreadsheet analysis
   proton-extractor calendar.ics --format csv --output report.csv
 
-  # Auto-confirm file overwrite (no prompt)
-  proton-extractor calendar.ics --output report.csv --yes
-
   # Preview events without processing (dry run)
   proton-extractor calendar.ics --dry-run
 
+  # Get just the total hours (great for scripting)
+  proton-extractor calendar.ics --total-only
+
+  # Filter by ISO week number
+  proton-extractor calendar.ics --week-number W10
+
   # Filter by time range within a day
   proton-extractor calendar.ics --start-after 09:00 --end-before 17:00
+
+  # Auto-confirm file overwrite (no prompt)
+  proton-extractor calendar.ics --output report.csv --yes
+
+  # Pipe ICS content from another command
+  cat calendar.ics | proton-extractor --stdin
 
   # Shell completion setup
   source <(proton-extractor --generate-completion bash)
@@ -2318,7 +2330,7 @@ fn main() -> io::Result<()> {
     if let Some(ref t) = args.end_before {
         if let Err(e) = validate_time_filter(t, "end-before") {
             print_error(&e.to_string());
-            eprintln!("  {} Use format: HH:MM (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
+            print_hint("Use format: HH:MM (e.g., '09:00' or '17:30')");
             std::process::exit(1);
         }
     }
@@ -2549,7 +2561,11 @@ fn main() -> io::Result<()> {
                 let response = response.trim().to_lowercase();
                 if !response.is_empty() && !response.eq("y") && !response.eq("yes") {
                     eprintln!();
-                    print_info("Operation cancelled. Use --yes or --force to skip this prompt.");
+                    print_info("Operation cancelled");
+                    eprintln!("  {} Use {} or {} to skip this prompt",
+                        colored(color::DIM, "→"),
+                        colored(color::CYAN, "--yes"),
+                        colored(color::CYAN, "--force"));
                     std::process::exit(1);
                 }
             }
