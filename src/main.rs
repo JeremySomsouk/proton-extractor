@@ -200,6 +200,10 @@ struct Args {
     #[arg(long)]
     exclude_recurring: bool,
 
+    /// Only show recurring events (events with RRULE)
+    #[arg(long, conflicts_with_all = ["exclude_recurring"])]
+    include_recurring: bool,
+
     /// Generate shell completion script for bash, zsh, fish, or powershell
     #[arg(long, value_enum)]
     generate_completion: Option<clap_complete::Shell>,
@@ -1242,6 +1246,16 @@ fn matches_exclude_recurring_filter(event: &Event, exclude_recurring: bool) -> b
     }
 }
 
+/// Returns true if event is recurring and --include-recurring is set.
+/// Returns true if --include-recurring is not set (filter not active).
+fn matches_include_recurring_filter(event: &Event, include_recurring: bool) -> bool {
+    if include_recurring {
+        event.is_recurring
+    } else {
+        true
+    }
+}
+
 fn matches_duration_filter(
     event: &Event,
     min_duration: &Option<Duration>,
@@ -1717,6 +1731,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_exclude_location_filter(e, &args.exclude_location))
         .filter(|e| matches_duration_filter(e, &min_duration, &max_duration))
         .filter(|e| matches_exclude_recurring_filter(e, args.exclude_recurring))
+        .filter(|e| matches_include_recurring_filter(e, args.include_recurring))
         .take(args.limit.unwrap_or(usize::MAX))
         .collect();
 
@@ -3744,5 +3759,30 @@ mod tests {
 
         // Should have 3 unique events (4 originals - 1 exact duplicate)
         assert_eq!(deduped.len(), 3);
+    }
+
+    #[test]
+    fn test_matches_include_recurring_filter() {
+        let recurring_event = Event::with_recurring(
+            "Weekly meeting [Alice]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            None,
+            vec![],
+            true, // is_recurring = true
+        );
+        let non_recurring_event = Event::new(
+            "One-time meeting [Bob]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(11, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(12, 0, 0).unwrap(),
+        );
+
+        // No filter = all pass
+        assert!(matches_include_recurring_filter(&recurring_event, false));
+        assert!(matches_include_recurring_filter(&non_recurring_event, false));
+
+        // Include recurring filter: only pass recurring events
+        assert!(matches_include_recurring_filter(&recurring_event, true));
+        assert!(!matches_include_recurring_filter(&non_recurring_event, true));
     }
 }
