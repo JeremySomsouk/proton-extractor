@@ -549,22 +549,6 @@ fn parse_rrule(rrule: &str) -> Option<RRuleParseResult> {
 const RECURRENCE_LIMIT_DAYS: i64 = 365 * 5; // 5 year limit for recurrence expansion
 const MAX_RECURRENCE_INSTANCES: usize = 365; // Safety limit for instances
 
-/// Returns the number of days in a given month, accounting for leap years.
-fn days_in_month(year: i32, month: u32) -> u32 {
-    match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 => {
-            if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
-                29
-            } else {
-                28
-            }
-        }
-        _ => 31,
-    }
-}
-
 fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
     // Separate overrides (events with RECURRENCE-ID) from base events
     let mut overrides: HashSet<(String, NaiveDate)> = HashSet::new();
@@ -672,8 +656,8 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                         } else {
                             (year, month + 1)
                         };
-                        // Days in each month
-                        let days_in_month_target = days_in_month(new_year, new_month);
+                        // Days in each month (use chrono Datelike trait)
+                        let days_in_month_target = NaiveDate::from_ymd_opt(new_year, new_month, 1).unwrap().num_days_in_month() as u32;
                         // Use original day (clamped to max days in target month)
                         let new_day = original_day.min(days_in_month_target);
                         if let Some(new_date) = NaiveDate::from_ymd_opt(new_year, new_month, new_day) {
@@ -686,7 +670,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                         // Increment by one year
                         let new_year = current.year() + 1;
                         // Clamp original day to valid days in target month
-                        let days_in_target_month = days_in_month(new_year, current.month());
+                        let days_in_target_month = NaiveDate::from_ymd_opt(new_year, current.month(), 1).unwrap().num_days_in_month() as u32;
                         // Clamp original day to valid days in target month
                         let new_day = original_day.min(days_in_target_month);
                         if let Some(new_date) = NaiveDate::from_ymd_opt(new_year, current.month(), new_day) {
@@ -3454,26 +3438,5 @@ mod tests {
         assert_eq!(grouped.get("Alpha").unwrap().len(), 2);
         assert_eq!(grouped.get("Beta").unwrap().len(), 1);
         assert_eq!(grouped.get("(none)").unwrap().len(), 1);
-    }
-
-    #[test]
-    fn test_days_in_month() {
-        use super::days_in_month;
-
-        // Regular months
-        assert_eq!(days_in_month(2024, 1), 31);
-        assert_eq!(days_in_month(2024, 4), 30);
-        assert_eq!(days_in_month(2024, 6), 30);
-        assert_eq!(days_in_month(2024, 11), 30);
-
-        // February non-leap year
-        assert_eq!(days_in_month(2023, 2), 28);
-        assert_eq!(days_in_month(2025, 2), 28);
-
-        // February leap year
-        assert_eq!(days_in_month(2024, 2), 29);
-        assert_eq!(days_in_month(2020, 2), 29);
-        assert_eq!(days_in_month(2000, 2), 29); // divisible by 400
-        assert_eq!(days_in_month(1900, 2), 28); // divisible by 100 but not 400
     }
 }
