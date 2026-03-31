@@ -107,6 +107,36 @@ fn print_success(msg: &str) {
     println!("{} {}", colored(color::GREEN, "✓"), msg);
 }
 
+/// Styled done message with duration - for completed operations
+fn print_done(msg: &str, duration_ms: u128) {
+    let duration_str = if duration_ms < 1000 {
+        format!("{}ms", duration_ms)
+    } else {
+        let secs = duration_ms as f64 / 1000.0;
+        format!("{:.1}s", secs)
+    };
+    println!("{} {} ({})", colored(color::GREEN, "✓"), msg, colored(color::DIM, duration_str));
+}
+
+/// Styled export completion - shows file path and event count
+fn print_export_done(count: usize, path: &Path, duration_ms: u128) {
+    let event_label = if count == 1 { "event" } else { "events" };
+    let duration_str = if duration_ms < 1000 {
+        format!("{}ms", duration_ms)
+    } else {
+        let secs = duration_ms as f64 / 1000.0;
+        format!("{:.1}s", secs)
+    };
+    println!(
+        "{} Exported {} {} → {} ({})",
+        colored(color::GREEN, "✓"),
+        colored(color::YELLOW, count.to_string()),
+        event_label,
+        colored(color::CYAN, path.display().to_string()),
+        colored(color::DIM, duration_str)
+    );
+}
+
 #[derive(Debug, Clone, ValueEnum)]
 enum DateFilter {
     Current,
@@ -2476,17 +2506,17 @@ fn main() -> io::Result<()> {
         // Validate all arguments without requiring files
         if let Err(e) = validate_date_range(&args.from, &args.to) {
             print_error(&e.to_string());
-            print_hint("Ensure --from date is before or equal to --to date");
+            eprintln!("  {} --from must be before or equal to --to", colored(color::DIM, "→"));
             std::process::exit(1);
         }
         if let Err(e) = validate_month(args.month) {
             print_error(&e.to_string());
-            print_hint("Month must be between 1 (January) and 12 (December)");
+            eprintln!("  {} Month must be 1-12 (e.g., --month 3 for March)", colored(color::DIM, "→"));
             std::process::exit(1);
         }
         if let Err(e) = validate_week_number(&args.week_number) {
             print_error(&e.to_string());
-            print_hint("Use format: W10 (current year) or 2024-W10 (specific year)");
+            eprintln!("  {} Format: W10 (current year) or 2024-W10 (specific year)", colored(color::DIM, "→"));
             std::process::exit(1);
         }
         if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
@@ -2522,19 +2552,19 @@ fn main() -> io::Result<()> {
 
     if let Err(e) = validate_date_range(&args.from, &args.to) {
         print_error(&e.to_string());
-        print_hint("Ensure --from date is before or equal to --to date");
+        eprintln!("  {} --from must be before or equal to --to", colored(color::DIM, "→"));
         std::process::exit(1);
     }
     if let Err(e) = validate_month(args.month) {
         print_error(&e.to_string());
-        print_hint("Month must be between 1 (January) and 12 (December)");
+        eprintln!("  {} Month must be 1-12 (e.g., --month 3 for March)", colored(color::DIM, "→"));
         std::process::exit(1);
     }
 
     // Validate week number format
     if let Err(e) = validate_week_number(&args.week_number) {
         print_error(&e.to_string());
-        print_hint("Use format: W10 (current year) or 2024-W10 (specific year)");
+        eprintln!("  {} Format: W10 (current year) or 2024-W10 (specific year)", colored(color::DIM, "→"));
         std::process::exit(1);
     }
 
@@ -2552,28 +2582,28 @@ fn main() -> io::Result<()> {
     if let Some(ref t) = args.start_after {
         if let Err(e) = validate_time_filter(t, "start-after") {
             print_error(&e.to_string());
-            print_hint("Use format: HH:MM (e.g., '09:00' or '17:30')");
+            eprintln!("  {} Use HH:MM format (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.start_before {
         if let Err(e) = validate_time_filter(t, "start-before") {
             print_error(&e.to_string());
-            print_hint("Use format: HH:MM (e.g., '09:00' or '17:30')");
+            eprintln!("  {} Use HH:MM format (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.end_after {
         if let Err(e) = validate_time_filter(t, "end-after") {
             print_error(&e.to_string());
-            print_hint("Use format: HH:MM (e.g., '09:00' or '17:30')");
+            eprintln!("  {} Use HH:MM format (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.end_before {
         if let Err(e) = validate_time_filter(t, "end-before") {
             print_error(&e.to_string());
-            print_hint("Use format: HH:MM (e.g., '09:00' or '17:30')");
+            eprintln!("  {} Use HH:MM format (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
             std::process::exit(1);
         }
     }
@@ -2601,8 +2631,8 @@ fn main() -> io::Result<()> {
         // Validate file extensions before processing
         for path in &args.files {
             if let Err(e) = validate_ics_file(path) {
-                print_error(&format!("Invalid file '{}': {}", path.display(), e));
-                eprintln!("  {} Expected file extension: .ics", colored(color::DIM, "→"));
+                print_error(&format!("'{}': {}", path.display(), e));
+                eprintln!("  {} Expected: .ics file", colored(color::DIM, "→"));
                 std::process::exit(1);
             }
         }
@@ -2626,13 +2656,14 @@ fn main() -> io::Result<()> {
                 let path_str = path.display().to_string();
                 match e.kind() {
                     std::io::ErrorKind::NotFound => {
-                        print_error(&format!("File not found: '{}'", path_str));
-                        eprintln!("  {} Verify the path is correct and the file exists", colored(color::DIM, "→"));
+                        print_error(&format!("'{}' not found", path_str));
+                        eprintln!("  {} Verify the path is correct", colored(color::DIM, "→"));
+                        eprintln!("  {} Check file permissions with: ls -la {}", colored(color::DIM, "→"), path_str);
                         std::process::exit(1);
                     }
                     std::io::ErrorKind::PermissionDenied => {
                         print_error(&format!("Permission denied: '{}'", path_str));
-                        eprintln!("  {} Check file permissions with: ls -la", colored(color::DIM, "→"));
+                        eprintln!("  {} Run: chmod +r {}", colored(color::DIM, "→"), path_str);
                         std::process::exit(1);
                     }
                     _ => io::Error::new(
@@ -2716,8 +2747,9 @@ fn main() -> io::Result<()> {
         match parse_human_duration(s).or_else(|| parse_duration(s)) {
             Some(d) => Some(d),
             None => {
-                print_error(&format!("Invalid --min-duration format '{}'", s));
-                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w', '90'", colored(color::DIM, "→"));
+                print_error(&format!("invalid '{}' for --min-duration", s));
+                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
+                eprintln!("  {} Examples: --min-duration 30m  --min-duration 1h30m", colored(color::DIM, "→"));
                 std::process::exit(1);
             }
         }
@@ -2729,8 +2761,9 @@ fn main() -> io::Result<()> {
         match parse_human_duration(s).or_else(|| parse_duration(s)) {
             Some(d) => Some(d),
             None => {
-                print_error(&format!("Invalid --max-duration format '{}'", s));
-                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w', '90'", colored(color::DIM, "→"));
+                print_error(&format!("invalid '{}' for --max-duration", s));
+                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
+                eprintln!("  {} Examples: --max-duration 4h  --max-duration 8h", colored(color::DIM, "→"));
                 std::process::exit(1);
             }
         }
