@@ -146,7 +146,39 @@ impl std::fmt::Display for EventStatus {
 
 #[derive(Parser, Debug)]
 #[command(name = "proton-extractor", about = "Sum calendar event hours from ICS files", version = VERSION)]
-#[command(after_help = "For shell completion, run:\n  proton-extractor --generate-completion bash\n  proton-extractor --generate-completion zsh\n  proton-extractor --generate-completion fish\n  proton-extractor --generate-completion powershell\n\nOr source the output directly, e.g.:\n  source <(proton-extractor --generate-completion bash)")]
+#[command(after_help = "EXAMPLES:
+  # Basic usage - show all events from a file
+  proton-extractor calendar.ics
+
+  # Filter by person and show totals
+  proton-extractor calendar.ics --person \"John Doe\"
+
+  # Show only this week's events
+  proton-extractor calendar.ics --weekly
+
+  # Show statistics with JSON output
+  proton-extractor calendar.ics --stats --stats-format json
+
+  # Group by person with a date range
+  proton-extractor calendar.ics --from 2024-01-01 --to 2024-03-31 --group-by-person
+
+  # Find events longer than 2 hours
+  proton-extractor calendar.ics --min-duration 2h
+
+  # List all unique persons and projects
+  proton-extractor calendar.ics --list-persons --list-projects
+
+  # Export to CSV for spreadsheet analysis
+  proton-extractor calendar.ics --format csv --output report.csv
+
+  # Shell completion setup
+  source <(proton-extractor --generate-completion bash)
+
+For shell completion, run:
+  proton-extractor --generate-completion bash
+  proton-extractor --generate-completion zsh
+  proton-extractor --generate-completion fish
+  proton-extractor --generate-completion powershell")]
 #[command(version = VERSION)]
 struct Args {
     /// Paths to .ics files
@@ -1946,21 +1978,39 @@ fn main() -> io::Result<()> {
         std::process::exit(1);
     }
 
-    validate_date_range(&args.from, &args.to)?;
-    validate_month(args.month)?;
+    if let Err(e) = validate_date_range(&args.from, &args.to) {
+        print_error(&e.to_string());
+        std::process::exit(1);
+    }
+    if let Err(e) = validate_month(args.month) {
+        print_error(&e.to_string());
+        std::process::exit(1);
+    }
 
     // Validate time filters
     if let Some(ref t) = args.start_after {
-        validate_time_filter(t, "start-after")?;
+        if let Err(e) = validate_time_filter(t, "start-after") {
+            print_error(&e.to_string());
+            std::process::exit(1);
+        }
     }
     if let Some(ref t) = args.start_before {
-        validate_time_filter(t, "start-before")?;
+        if let Err(e) = validate_time_filter(t, "start-before") {
+            print_error(&e.to_string());
+            std::process::exit(1);
+        }
     }
     if let Some(ref t) = args.end_after {
-        validate_time_filter(t, "end-after")?;
+        if let Err(e) = validate_time_filter(t, "end-after") {
+            print_error(&e.to_string());
+            std::process::exit(1);
+        }
     }
     if let Some(ref t) = args.end_before {
-        validate_time_filter(t, "end-before")?;
+        if let Err(e) = validate_time_filter(t, "end-before") {
+            print_error(&e.to_string());
+            std::process::exit(1);
+        }
     }
 
     let mut all_raw_events = Vec::new();
@@ -2055,23 +2105,25 @@ fn main() -> io::Result<()> {
 
     // Parse duration filters with validation
     let min_duration: Option<Duration> = if let Some(ref s) = args.min_duration {
-        Some(parse_human_duration(s)
-            .or_else(|| parse_duration(s))
-            .ok_or_else(|| io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Invalid --min-duration format '{}'. Use formats like '30m', '1h', '2h30m', '1d'", s)
-            ))?)
+        match parse_human_duration(s).or_else(|| parse_duration(s)) {
+            Some(d) => Some(d),
+            None => {
+                print_error(&format!("Invalid --min-duration format '{}'. Use formats like '30m', '1h', '2h30m', '1d'", s));
+                std::process::exit(1);
+            }
+        }
     } else {
         None
     };
 
     let max_duration: Option<Duration> = if let Some(ref s) = args.max_duration {
-        Some(parse_human_duration(s)
-            .or_else(|| parse_duration(s))
-            .ok_or_else(|| io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Invalid --max-duration format '{}'. Use formats like '30m', '1h', '2h30m', '1d'", s)
-            ))?)
+        match parse_human_duration(s).or_else(|| parse_duration(s)) {
+            Some(d) => Some(d),
+            None => {
+                print_error(&format!("Invalid --max-duration format '{}'. Use formats like '30m', '1h', '2h30m', '1d'", s));
+                std::process::exit(1);
+            }
+        }
     } else {
         None
     };
@@ -2079,12 +2131,12 @@ fn main() -> io::Result<()> {
     // Validate min < max if both are set
     if let (Some(min), Some(max)) = (&min_duration, &max_duration) {
         if min.num_minutes() > max.num_minutes() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("--min-duration ({}h {}m) must be less than or equal to --max-duration ({}h {}m)", 
-                    min.num_minutes() / 60, min.num_minutes() % 60,
-                    max.num_minutes() / 60, max.num_minutes() % 60),
+            print_error(&format!(
+                "--min-duration ({}h {}m) must be less than or equal to --max-duration ({}h {}m)",
+                min.num_minutes() / 60, min.num_minutes() % 60,
+                max.num_minutes() / 60, max.num_minutes() % 60
             ));
+            std::process::exit(1);
         }
     }
 
