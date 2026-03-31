@@ -2347,8 +2347,20 @@ fn main() -> io::Result<()> {
             }
         }
 
-        for path in &args.files {
+        for (i, path) in args.files.iter().enumerate() {
             debug!("Reading: {}", path.display());
+            
+            // Show progress for multiple files
+            if args.files.len() > 1 && !args.quiet {
+                eprintln!(
+                    "{} [{}/{}] {}",
+                    colored(color::DIM, "→"),
+                    i + 1,
+                    args.files.len(),
+                    colored(color::CYAN, path.display().to_string())
+                );
+            }
+            
             let file = File::open(path).map_err(|e| {
                 io::Error::new(
                     io::ErrorKind::NotFound,
@@ -2504,13 +2516,13 @@ fn main() -> io::Result<()> {
             output_file_path = Some(path.clone());
             // Check if file exists and prompt for confirmation unless --force or --yes is set
             if path.exists() && !args.force && !args.yes {
-                eprintln!(
-                    "{} File '{}' already exists.",
-                    colored(color::YELLOW, "warning:"),
-                    path.display()
-                );
                 eprintln!();
-                eprint!("  {} Overwrite? [y/N] ", colored(color::CYAN, "→"));
+                eprintln!(
+                    "{} {}",
+                    colored(color::YELLOW, "⚠"),
+                    colored(color::BOLD, format!("File '{}' already exists", path.display()))
+                );
+                eprint!("  {} Overwrite? ", colored(color::CYAN, "→"));
                 io::stderr().flush().ok();
                 let mut response = String::new();
                 if io::stdin().read_line(&mut response).is_err() {
@@ -2657,17 +2669,28 @@ fn main() -> io::Result<()> {
     }
 
     if filtered.is_empty() {
-        print_info("No events found");
+        print_info("No events found matching your criteria");
         eprintln!();
-        eprintln!("  {} Try adjusting your filters:", colored(color::CYAN, "→"));
-        eprintln!("    {} {:<20} Show all events", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
-        eprintln!("    {} {:<20} Current month only", colored(color::DIM, "•"), colored(color::CYAN, "-d current"));
-        eprintln!("    {} {:<20} Show events from date range", colored(color::DIM, "•"), colored(color::CYAN, "--from 2024-01-01 --to 2024-03-31"));
-        eprintln!("    {} {:<20} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
+        eprintln!("  {} Try these options:", colored(color::CYAN, "→"));
+        
+        // Context-aware suggestions
+        if args.today || args.yesterday || args.tomorrow || args.weekly || args.last_week {
+            eprintln!("    {} {:<22} Show all events (no date filter)", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
+        }
+        if !args.person.is_none() || !args.persons.clone().unwrap_or_default().is_empty() {
+            eprintln!("    {} {:<22} Remove person filter", colored(color::DIM, "•"), colored(color::CYAN, "--person \"\""));
+        }
+        if args.exclude_recurring {
+            eprintln!("    {} {:<22} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
+        }
+        if args.only_untagged {
+            eprintln!("    {} {:<22} Include tagged events", colored(color::DIM, "•"), colored(color::CYAN, "--no-only-untagged"));
+        }
+        
         eprintln!();
         eprintln!("  {} Run {} for all filter options",
             colored(color::DIM, "→"),
-            colored(color::CYAN, "proton-extractor --help | grep -E '^[[:space:]]+'"));
+            colored(color::CYAN, "proton-extractor --help"));
         return Ok(());
     }
 
@@ -3990,7 +4013,14 @@ fn main() -> io::Result<()> {
     // Success feedback when writing to file
     if write_to_file {
         if let Some(ref path) = output_file_path {
-            print_success(format!("Saved → {}", path.display()));
+            let event_count = filtered.len();
+            let duration_str = format_hours(grand_total_minutes);
+            print_success(format!(
+                "Exported {} events ({} total) → {}",
+                event_count,
+                duration_str,
+                path.display()
+            ));
         }
     }
 
