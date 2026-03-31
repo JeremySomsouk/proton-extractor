@@ -1882,7 +1882,7 @@ fn main() -> io::Result<()> {
                 .ok();
             } else {
                 // Full output with individual events
-                wtr.write_record(["date", "start", "end", "duration_minutes", "person", "project", "summary", "location", "categories"])
+                wtr.write_record(["date", "start", "end", "duration_minutes", "weekday", "person", "project", "summary", "location", "categories"])
                     .ok();
                 for event in &filtered {
                     let mins = match event_duration_minutes(event) {
@@ -1896,6 +1896,7 @@ fn main() -> io::Result<()> {
                         event.start.format("%H:%M").to_string(),
                         event.end.format("%H:%M").to_string(),
                         mins.to_string(),
+                        event.start.format("%a").to_string(),
                         csv_escape(person),
                         csv_escape(project),
                         csv_escape(&event.summary),
@@ -1910,6 +1911,7 @@ fn main() -> io::Result<()> {
                     "".to_string(),
                     "".to_string(),
                     grand_total_minutes.to_string(),
+                    "".to_string(),
                     "".to_string(),
                     "".to_string(),
                     "".to_string(),
