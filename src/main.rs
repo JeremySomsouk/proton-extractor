@@ -187,6 +187,7 @@ struct Spinner {
     message: String,
     chars: Vec<char>,
     current: usize,
+    start_time: std::time::Instant,
 }
 
 impl Spinner {
@@ -195,12 +196,24 @@ impl Spinner {
             message: message.to_string(),
             chars: vec!['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
             current: 0,
+            start_time: std::time::Instant::now(),
         }
     }
 
     fn tick(&mut self) {
-        // Carriage return + clear line + print new spinner + message
-        eprint!("\r\x1b[K{}{}", self.chars[self.current], self.message);
+        let elapsed = self.start_time.elapsed();
+        let secs = elapsed.as_secs();
+        let time_str = if secs >= 60 {
+            format!("{}m {:02}s", secs / 60, secs % 60)
+        } else {
+            format!("{}s", secs)
+        };
+        eprint!(
+            "\r\x1b[K{}{} {}",
+            self.chars[self.current],
+            self.message,
+            colored(color::DIM, format!("[{}]", time_str))
+        );
         io::stderr().flush().ok();
         self.current = (self.current + 1) % self.chars.len();
     }
@@ -214,7 +227,16 @@ impl Spinner {
     /// Finish with a success message
     fn finish_with_success(&self, message: &str) {
         self.finish();
-        println!("{} {}", colored(color::GREEN, "✓"), message);
+        let elapsed = self.start_time.elapsed();
+        let secs = elapsed.as_secs();
+        let time_str = if secs >= 60 {
+            format!(" ({}m {:02}s)", secs / 60, secs % 60)
+        } else if secs > 0 {
+            format!(" ({}s)", secs)
+        } else {
+            String::new()
+        };
+        println!("{} {}{}", colored(color::GREEN, "✓"), message, time_str);
     }
 
     /// Finish with an error message (consistent with print_error style)
@@ -2554,43 +2576,62 @@ fn print_examples() {
     println!(
         "{} {}",
         colored(color::CYAN, "━━━"),
-        colored(color::CYAN, "Usage Examples")
+        colored(color::BOLD, "Usage Examples")
     );
     println!();
-    println!("  {} Getting Started", colored(color::BOLD, "›"));
+
+    println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Getting Started"));
     println!("    proton-extractor calendar.ics");
     println!("    cat calendar.ics | proton-extractor --stdin");
     println!();
-    println!("  {} Quick Filters", colored(color::BOLD, "›"));
+
+    println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Quick Filters"));
     println!("    -d current              # Current month (default)");
     println!("    -d previous             # Previous month");
     println!("    -d all                  # All events");
     println!("    -t                       # Today's events");
     println!("    -w                       # This week");
+    println!("    -l                       # Last week");
     println!();
-    println!("  {} Person & Project", colored(color::BOLD, "›"));
+
+    println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Person & Project"));
     println!("    --person \"Alice\"         # Filter by person");
     println!("    --project \"Backend\"      # Filter by project");
     println!("    --tag urgent            # Filter by tag (person OR project)");
+    println!("    -P                       # List all persons");
+    println!("    -J                       # List all projects");
     println!();
-    println!("  {} Date Ranges", colored(color::BOLD, "›"));
+
+    println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Date Ranges"));
     println!("    --from 2024-01-01 --to 2024-03-31");
     println!("    --weekdays MO,WE,FR      # Specific days");
     println!("    --recent 30              # Last 30 days");
+    println!("    --week-number W10        # ISO week (current year)");
+    println!("    --week-number 2024-W10   # ISO week (specific year)");
     println!();
-    println!("  {} Output Formats", colored(color::BOLD, "›"));
+
+    println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Output Formats"));
     println!("    -f json -o report.json   # JSON export");
     println!("    -f csv -o report.csv     # CSV export");
     println!("    -f html -o report.html   # HTML report");
     println!("    -q                       # Quiet mode (totals only)");
-    println!("    --stats                  # Statistics summary");
+    println!("    -s                       # Statistics summary");
     println!("    --stats-quiet            # Compact stats (single line)");
     println!();
-    println!("  {} Automation", colored(color::BOLD, "›"));
-    println!("    --yes, --force          # Auto-confirm prompts");
+
+    println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Advanced"));
+    println!("    --dry-run                # Preview without output");
+    println!("    --top 10                 # Top 10 longest events");
+    println!("    --bottom 5               # Bottom 5 shortest events");
+    println!("    --sort-by duration       # Sort by duration");
+    println!();
+
+    println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Automation"));
+    println!("    --yes, --force           # Auto-confirm prompts");
     println!("    --validate               # Validate args (CI/CD)");
     println!("    --no-color               # Disable colors");
     println!();
+
     println!(
         "  {} Run {} for full help",
         colored(color::DIM, "→"),
@@ -2819,16 +2860,12 @@ fn main() -> io::Result<()> {
 
         // Success output
         print_success("All arguments validated successfully");
-        println!();
-        println!(
-            "  {} {} argument constraint(s) checked",
-            colored(color::DIM, "→"),
-            validated_count
-        );
-        print_banner("Validation Complete");
-
-        // Show effective filters in verbose mode
         if args.verbose {
+            println!(
+                "  {} {} constraint(s) checked",
+                colored(color::DIM, "→"),
+                validated_count
+            );
             println!();
             println!("  {} Effective filters:", colored(color::CYAN, "→"));
             if args.quiet {
