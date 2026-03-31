@@ -2637,7 +2637,9 @@ fn main() -> io::Result<()> {
             writeln!(out_writer, "PRODID:-//proton-extractor//EN")?;
             for event in &filtered {
                 writeln!(out_writer, "BEGIN:VEVENT")?;
-                writeln!(out_writer, "UID:{}@proton-extractor", event.start.and_utc().timestamp())?;
+                // Use original UID if available, otherwise generate one
+                let uid = event.uid.clone().unwrap_or_else(|| format!("{}@proton-extractor", event.start.and_utc().timestamp()));
+                writeln!(out_writer, "UID:{}", uid)?;
                 writeln!(out_writer, "DTSTAMP:{}", event.start.format("%Y%m%dT%H%M%S"))?;
                 writeln!(out_writer, "DTSTART:{}", event.start.format("%Y%m%dT%H%M%S"))?;
                 writeln!(out_writer, "DTEND:{}", event.end.format("%Y%m%dT%H%M%S"))?;
@@ -2648,6 +2650,32 @@ fn main() -> io::Result<()> {
                     .replace(",", "\\,")
                     .replace("\n", "\\n");
                 writeln!(out_writer, "SUMMARY:{}", summary_escaped)?;
+                // Add location if available
+                if let Some(ref loc) = event.location {
+                    if !loc.is_empty() {
+                        let loc_escaped = loc
+                            .replace("\\", "\\\\")
+                            .replace(";", "\\;")
+                            .replace(",", "\\,")
+                            .replace("\n", "\\n");
+                        writeln!(out_writer, "LOCATION:{}", loc_escaped)?;
+                    }
+                }
+                // Add categories if available
+                if !event.categories.is_empty() {
+                    let cats_escaped = event.categories.join(",")
+                        .replace("\\", "\\\\")
+                        .replace(";", "\\;")
+                        .replace(",", "\\,")
+                        .replace("\n", "\\n");
+                    writeln!(out_writer, "CATEGORIES:{}", cats_escaped)?;
+                }
+                // Add status if available
+                if let Some(ref status) = event.status {
+                    if !status.is_empty() {
+                        writeln!(out_writer, "STATUS:{}", status)?;
+                    }
+                }
                 writeln!(out_writer, "END:VEVENT")?;
             }
             writeln!(out_writer, "END:VCALENDAR")?;
