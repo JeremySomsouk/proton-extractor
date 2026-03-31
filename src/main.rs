@@ -441,7 +441,7 @@ struct Args {
     today: bool,
 
     /// Quick filter: show only yesterday's events
-    #[arg(short = 'y', long)]
+    #[arg(long)]
     yesterday: bool,
 
     /// Quick filter: show only tomorrow's events
@@ -2540,7 +2540,7 @@ fn main() -> io::Result<()> {
                     colored(color::YELLOW, "warning:"),
                     colored(color::BOLD, format!("'{}' already exists", path.display()))
                 );
-                eprint!("  {} Overwrite? [y/N] ", colored(color::CYAN, "→"));
+                eprint!("  {} Overwrite? [{}/N] ", colored(color::CYAN, "→"), colored(color::GREEN, "y"));
                 io::stderr().flush().ok();
                 let mut response = String::new();
                 if io::stdin().read_line(&mut response).is_err() {
