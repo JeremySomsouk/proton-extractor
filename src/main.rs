@@ -98,10 +98,11 @@ fn print_success<S: AsRef<str>>(msg: S) {
 fn print_saved(count: usize, path: &Path) {
     let event_label = if count == 1 { "event" } else { "events" };
     println!(
-        "{} Saved {} {} {} {}",
+        "{} {} {} {} {} → {}",
         colored(color::GREEN, "✓"),
         colored(color::YELLOW, count.to_string()),
         event_label,
+        colored(color::DIM, "saved"),
         colored(color::DIM, "→"),
         colored(color::CYAN, path.display().to_string())
     );
@@ -111,8 +112,8 @@ fn print_saved(count: usize, path: &Path) {
 /// Use for actionable tips after errors
 fn print_hint<S: AsRef<str>>(msg: S) {
     eprintln!(
-        "{} {}",
-        colored(color::DIM, "hint:"),
+        "  {} {}",
+        colored(color::DIM, "→"),
         colored(color::CYAN, msg.as_ref())
     );
 }
@@ -177,10 +178,9 @@ fn confirm(prompt: &str) -> bool {
     }
 
     eprint!(
-        "  {} {} [{}/n] ",
+        "  {} {} [Y/n] ",
         colored(color::YELLOW, "?"),
-        prompt,
-        colored(color::GREEN, "Y")
+        prompt
     );
     io::stderr().flush().ok();
     let mut response = String::new();
