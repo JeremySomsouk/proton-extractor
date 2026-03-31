@@ -2335,8 +2335,8 @@ fn main() -> io::Result<()> {
 
             for ((year, month), summary) in &grouped {
                 let month_total = summary.total_minutes();
-                toml_output.push_str(&format!("[[months]]\n"));
-                toml_output.push_str(&format!("[months.meta]\n"));
+                toml_output.push_str("[[months]]\n");
+                toml_output.push_str("[months.meta]\n");
                 toml_output.push_str(&format!("year = {}\n", year));
                 toml_output.push_str(&format!("month = {}\n", month));
                 toml_output.push_str(&format!("month_name = \"{}\"\n", summary.month_name));
