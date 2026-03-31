@@ -252,6 +252,27 @@ struct Args {
     #[arg(long)]
     search: Vec<String>,
 
+    /// Include events whose summary contains this text (case-insensitive, can be repeated)
+    /// Useful for finding specific types of events within larger sets
+    #[arg(long)]
+    include_summary: Vec<String>,
+
+    /// Filter events that start at or after this time (HH:MM format, e.g., "09:00" or "17:30")
+    #[arg(long)]
+    start_after: Option<String>,
+
+    /// Filter events that start at or before this time (HH:MM format, e.g., "09:00" or "17:30")
+    #[arg(long)]
+    start_before: Option<String>,
+
+    /// Filter events that end at or after this time (HH:MM format, e.g., "09:00" or "17:30")
+    #[arg(long)]
+    end_after: Option<String>,
+
+    /// Filter events that end at or before this time (HH:MM format, e.g., "09:00" or "17:30")
+    #[arg(long)]
+    end_before: Option<String>,
+
     /// Enable compact JSON output (no pretty-printing)
     #[arg(long, requires = "format")]
     compact: bool,
@@ -1353,6 +1374,86 @@ fn matches_search_filter(event: &Event, search_terms: &[String]) -> bool {
     search_terms.iter().all(|term| summary_lower.contains(&term.to_lowercase()))
 }
 
+/// Returns true if event matches ANY include_summary term (case-insensitive, OR logic).
+/// Empty list matches everything.
+fn matches_include_summary_filter(event: &Event, include_terms: &[String]) -> bool {
+    if include_terms.is_empty() {
+        return true;
+    }
+    let summary_lower = event.summary.to_lowercase();
+    include_terms.iter().any(|term| summary_lower.contains(&term.to_lowercase()))
+}
+
+/// Parse a time string in HH:MM format
+fn parse_time(time_str: &str) -> Option<(u32, u32)> {
+    let parts: Vec<&str> = time_str.split(':').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let hours: u32 = parts[0].parse().ok()?;
+    let minutes: u32 = parts[1].parse().ok()?;
+    if hours > 23 || minutes > 59 {
+        return None;
+    }
+    Some((hours, minutes))
+}
+
+/// Returns true if event starts at or after the given time
+fn matches_start_after_filter(event: &Event, start_after: &Option<String>) -> bool {
+    if let Some(time_str) = start_after {
+        if let Some((hours, minutes)) = parse_time(time_str) {
+            let event_hours = event.start.hour();
+            let event_minutes = event.start.minute();
+            if event_hours < hours || (event_hours == hours && event_minutes < minutes) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Returns true if event starts at or before the given time
+fn matches_start_before_filter(event: &Event, start_before: &Option<String>) -> bool {
+    if let Some(time_str) = start_before {
+        if let Some((hours, minutes)) = parse_time(time_str) {
+            let event_hours = event.start.hour();
+            let event_minutes = event.start.minute();
+            if event_hours > hours || (event_hours == hours && event_minutes > minutes) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Returns true if event ends at or after the given time
+fn matches_end_after_filter(event: &Event, end_after: &Option<String>) -> bool {
+    if let Some(time_str) = end_after {
+        if let Some((hours, minutes)) = parse_time(time_str) {
+            let event_hours = event.end.hour();
+            let event_minutes = event.end.minute();
+            if event_hours < hours || (event_hours == hours && event_minutes < minutes) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Returns true if event ends at or before the given time
+fn matches_end_before_filter(event: &Event, end_before: &Option<String>) -> bool {
+    if let Some(time_str) = end_before {
+        if let Some((hours, minutes)) = parse_time(time_str) {
+            let event_hours = event.end.hour();
+            let event_minutes = event.end.minute();
+            if event_hours > hours || (event_hours == hours && event_minutes > minutes) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// Returns true if event should NOT be excluded as recurring.
 /// Returns true if --exclude-recurring is not set (filter not active).
 /// Returns true for non-recurring events even if filter is active.
@@ -1920,6 +2021,11 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_exclude_recurring_filter(e, args.exclude_recurring))
         .filter(|e| matches_include_recurring_filter(e, args.include_recurring))
         .filter(|e| matches_recent_filter(e, &args.recent, &now.date()))
+        .filter(|e| matches_start_after_filter(e, &args.start_after))
+        .filter(|e| matches_start_before_filter(e, &args.start_before))
+        .filter(|e| matches_end_after_filter(e, &args.end_after))
+        .filter(|e| matches_end_before_filter(e, &args.end_before))
+        .filter(|e| matches_include_summary_filter(e, &args.include_summary))
         .take(args.limit.unwrap_or(usize::MAX))
         .collect();
 
@@ -4231,5 +4337,135 @@ mod tests {
         // Include recurring filter: only pass recurring events
         assert!(matches_include_recurring_filter(&recurring_event, true));
         assert!(!matches_include_recurring_filter(&non_recurring_event, true));
+    }
+
+    #[test]
+    fn test_parse_time() {
+        assert_eq!(parse_time("09:00"), Some((9, 0)));
+        assert_eq!(parse_time("17:30"), Some((17, 30)));
+        assert_eq!(parse_time("00:00"), Some((0, 0)));
+        assert_eq!(parse_time("23:59"), Some((23, 59)));
+        assert_eq!(parse_time("9:00"), Some((9, 0))); // single digit hour
+        assert_eq!(parse_time("9:5"), Some((9, 5))); // single digit minute
+        assert_eq!(parse_time("25:00"), None); // invalid hour
+        assert_eq!(parse_time("09:60"), None); // invalid minute
+        assert_eq!(parse_time("9"), None); // missing colon
+        assert_eq!(parse_time(""), None);
+        assert_eq!(parse_time("09:00:00"), None); // extra part
+    }
+
+    #[test]
+    fn test_matches_include_summary_filter() {
+        let event = Event::new(
+            "Team standup meeting [Alice] {Project}".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+
+        // Empty list matches everything
+        assert!(matches_include_summary_filter(&event, &[]));
+
+        // Single term matching
+        assert!(matches_include_summary_filter(&event, &["standup".to_string()]));
+        assert!(matches_include_summary_filter(&event, &["meeting".to_string()]));
+        assert!(matches_include_summary_filter(&event, &["TEAM".to_string()])); // case insensitive
+
+        // Multiple terms (OR logic - any match passes)
+        assert!(matches_include_summary_filter(&event, &["standup".to_string(), "vacation".to_string()]));
+        assert!(matches_include_summary_filter(&event, &["Alice".to_string(), "Bob".to_string()]));
+
+        // No match
+        assert!(!matches_include_summary_filter(&event, &["vacation".to_string()]));
+        assert!(!matches_include_summary_filter(&event, &["xyz".to_string()]));
+    }
+
+    #[test]
+    fn test_matches_start_after_filter() {
+        let event = Event::new(
+            "Morning meeting [Alice]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 30, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 30, 0).unwrap(),
+        );
+
+        // No filter = all pass
+        assert!(matches_start_after_filter(&event, &None));
+
+        // Start after 09:00 - event at 09:30 passes
+        assert!(matches_start_after_filter(&event, &Some("09:00".to_string())));
+
+        // Start after 10:00 - event at 09:30 fails
+        assert!(!matches_start_after_filter(&event, &Some("10:00".to_string())));
+
+        // Start after 09:30 exactly - passes (>=)
+        assert!(matches_start_after_filter(&event, &Some("09:30".to_string())));
+
+        // Start after 09:31 - fails
+        assert!(!matches_start_after_filter(&event, &Some("09:31".to_string())));
+    }
+
+    #[test]
+    fn test_matches_start_before_filter() {
+        let event = Event::new(
+            "Morning meeting [Alice]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 30, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 30, 0).unwrap(),
+        );
+
+        // No filter = all pass
+        assert!(matches_start_before_filter(&event, &None));
+
+        // Start before 10:00 - event at 09:30 passes
+        assert!(matches_start_before_filter(&event, &Some("10:00".to_string())));
+
+        // Start before 09:00 - event at 09:30 fails
+        assert!(!matches_start_before_filter(&event, &Some("09:00".to_string())));
+
+        // Start before 09:30 exactly - passes (<=)
+        assert!(matches_start_before_filter(&event, &Some("09:30".to_string())));
+
+        // Start before 09:29 - fails
+        assert!(!matches_start_before_filter(&event, &Some("09:29".to_string())));
+    }
+
+    #[test]
+    fn test_matches_end_after_filter() {
+        let event = Event::new(
+            "Morning meeting [Alice]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 30, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 30, 0).unwrap(),
+        );
+
+        // No filter = all pass
+        assert!(matches_end_after_filter(&event, &None));
+
+        // End after 10:00 - event ends at 10:30 passes
+        assert!(matches_end_after_filter(&event, &Some("10:00".to_string())));
+
+        // End after 11:00 - event ends at 10:30 fails
+        assert!(!matches_end_after_filter(&event, &Some("11:00".to_string())));
+
+        // End after 10:30 exactly - passes
+        assert!(matches_end_after_filter(&event, &Some("10:30".to_string())));
+    }
+
+    #[test]
+    fn test_matches_end_before_filter() {
+        let event = Event::new(
+            "Morning meeting [Alice]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 30, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 30, 0).unwrap(),
+        );
+
+        // No filter = all pass
+        assert!(matches_end_before_filter(&event, &None));
+
+        // End before 11:00 - event ends at 10:30 passes
+        assert!(matches_end_before_filter(&event, &Some("11:00".to_string())));
+
+        // End before 10:00 - event ends at 10:30 fails
+        assert!(!matches_end_before_filter(&event, &Some("10:00".to_string())));
+
+        // End before 10:30 exactly - passes
+        assert!(matches_end_before_filter(&event, &Some("10:30".to_string())));
     }
 }
