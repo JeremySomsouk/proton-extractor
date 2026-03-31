@@ -517,7 +517,7 @@ pub fn parse_human_duration(s: &str) -> Option<Duration> {
     }
 }
 
-type RRuleParseResult = (String, NaiveDateTime, Option<Vec<String>>, Option<i32>, Option<i32>);
+type RRuleParseResult = (String, NaiveDateTime, Option<Vec<String>>, Option<i32>, Option<i32>, Option<Vec<i32>>);
 
 fn parse_rrule(rrule: &str) -> Option<RRuleParseResult> {
     let mut freq = None;
@@ -525,6 +525,7 @@ fn parse_rrule(rrule: &str) -> Option<RRuleParseResult> {
     let mut byday = None;
     let mut interval: Option<i32> = None;
     let mut count: Option<i32> = None;
+    let mut bymonthday: Option<Vec<i32>> = None;
     for part in rrule.split(';') {
         if let Some(v) = part.strip_prefix("FREQ=") {
             freq = Some(v.to_string());
@@ -536,6 +537,9 @@ fn parse_rrule(rrule: &str) -> Option<RRuleParseResult> {
             interval = v.parse().ok().filter(|&i| i > 0);
         } else if let Some(v) = part.strip_prefix("COUNT=") {
             count = v.parse().ok().filter(|&c| c > 0);
+        } else if let Some(v) = part.strip_prefix("BYMONTHDAY=") {
+            // BYMONTHDAY can be positive (1-31) or negative (-1 for last day, -2 for second-to-last, etc.)
+            bymonthday = Some(v.split(',').filter_map(|d| d.parse().ok()).collect());
         }
     }
     // Use a far-future datetime as default (guaranteed valid since year 2099 is always valid)
@@ -543,7 +547,7 @@ fn parse_rrule(rrule: &str) -> Option<RRuleParseResult> {
         .expect("Date 2099-12-31 should always be valid")
         .and_hms_opt(23, 59, 59)
         .expect("Time 23:59:59 should always be valid");
-    Some((freq?, until.unwrap_or(default_until), byday, interval, count))
+    Some((freq?, until.unwrap_or(default_until), byday, interval, count, bymonthday))
 }
 
 const RECURRENCE_LIMIT_DAYS: i64 = 365 * 5; // 5 year limit for recurrence expansion
@@ -588,7 +592,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                 }
             }
             Some(rrule) => {
-                let Some((freq, until, byday, interval, count)) = parse_rrule(rrule) else {
+                let Some((freq, until, byday, interval, count, bymonthday)) = parse_rrule(rrule) else {
                     // Can't parse RRULE, just add the single event
                     let duration = event.end - event.start;
                     if duration.num_minutes() > 0 {
@@ -649,22 +653,71 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
 
                     // Increment to next occurrence
                     if freq == "MONTHLY" {
-                        // Increment by one month, keeping same day/time
-                        let (year, month) = (current.year(), current.month());
-                        let (new_year, new_month) = if month == 12 {
-                            (year + 1, 1)
+                        // Handle BYMONTHDAY if specified (e.g., "15th of every month" or "last day")
+                        if let Some(ref bmd_list) = bymonthday {
+                            let current_year = current.year();
+                            let current_month = current.month();
+                            
+                            // Helper to get valid days for any month
+                            let get_valid_days = |year: i32, month: u32| -> Vec<i32> {
+                                let days_in_month = NaiveDate::from_ymd_opt(year, month, 1)
+                                    .map(|d| d.num_days_in_month() as i32)
+                                    .unwrap_or(28);
+                                let mut days: Vec<i32> = bmd_list.iter().filter_map(|&day| {
+                                    if day > 0 {
+                                        if day <= days_in_month { Some(day) } else { None }
+                                    } else {
+                                        // Negative: -1 = last day, -2 = second-to-last, etc.
+                                        let actual_day = days_in_month + day + 1;
+                                        if actual_day > 0 { Some(actual_day) } else { None }
+                                    }
+                                }).collect();
+                                days.sort();
+                                days
+                            };
+                            
+                            let valid_days = get_valid_days(current_year, current_month);
+                            
+                            // Find next valid day in current month
+                            let current_day = current.day() as i32;
+                            if let Some(&next_day) = valid_days.iter().find(|&&d| d > current_day) {
+                                // Use next valid day in current month
+                                current = NaiveDate::from_ymd_opt(current_year, current_month, next_day as u32)
+                                    .unwrap()
+                                    .and_hms_opt(current.hour(), current.minute(), current.second())
+                                    .unwrap_or(current);
+                            } else {
+                                // Move to first valid day of next month (recalculate for target month)
+                                let (next_year, next_month) = if current_month == 12 {
+                                    (current_year + 1, 1)
+                                } else {
+                                    (current_year, current_month + 1)
+                                };
+                                let next_valid_days = get_valid_days(next_year, next_month);
+                                let first_valid = *next_valid_days.first().unwrap_or(&1);
+                                current = NaiveDate::from_ymd_opt(next_year, next_month, first_valid as u32)
+                                    .unwrap()
+                                    .and_hms_opt(current.hour(), current.minute(), current.second())
+                                    .unwrap_or(current);
+                            }
                         } else {
-                            (year, month + 1)
-                        };
-                        // Days in each month (use chrono Datelike trait)
-                        let days_in_month_target = NaiveDate::from_ymd_opt(new_year, new_month, 1).unwrap().num_days_in_month() as u32;
-                        // Use original day (clamped to max days in target month)
-                        let new_day = original_day.min(days_in_month_target);
-                        if let Some(new_date) = NaiveDate::from_ymd_opt(new_year, new_month, new_day) {
-                            current = new_date.and_hms_opt(current.hour(), current.minute(), current.second()).unwrap_or(current);
-                        } else {
-                            // Fallback: shouldn't happen with our day calculation
-                            current += Duration::days(30);
+                            // Default: increment by one month, keeping same day/time
+                            let (year, month) = (current.year(), current.month());
+                            let (new_year, new_month) = if month == 12 {
+                                (year + 1, 1)
+                            } else {
+                                (year, month + 1)
+                            };
+                            // Days in each month (use chrono Datelike trait)
+                            let days_in_month_target = NaiveDate::from_ymd_opt(new_year, new_month, 1).unwrap().num_days_in_month() as u32;
+                            // Use original day (clamped to max days in target month)
+                            let new_day = original_day.min(days_in_month_target);
+                            if let Some(new_date) = NaiveDate::from_ymd_opt(new_year, new_month, new_day) {
+                                current = new_date.and_hms_opt(current.hour(), current.minute(), current.second()).unwrap_or(current);
+                            } else {
+                                // Fallback: shouldn't happen with our day calculation
+                                current += Duration::days(30);
+                            }
                         }
                     } else if freq == "YEARLY" {
                         // Increment by one year
@@ -2417,38 +2470,51 @@ mod tests {
     fn test_parse_rrule() {
         let result = parse_rrule("FREQ=WEEKLY;UNTIL=20240315T090000Z");
         assert!(result.is_some());
-        let (freq, until, byday, interval, count) = result.unwrap();
+        let (freq, until, byday, interval, count, bymonthday) = result.unwrap();
         assert_eq!(freq, "WEEKLY");
         assert_eq!(until.format("%Y%m%d").to_string(), "20240315"); // Date only, time is 00:00:00
         assert!(byday.is_none());
         assert_eq!(interval, None);
         assert_eq!(count, None);
+        assert!(bymonthday.is_none());
         
         // BYDAY extraction
         let result = parse_rrule("FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20240315T090000Z");
         assert!(result.is_some());
-        let (freq, _, byday, _, _) = result.unwrap();
+        let (freq, _, byday, _, _, _) = result.unwrap();
         assert_eq!(freq, "WEEKLY");
         assert_eq!(byday, Some(vec!["MO".to_string(), "WE".to_string(), "FR".to_string()]));
         
         // Missing UNTIL gets a default
         let result = parse_rrule("FREQ=DAILY");
         assert!(result.is_some());
-        let (_, until, _, _, _) = result.unwrap();
+        let (_, until, _, _, _, _) = result.unwrap();
         assert_eq!(until.format("%Y").to_string(), "2099"); // Should have default date
         
         // INTERVAL extraction
         let result = parse_rrule("FREQ=WEEKLY;INTERVAL=2;UNTIL=20240315T090000Z");
         assert!(result.is_some());
-        let (freq, _, _, interval, _) = result.unwrap();
+        let (freq, _, _, interval, _, _) = result.unwrap();
         assert_eq!(freq, "WEEKLY");
         assert_eq!(interval, Some(2));
         
         // COUNT extraction
         let result = parse_rrule("FREQ=DAILY;COUNT=10");
         assert!(result.is_some());
-        let (_, _, _, _, count) = result.unwrap();
+        let (_, _, _, _, count, _) = result.unwrap();
         assert_eq!(count, Some(10));
+
+        // BYMONTHDAY extraction
+        let result = parse_rrule("FREQ=MONTHLY;BYMONTHDAY=15;UNTIL=20241231T235959");
+        assert!(result.is_some());
+        let (_, _, _, _, _, bymonthday) = result.unwrap();
+        assert_eq!(bymonthday, Some(vec![15]));
+
+        // Multiple BYMONTHDAY
+        let result = parse_rrule("FREQ=MONTHLY;BYMONTHDAY=1,-1;UNTIL=20241231T235959");
+        assert!(result.is_some());
+        let (_, _, _, _, _, bymonthday) = result.unwrap();
+        assert_eq!(bymonthday, Some(vec![1, -1]));
     }
 
     #[test]
@@ -3019,6 +3085,56 @@ mod tests {
         assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2023, 2, 28).unwrap()); // 31st -> 28th
         assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2023, 3, 31).unwrap());
         assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2023, 4, 30).unwrap()); // 31st -> 30th
+    }
+
+    #[test]
+    fn test_expand_events_monthly_by_monthday() {
+        // Test BYMONTHDAY: every 15th of the month
+        let monthly_15th = RawEvent {
+            summary: "Monthly 15th [Alice]".to_string(),
+            start: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            uid: "uid1".to_string(),
+            rrule: Some("FREQ=MONTHLY;BYMONTHDAY=15;UNTIL=20240615T235959".to_string()),
+            exdates: vec![],
+            recurrence_id: None,
+            location: None,
+            categories: vec![],
+        };
+        let expanded = expand_events(vec![monthly_15th]);
+        // 6 months: Jan 15, Feb 15, Mar 15, Apr 15, May 15, Jun 15
+        assert_eq!(expanded.len(), 6);
+        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 1, 15).unwrap());
+        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2024, 2, 15).unwrap());
+        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2024, 3, 15).unwrap());
+        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2024, 4, 15).unwrap());
+        assert_eq!(expanded[4].start.date(), NaiveDate::from_ymd_opt(2024, 5, 15).unwrap());
+        assert_eq!(expanded[5].start.date(), NaiveDate::from_ymd_opt(2024, 6, 15).unwrap());
+    }
+
+    #[test]
+    fn test_expand_events_monthly_by_monthday_last_day() {
+        // Test BYMONTHDAY=-1 (last day of month)
+        let monthly_last = RawEvent {
+            summary: "Monthly last day [Bob]".to_string(),
+            start: NaiveDate::from_ymd_opt(2024, 1, 31).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 1, 31).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            uid: "uid1".to_string(),
+            rrule: Some("FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20240630T235959".to_string()),
+            exdates: vec![],
+            recurrence_id: None,
+            location: None,
+            categories: vec![],
+        };
+        let expanded = expand_events(vec![monthly_last]);
+        // Last days: Jan 31, Feb 29 (leap year 2024), Mar 31, Apr 30, May 31, Jun 30
+        assert_eq!(expanded.len(), 6);
+        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 1, 31).unwrap());
+        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()); // Feb 29 in leap year
+        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2024, 3, 31).unwrap());
+        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2024, 4, 30).unwrap());
+        assert_eq!(expanded[4].start.date(), NaiveDate::from_ymd_opt(2024, 5, 31).unwrap());
+        assert_eq!(expanded[5].start.date(), NaiveDate::from_ymd_opt(2024, 6, 30).unwrap());
     }
 
     #[test]
