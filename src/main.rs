@@ -249,7 +249,7 @@ impl std::fmt::Display for EventStatus {
 
   # ── Convenience Flags ───────────────────────────────────────────────────────
   # Auto-confirm file overwrite
-  proton-extractor calendar.ics -o report.csv --yes   # or --force
+  proton-extractor calendar.ics -o report.csv --yes   # or -y, --force
 
   # Validate arguments without processing files (CI/CD pre-flight)
   proton-extractor --validate --from 2024-01-01 --to 2024-03-31
@@ -340,11 +340,7 @@ struct Args {
     total_only: bool,
 
     /// Force overwrite of output file without confirmation
-    #[arg(long)]
-    force: bool,
-
-    /// Auto-confirm all prompts (skip interactive confirmation)
-    #[arg(long)]
+    #[arg(short = 'y', long, alias = "force")]
     yes: bool,
 
     /// Output file path (default: stdout)
@@ -2793,7 +2789,7 @@ fn main() -> io::Result<()> {
             write_to_file = true;
             output_file_path = Some(path.clone());
             // Check if file exists and prompt for confirmation unless --force or --yes is set
-            if path.exists() && !args.force && !args.yes {
+            if path.exists() && !args.yes {
                 // Non-interactive mode: fail safely instead of hanging
                 if !atty::is(atty::Stream::Stdin) {
                     print_error(&format!(
