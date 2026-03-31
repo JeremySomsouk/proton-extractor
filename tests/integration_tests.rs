@@ -992,7 +992,7 @@ fn test_cli_invalid_duration_format() {
 
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("Invalid --min-duration"));
+        .stderr(predicate::str::contains("invalid 'invalid' for --min-duration"));
 }
 
 #[test]

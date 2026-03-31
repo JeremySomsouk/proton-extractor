@@ -107,35 +107,7 @@ fn print_success(msg: &str) {
     println!("{} {}", colored(color::GREEN, "✓"), msg);
 }
 
-/// Styled done message with duration - for completed operations
-fn print_done(msg: &str, duration_ms: u128) {
-    let duration_str = if duration_ms < 1000 {
-        format!("{}ms", duration_ms)
-    } else {
-        let secs = duration_ms as f64 / 1000.0;
-        format!("{:.1}s", secs)
-    };
-    println!("{} {} ({})", colored(color::GREEN, "✓"), msg, colored(color::DIM, duration_str));
-}
 
-/// Styled export completion - shows file path and event count
-fn print_export_done(count: usize, path: &Path, duration_ms: u128) {
-    let event_label = if count == 1 { "event" } else { "events" };
-    let duration_str = if duration_ms < 1000 {
-        format!("{}ms", duration_ms)
-    } else {
-        let secs = duration_ms as f64 / 1000.0;
-        format!("{:.1}s", secs)
-    };
-    println!(
-        "{} Exported {} {} → {} ({})",
-        colored(color::GREEN, "✓"),
-        colored(color::YELLOW, count.to_string()),
-        event_label,
-        colored(color::CYAN, path.display().to_string()),
-        colored(color::DIM, duration_str)
-    );
-}
 
 #[derive(Debug, Clone, ValueEnum)]
 enum DateFilter {
@@ -370,7 +342,7 @@ struct Args {
     total_only: bool,
 
     /// Force overwrite of output file without confirmation
-    #[arg(short = 'y', long, alias = "force")]
+    #[arg(short = 'y', long = "yes", alias = "force", visible_alias = "force")]
     yes: bool,
 
     /// Output file path (default: stdout)
@@ -2703,6 +2675,7 @@ fn main() -> io::Result<()> {
 
     debug!("Total raw events: {}", all_raw_events.len());
 
+    let total_raw_events = all_raw_events.len();
     let all_events = expand_events(all_raw_events);
 
     debug!("Expanded events: {}", all_events.len());
@@ -3103,8 +3076,32 @@ fn main() -> io::Result<()> {
 
     let grouped: BTreeMap<(i32, u32), MonthSummary> = group_by_month(&filtered);
 
+    // No events found - show helpful context and suggestions
     if grouped.is_empty() {
-        print_notice("No events found for the selected period.");
+        let total_raw = total_raw_events;
+        
+        if total_raw == 0 {
+            // No events in files at all
+            print_warn("No calendar events found in the input files");
+            eprintln!("  {} Check that your .ics files contain valid VEVENT components", colored(color::DIM, "→"));
+        } else {
+            // Events exist but were filtered out
+            print_notice(&format!("No events match your filters ({} events in {} files)", 
+                colored(color::YELLOW, total_raw.to_string()),
+                colored(color::YELLOW, args.files.len().to_string())));
+            eprintln!();
+            eprintln!("  {} Suggestions:", colored(color::CYAN, "→"));
+            eprintln!("    {} {:<22} Show all events (no filter)", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
+            if args.person.is_none() && args.project.is_none() && args.tag.is_none() {
+                eprintln!("    {} {:<22} List available persons", colored(color::DIM, "•"), colored(color::CYAN, "-P"));
+            }
+            eprintln!("    {} {:<22} Show events from last 30 days", colored(color::DIM, "•"), colored(color::CYAN, "--recent 30"));
+            eprintln!("    {} {:<22} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
+        }
+        eprintln!();
+        eprintln!("  {} Run {} for filter options",
+            colored(color::DIM, "→"),
+            colored(color::CYAN, "proton-extractor --help"));
         return Ok(());
     }
 
