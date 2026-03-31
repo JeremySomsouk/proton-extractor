@@ -146,7 +146,7 @@ fn confirm(prompt: &str) -> bool {
         );
         return false;
     }
-    
+
     eprint!("  {} {} [{}/N] ", colored(color::CYAN, "→"), prompt, colored(color::GREEN, "y"));
     io::stderr().flush().ok();
     let mut response = String::new();
@@ -259,8 +259,8 @@ impl std::fmt::Display for EventStatus {
 #[command(name = "proton-extractor", about = "Sum calendar event hours from ICS files", version = VERSION)]
 #[command(long_about = "Sum calendar event hours from ICS files
 
-proton-extractor parses .ics calendar files, extracts events with [person] tags and {project} tags, 
-and computes total hours worked per person. Supports filtering, grouping, multiple output formats 
+proton-extractor parses .ics calendar files, extracts events with [person] tags and {project} tags,
+and computes total hours worked per person. Supports filtering, grouping, multiple output formats
 (text, JSON, CSV, HTML, YAML, TOML, iCal), and statistics.
 
 Enable shell completion for faster CLI usage:
@@ -719,7 +719,7 @@ fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
             } else {
                 String::new()
             };
-            
+
             let msg = if hint.is_empty() {
                 format!(
                     "invalid week format '{}': expected W10, 10, or 2024-W10",
@@ -731,7 +731,7 @@ fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
                     week, hint
                 )
             };
-            
+
             return Err(io::Error::new(io::ErrorKind::InvalidInput, msg));
         }
     }
@@ -743,7 +743,7 @@ fn validate_weekdays(weekdays: &Option<Vec<String>>, flag_name: &str) -> io::Res
     if let Some(ref days) = weekdays {
         let valid_abbrevs = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
         let valid_full = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
-        
+
         for day in days {
             let upper = day.to_uppercase();
             // Check if it's a valid abbreviation
@@ -759,7 +759,7 @@ fn validate_weekdays(weekdays: &Option<Vec<String>>, flag_name: &str) -> io::Res
                         ),
                     ));
                 }
-                
+
                 // Check for common typos
                 let typo_suggestions: Vec<&str> = valid_abbrevs.iter()
                     .filter(|&&abbr| {
@@ -769,7 +769,7 @@ fn validate_weekdays(weekdays: &Option<Vec<String>>, flag_name: &str) -> io::Res
                     })
                     .copied()
                     .collect();
-                
+
                 let msg = if !typo_suggestions.is_empty() {
                     format!(
                         "invalid weekday '{}' for --{}: valid values are {}{}",
@@ -788,7 +788,7 @@ fn validate_weekdays(weekdays: &Option<Vec<String>>, flag_name: &str) -> io::Res
                         day, flag_name, valid_abbrevs.join(", ")
                     )
                 };
-                
+
                 return Err(io::Error::new(io::ErrorKind::InvalidInput, msg));
             }
         }
@@ -802,15 +802,15 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
     let s2_chars: Vec<char> = s2.chars().collect();
     let len1 = s1_chars.len();
     let len2 = s2_chars.len();
-    
+
     if len1 == 0 { return len2; }
     if len2 == 0 { return len1; }
-    
+
     let mut matrix = vec![vec![0usize; len2 + 1]; len1 + 1];
-    
+
     for i in 0..=len1 { matrix[i][0] = i; }
     for j in 0..=len2 { matrix[0][j] = j; }
-    
+
     for i in 1..=len1 {
         for j in 1..=len2 {
             let cost = if s1_chars[i-1] == s2_chars[j-1] { 0 } else { 1 };
@@ -820,7 +820,7 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
             );
         }
     }
-    
+
     matrix[len1][len2]
 }
 
@@ -2552,13 +2552,15 @@ fn main() -> io::Result<()> {
         }
         if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
             print_error(&e.to_string());
+            print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
             std::process::exit(1);
         }
         if let Err(e) = validate_weekdays(&args.exclude_weekdays, "exclude-weekdays") {
             print_error(&e.to_string());
+            print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
             std::process::exit(1);
         }
-        
+
         // Validate time filters
         if let Some(ref t) = args.start_after {
             if let Err(e) = validate_time_filter(t, "start-after") {
@@ -2584,7 +2586,7 @@ fn main() -> io::Result<()> {
                 std::process::exit(1);
             }
         }
-        
+
         // Validate duration filters
         if let Some(ref s) = args.min_duration {
             if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
@@ -2606,28 +2608,13 @@ fn main() -> io::Result<()> {
                 std::process::exit(1);
             }
         }
-        
+
         print_success("All arguments validated successfully");
         return Ok(());
     }
 
-    if !has_stdin && !has_files {
-        print_error("No .ics files provided");
-        print_hints(&[
-            "Provide file paths: proton-extractor calendar.ics",
-            "Or pipe ICS content: cat calendar.ics | proton-extractor --stdin",
-            "Validate args (CI/CD): proton-extractor --validate [args]",
-            "Get help: proton-extractor --help"
-        ]);
-        std::process::exit(1);
-    }
-
-    if has_files && has_stdin {
-        print_error("Cannot use both --stdin and file arguments simultaneously");
-        print_hints(&["Use either --stdin OR file paths, not both"][..]);
-        std::process::exit(1);
-    }
-
+    // Validate filter arguments early (before checking for files)
+    // This provides better error messages for invalid filter values
     if let Err(e) = validate_date_range(&args.from, &args.to) {
         print_error(&e.to_string());
         print_hints(&["--from must be before or equal to --to"][..]);
@@ -2638,24 +2625,22 @@ fn main() -> io::Result<()> {
         print_hints(&["Month must be 1-12 (e.g., --month 3 for March)"][..]);
         std::process::exit(1);
     }
-
-    // Validate week number format
     if let Err(e) = validate_week_number(&args.week_number) {
         print_error(&e.to_string());
         print_hints(&["Format: W10 (current year) or 2024-W10 (specific year)"][..]);
         std::process::exit(1);
     }
-
-    // Validate weekday abbreviations
     if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
         print_error(&e.to_string());
+        print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
         std::process::exit(1);
     }
     if let Err(e) = validate_weekdays(&args.exclude_weekdays, "exclude-weekdays") {
         print_error(&e.to_string());
+        print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
         std::process::exit(1);
     }
-
+    
     // Validate time filters
     if let Some(ref t) = args.start_after {
         if let Err(e) = validate_time_filter(t, "start-after") {
@@ -2685,7 +2670,46 @@ fn main() -> io::Result<()> {
             std::process::exit(1);
         }
     }
+    
+    // Validate duration filters
+    if let Some(ref s) = args.min_duration {
+        if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
+            print_error(&format!("invalid '{}' for --min-duration", s));
+            print_hints(&[
+                "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
+                "Examples: --min-duration 30m  --min-duration 1h30m"
+            ]);
+            std::process::exit(1);
+        }
+    }
+    if let Some(ref s) = args.max_duration {
+        if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
+            print_error(&format!("invalid '{}' for --max-duration", s));
+            print_hints(&[
+                "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
+                "Examples: --max-duration 4h  --max-duration 8h"
+            ]);
+            std::process::exit(1);
+        }
+    }
 
+    if !has_stdin && !has_files {
+        print_error("No .ics files provided");
+        print_hints(&[
+            "Provide file paths: proton-extractor calendar.ics",
+            "Or pipe ICS content: cat calendar.ics | proton-extractor --stdin",
+            "Validate args (CI/CD): proton-extractor --validate [args]",
+            "Get help: proton-extractor --help"
+        ]);
+        std::process::exit(1);
+    }
+
+    if has_files && has_stdin {
+        print_error("Cannot use both --stdin and file arguments simultaneously");
+        print_hints(&["Use either --stdin OR file paths, not both"][..]);
+        std::process::exit(1);
+    }
+    
     let mut all_raw_events = Vec::new();
 
     if has_stdin {
@@ -2708,7 +2732,7 @@ fn main() -> io::Result<()> {
                 }
             }
         }
-        
+
         // Detect empty stdin early
         if !found_content && !parse_warnings.is_empty() && !args.quiet {
             print_warn("stdin appears to be empty or not valid ICS content");
@@ -2736,7 +2760,7 @@ fn main() -> io::Result<()> {
 
         for (i, path) in args.files.iter().enumerate() {
             debug!("Reading: {}", path.display());
-            
+
             // Show progress for multiple files or dry-run
             if let Some(ref mut s) = spinner {
                 s.tick();
@@ -2757,7 +2781,7 @@ fn main() -> io::Result<()> {
                 }
                 io::stderr().flush().ok();
             }
-            
+
             let file = File::open(path).map_err(|e| {
                 let path_str = path.display().to_string();
                 match e.kind() {
@@ -2804,7 +2828,7 @@ fn main() -> io::Result<()> {
                 }
             }
         }
-        
+
         // Clear the spinner and show completion
         if let Some(ref s) = spinner {
             if args.files.len() > 1 {
@@ -3147,7 +3171,7 @@ fn main() -> io::Result<()> {
             print_notice("No events found matching your criteria");
             eprintln!("  {} Use {} to debug argument issues", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [your args]"));
         }
-        
+
         // Show active date context if a date filter is active
         if !args.quiet {
             match &effective_date {
@@ -3163,12 +3187,12 @@ fn main() -> io::Result<()> {
                 },
                 DateFilter::All => {}
             }
-            
+
             // Show date range if --from/--to is set
             if let (Some(from), Some(to)) = (&args.from, &args.to) {
                 eprintln!("  {}  Date range: {} to {}", colored(color::DIM, "→"), from, to);
             }
-            
+
             eprintln!();
             eprintln!("  {} Try these options:", colored(color::CYAN, "→"));
 
@@ -3213,14 +3237,14 @@ fn main() -> io::Result<()> {
     // No events found - show helpful context and suggestions
     if grouped.is_empty() {
         let total_raw = total_raw_events;
-        
+
         if total_raw == 0 {
             // No events in files at all
             print_warn("No calendar events found in the input files");
             eprintln!("  {} Check that your .ics files contain valid VEVENT components", colored(color::DIM, "→"));
         } else {
             // Events exist but were filtered out
-            print_notice(&format!("No events match your filters ({} events in {} files)", 
+            print_notice(&format!("No events match your filters ({} events in {} files)",
                 colored(color::YELLOW, total_raw.to_string()),
                 colored(color::YELLOW, args.files.len().to_string())));
             eprintln!();
