@@ -160,6 +160,10 @@ struct Args {
     #[arg(long)]
     sum_only: bool,
 
+    /// Show only the grand total (single line output, useful for scripting)
+    #[arg(long, conflicts_with_all = ["quiet", "sum_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "stats", "top", "bottom", "group_by_person", "group_by_project", "group_by_weekday", "group_by_location", "group_by_category", "dry_run"])]
+    total_only: bool,
+
     /// Output file path (default: stdout)
     #[arg(short = 'o', long)]
     output: Option<PathBuf>,
@@ -1988,6 +1992,12 @@ fn main() -> io::Result<()> {
     let grand_total_minutes: i64 = filtered.iter()
         .filter_map(|e| event_duration_minutes(e))
         .sum();
+
+    // Total only mode: show just the grand total (useful for scripting)
+    if args.total_only {
+        writeln!(out_writer, "{}", format_hours(grand_total_minutes))?;
+        return Ok(());
+    }
 
     // Show top N events by duration if --top is requested
     if let Some(top_n) = args.top {

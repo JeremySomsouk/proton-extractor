@@ -718,3 +718,16 @@ fn test_cli_verbose_flag() {
     cmd.assert()
         .success();
 }
+
+#[test]
+fn test_cli_total_only() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--total-only");
+    
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("h"));
+}
