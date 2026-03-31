@@ -2535,7 +2535,50 @@ fn main() -> io::Result<()> {
             print_error(&e.to_string());
             std::process::exit(1);
         }
-        let _ = validate_time_filter("09:00", "start-after");
+        
+        // Validate time filters
+        if let Some(ref t) = args.start_after {
+            if let Err(e) = validate_time_filter(t, "start-after") {
+                print_error(&e.to_string());
+                std::process::exit(1);
+            }
+        }
+        if let Some(ref t) = args.start_before {
+            if let Err(e) = validate_time_filter(t, "start-before") {
+                print_error(&e.to_string());
+                std::process::exit(1);
+            }
+        }
+        if let Some(ref t) = args.end_after {
+            if let Err(e) = validate_time_filter(t, "end-after") {
+                print_error(&e.to_string());
+                std::process::exit(1);
+            }
+        }
+        if let Some(ref t) = args.end_before {
+            if let Err(e) = validate_time_filter(t, "end-before") {
+                print_error(&e.to_string());
+                std::process::exit(1);
+            }
+        }
+        
+        // Validate duration filters
+        if let Some(ref s) = args.min_duration {
+            if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
+                print_error(&format!("invalid '{}' for --min-duration", s));
+                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
+                eprintln!("  {} Examples: --min-duration 30m  --min-duration 1h30m", colored(color::DIM, "→"));
+                std::process::exit(1);
+            }
+        }
+        if let Some(ref s) = args.max_duration {
+            if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
+                print_error(&format!("invalid '{}' for --max-duration", s));
+                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
+                eprintln!("  {} Examples: --max-duration 4h  --max-duration 8h", colored(color::DIM, "→"));
+                std::process::exit(1);
+            }
+        }
         
         print_success("All arguments validated successfully");
         return Ok(());
