@@ -86,6 +86,13 @@ enum OutputFormat {
     Pivot,
 }
 
+#[derive(Debug, Clone, ValueEnum)]
+enum StatsFormat {
+    Text,
+    Json,
+    Yaml,
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "proton-extractor", about = "Sum calendar event hours from ICS files", version = VERSION)]
 #[command(after_help = "For shell completion, run:\n  proton-extractor --generate-completion bash\n  proton-extractor --generate-completion zsh\n  proton-extractor --generate-completion fish\n  proton-extractor --generate-completion powershell\n\nOr source the output directly, e.g.:\n  source <(proton-extractor --generate-completion bash)")]
@@ -224,6 +231,10 @@ struct Args {
     /// Show statistics about events (count, avg/day, top person, busiest day)
     #[arg(long)]
     stats: bool,
+
+    /// Output format for statistics (only applies when --stats is used)
+    #[arg(long, value_enum, default_value = "text")]
+    stats_format: StatsFormat,
 
     /// Reverse chronological order (newest first)
     #[arg(long)]
@@ -1276,6 +1287,36 @@ struct JsonOutput {
     months: Vec<JsonMonthSummary>,
 }
 
+#[derive(Serialize)]
+struct StatsByPerson {
+    person: String,
+    minutes: i64,
+    formatted: String,
+    percentage: String,
+}
+
+#[derive(Serialize)]
+struct StatsByWeekday {
+    weekday: String,
+    minutes: i64,
+    formatted: String,
+}
+
+#[derive(Serialize)]
+struct StatsOutput {
+    total_events: usize,
+    total_minutes: i64,
+    total_formatted: String,
+    date_range_start: Option<String>,
+    date_range_end: Option<String>,
+    days_span: i64,
+    avg_per_day_minutes: i64,
+    avg_per_day_formatted: String,
+    top_person: Option<String>,
+    by_person: Vec<StatsByPerson>,
+    by_weekday: Vec<StatsByWeekday>,
+}
+
 /// Extracts content between matching bracket pairs, or None if invalid/empty.
 /// The `open` and `close` args specify which bracket characters to match.
 /// Returns the inner content (without brackets) if found and not empty/whitespace.
@@ -1897,38 +1938,92 @@ fn main() -> io::Result<()> {
         let dates: Vec<_> = filtered.iter().map(|e| e.start.date()).collect();
         let min_date = dates.iter().min();
         let max_date = dates.iter().max();
-
-        writeln!(out_writer, "📊 Statistics")?;
-        writeln!(out_writer, "{}", colored(color::CYAN, "============"))?;
-        writeln!(out_writer)?;
-        writeln!(out_writer, "Total events:  {}", colored(color::YELLOW, total_events.to_string()))?;
-        writeln!(out_writer, "Total hours:    {}", colored(color::YELLOW, format_hours(total_mins)))?;
-        if let (Some(min_d), Some(max_d)) = (min_date, max_date) {
-            let days_span = (*max_d - *min_d).num_days() + 1;
-            let avg_per_day = if days_span > 0 { total_mins / days_span } else { total_mins };
-            writeln!(out_writer, "Date range:     {} to {} ({} days)", min_d, max_d, days_span)?;
-            writeln!(out_writer, "Avg per day:    {}", colored(color::YELLOW, format_hours(avg_per_day)))?;
-        }
-
-        writeln!(out_writer)?;
-        writeln!(out_writer, "{}", colored(color::CYAN, "By Person"))?;
-        writeln!(out_writer, "{}", colored(color::CYAN, "--------"))?;
-        if !by_person.is_empty() {
-            let top_person = by_person.iter().max_by_key(|(_, v)| *v);
-            for (person, mins) in &by_person {
-                let marker = if Some((person, mins)) == top_person { " 🏆" } else { "" };
-                let pct = format_percentage(*mins, total_mins);
-                writeln!(out_writer, "  {}  {:>6}  ({}){}", colored(color::YELLOW, format_hours(*mins)), colored(color::MAGENTA, pct), person, marker)?;
-            }
+        let (days_span, avg_per_day) = if let (Some(min_d), Some(max_d)) = (min_date, max_date) {
+            let span = (*max_d - *min_d).num_days() + 1;
+            (span, if span > 0 { total_mins / span } else { total_mins })
         } else {
-            writeln!(out_writer, "  (no person data)")?;
-        }
+            (0, 0)
+        };
 
-        writeln!(out_writer)?;
-        writeln!(out_writer, "{}", colored(color::CYAN, "By Weekday"))?;
-        writeln!(out_writer, "{}", colored(color::CYAN, "------------"))?;
-        for (day, mins) in &by_weekday {
-            writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(*mins)), day)?;
+        // Top person
+        let top_person_entry = by_person.iter().max_by_key(|(_, v)| *v);
+
+        match args.stats_format {
+            StatsFormat::Text => {
+                writeln!(out_writer, "📊 Statistics")?;
+                writeln!(out_writer, "{}", colored(color::CYAN, "============"))?;
+                writeln!(out_writer)?;
+                writeln!(out_writer, "Total events:  {}", colored(color::YELLOW, total_events.to_string()))?;
+                writeln!(out_writer, "Total hours:    {}", colored(color::YELLOW, format_hours(total_mins)))?;
+                if let (Some(min_d), Some(max_d)) = (min_date, max_date) {
+                    writeln!(out_writer, "Date range:     {} to {} ({} days)", min_d, max_d, days_span)?;
+                    writeln!(out_writer, "Avg per day:    {}", colored(color::YELLOW, format_hours(avg_per_day)))?;
+                }
+
+                writeln!(out_writer)?;
+                writeln!(out_writer, "{}", colored(color::CYAN, "By Person"))?;
+                writeln!(out_writer, "{}", colored(color::CYAN, "--------"))?;
+                if !by_person.is_empty() {
+                    for (person, mins) in &by_person {
+                        let marker = if Some((person, mins)) == top_person_entry { " 🏆" } else { "" };
+                        let pct = format_percentage(*mins, total_mins);
+                        writeln!(out_writer, "  {}  {:>6}  ({}){}", colored(color::YELLOW, format_hours(*mins)), colored(color::MAGENTA, pct), person, marker)?;
+                    }
+                } else {
+                    writeln!(out_writer, "  (no person data)")?;
+                }
+
+                writeln!(out_writer)?;
+                writeln!(out_writer, "{}", colored(color::CYAN, "By Weekday"))?;
+                writeln!(out_writer, "{}", colored(color::CYAN, "------------"))?;
+                for (day, mins) in &by_weekday {
+                    writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(*mins)), day)?;
+                }
+            }
+            StatsFormat::Json | StatsFormat::Yaml => {
+                let stats = StatsOutput {
+                    total_events,
+                    total_minutes: total_mins,
+                    total_formatted: format_hours(total_mins),
+                    date_range_start: min_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                    date_range_end: max_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                    days_span,
+                    avg_per_day_minutes: avg_per_day,
+                    avg_per_day_formatted: format_hours(avg_per_day),
+                    top_person: top_person_entry.map(|(p, _)| p.to_string()),
+                    by_person: by_person
+                        .iter()
+                        .map(|(person, mins)| StatsByPerson {
+                            person: person.to_string(),
+                            minutes: *mins,
+                            formatted: format_hours(*mins),
+                            percentage: format_percentage(*mins, total_mins),
+                        })
+                        .collect(),
+                    by_weekday: by_weekday
+                        .iter()
+                        .map(|(day, mins)| StatsByWeekday {
+                            weekday: day.to_string(),
+                            minutes: *mins,
+                            formatted: format_hours(*mins),
+                        })
+                        .collect(),
+                };
+
+                match args.stats_format {
+                    StatsFormat::Json => {
+                        let json_str = serde_json::to_string_pretty(&stats)
+                            .unwrap_or_else(|_| "{}".to_string());
+                        writeln!(out_writer, "{}", json_str)?;
+                    }
+                    StatsFormat::Yaml => {
+                        let yaml_str = serde_yaml::to_string(&stats)
+                            .unwrap_or_else(|_| "{}".to_string());
+                        writeln!(out_writer, "{}", yaml_str)?;
+                    }
+                    StatsFormat::Text => unreachable!(),
+                }
+            }
         }
 
         return Ok(());
