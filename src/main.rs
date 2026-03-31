@@ -74,9 +74,8 @@ fn print_warn(msg: &str) {
 }
 
 /// Styled success message output - confirms completed actions
-#[allow(dead_code)]
-fn print_success(msg: &str) {
-    println!("{}", colored(color::GREEN, msg));
+fn print_success<S: AsRef<str>>(msg: S) {
+    println!("{} {}", colored(color::GREEN, "✓"), msg.as_ref());
 }
 
 /// Styled info message output - neutral informational messages
@@ -85,9 +84,8 @@ fn print_info(msg: &str) {
 }
 
 /// Styled hint message output - helpful suggestions with user's specific values
-#[allow(dead_code)]
-fn print_hint(msg: &str) {
-    eprintln!("{} {}", colored(color::DIM, "hint:"), colored(color::CYAN, msg));
+fn print_hint<S: AsRef<str>>(msg: S) {
+    eprintln!("{} {}", colored(color::DIM, "hint:"), colored(color::CYAN, msg.as_ref()));
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -176,6 +174,15 @@ impl std::fmt::Display for EventStatus {
 
   # Export to CSV for spreadsheet analysis
   proton-extractor calendar.ics --format csv --output report.csv
+
+  # Auto-confirm file overwrite (no prompt)
+  proton-extractor calendar.ics --output report.csv --yes
+
+  # Preview events without processing (dry run)
+  proton-extractor calendar.ics --dry-run
+
+  # Filter by time range within a day
+  proton-extractor calendar.ics --start-after 09:00 --end-before 17:00
 
   # Shell completion setup
   source <(proton-extractor --generate-completion bash)
@@ -2271,12 +2278,12 @@ fn main() -> io::Result<()> {
 
     if let Err(e) = validate_date_range(&args.from, &args.to) {
         print_error(&e.to_string());
-        eprintln!("  {} Ensure --from date is before or equal to --to date", colored(color::DIM, "→"));
+        print_hint("Ensure --from date is before or equal to --to date");
         std::process::exit(1);
     }
     if let Err(e) = validate_month(args.month) {
         print_error(&e.to_string());
-        eprintln!("  {} Month must be between 1 (January) and 12 (December)", colored(color::DIM, "→"));
+        print_hint("Month must be between 1 (January) and 12 (December)");
         std::process::exit(1);
     }
 
@@ -2284,21 +2291,21 @@ fn main() -> io::Result<()> {
     if let Some(ref t) = args.start_after {
         if let Err(e) = validate_time_filter(t, "start-after") {
             print_error(&e.to_string());
-            eprintln!("  {} Use format: HH:MM (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
+            print_hint("Use format: HH:MM (e.g., '09:00' or '17:30')");
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.start_before {
         if let Err(e) = validate_time_filter(t, "start-before") {
             print_error(&e.to_string());
-            eprintln!("  {} Use format: HH:MM (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
+            print_hint("Use format: HH:MM (e.g., '09:00' or '17:30')");
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.end_after {
         if let Err(e) = validate_time_filter(t, "end-after") {
             print_error(&e.to_string());
-            eprintln!("  {} Use format: HH:MM (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
+            print_hint("Use format: HH:MM (e.g., '09:00' or '17:30')");
             std::process::exit(1);
         }
     }
@@ -2488,8 +2495,12 @@ fn main() -> io::Result<()> {
     };
 
     // Setup output: file or stdout
+    let mut write_to_file = false;
+    let mut output_file_path: Option<PathBuf> = None;
     let out_writer: Box<dyn Write> = match &output_path {
         Some(path) => {
+            write_to_file = true;
+            output_file_path = Some(path.clone());
             // Check if file exists and prompt for confirmation unless --force or --yes is set
             if path.exists() && !args.force && !args.yes {
                 eprintln!(
@@ -2497,14 +2508,16 @@ fn main() -> io::Result<()> {
                     colored(color::YELLOW, "warning:"),
                     path.display()
                 );
-                eprint!("  {} Overwrite? [y/N] ", colored(color::DIM, "→"));
+                eprintln!();
+                eprint!("  {} Overwrite? [y/N] ", colored(color::CYAN, "→"));
                 io::stderr().flush().ok();
                 let mut response = String::new();
                 if io::stdin().read_line(&mut response).is_err() {
                     std::process::exit(1);
                 }
                 if !response.trim().eq_ignore_ascii_case("y") {
-                    eprintln!("  {} Aborted.", colored(color::DIM, "→"));
+                    eprintln!();
+                    print_info("Operation cancelled. Use --yes or --force to skip this prompt.");
                     std::process::exit(1);
                 }
             }
@@ -2651,7 +2664,7 @@ fn main() -> io::Result<()> {
         eprintln!("    {} {:<20} Show events from date range", colored(color::DIM, "•"), colored(color::CYAN, "--from 2024-01-01 --to 2024-03-31"));
         eprintln!("    {} {:<20} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
         eprintln!();
-        eprintln!("  {} Run {} for all filter options", 
+        eprintln!("  {} Run {} for all filter options",
             colored(color::DIM, "→"),
             colored(color::CYAN, "proton-extractor --help | grep -E '^[[:space:]]+'"));
         return Ok(());
@@ -3970,6 +3983,19 @@ fn main() -> io::Result<()> {
                     )?;
                 }
             }
+        }
+    }
+
+    // Success feedback when writing to file
+    if write_to_file {
+        if let Some(ref path) = output_file_path {
+            eprintln!();
+            eprintln!(
+                "{} {} → {}",
+                colored(color::GREEN, "✓"),
+                colored(color::BOLD, "Saved"),
+                path.display()
+            );
         }
     }
 
