@@ -215,6 +215,7 @@ enum SortBy {
 }
 
 #[derive(Debug, Clone, ValueEnum)]
+#[value(rename_all = "lower")]
 enum OutputFormat {
     Text,
     Json,
@@ -226,6 +227,23 @@ enum OutputFormat {
     Yaml,
     Toml,
     Pivot,
+}
+
+impl std::fmt::Display for OutputFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OutputFormat::Text => write!(f, "text"),
+            OutputFormat::Json => write!(f, "json"),
+            OutputFormat::Jsonl => write!(f, "jsonl"),
+            OutputFormat::Csv => write!(f, "csv"),
+            OutputFormat::Markdown => write!(f, "markdown"),
+            OutputFormat::Ical => write!(f, "ical"),
+            OutputFormat::Html => write!(f, "html"),
+            OutputFormat::Yaml => write!(f, "yaml"),
+            OutputFormat::Toml => write!(f, "toml"),
+            OutputFormat::Pivot => write!(f, "pivot"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -523,7 +541,7 @@ struct Args {
     end_before: Option<String>,
 
     /// Enable compact JSON/YAML output (single line, no pretty-printing)
-    #[arg(long)]
+    #[arg(long, verbatim_doc_comment)]
     compact: bool,
 
     /// Show statistics about events (count, avg/day, top person, busiest day)
@@ -2641,6 +2659,19 @@ fn main() -> io::Result<()> {
             }
         }
         
+        // Validate --compact flag (only applies to JSON/YAML formats)
+        validated_count += 1;
+        if args.compact {
+            match args.format {
+                OutputFormat::Json | OutputFormat::Yaml | OutputFormat::Jsonl => {}
+                _ => {
+                    has_errors = true;
+                    print_error(format!("--compact only applies to JSON/YAML formats, not '{}'", args.format));
+                    print_hints(&["Remove --compact or use -f json/yaml"][..]);
+                }
+            }
+        }
+        
         if has_errors {
             eprintln!();
             print_error("Validation failed");
@@ -2743,6 +2774,17 @@ fn main() -> io::Result<()> {
         }
     }
     
+    // Validate --compact flag (only applies to JSON/YAML formats)
+    if args.compact {
+        match args.format {
+            OutputFormat::Json | OutputFormat::Yaml | OutputFormat::Jsonl => {}
+            _ => {
+                print_warn(format!("--compact has no effect with {} format (only affects JSON/YAML)", args.format));
+                print_hints(&["Remove --compact or use -f json/yaml"][..]);
+            }
+        }
+    }
+
     // Validate duration filters
     if let Some(ref s) = args.min_duration {
         if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
