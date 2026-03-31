@@ -178,9 +178,10 @@ fn confirm(prompt: &str) -> bool {
     }
 
     eprint!(
-        "  {} {} [Y/n] ",
+        "\n  {} {}\n  {} [Y/n] ",
         colored(color::YELLOW, "?"),
-        prompt
+        prompt,
+        colored(color::DIM, "Enter")
     );
     io::stderr().flush().ok();
     let mut response = String::new();
@@ -537,7 +538,7 @@ struct Args {
     total_only: bool,
 
     /// Auto-confirm destructive actions (overwrite files, delete data)
-    #[arg(short = 'y', long = "yes", visible_alias = "force")]
+    #[arg(short = 'y', long = "yes", visible_aliases = ["force", "confirm"])]
     yes: bool,
 
     /// Output file path (default: stdout)
@@ -3664,7 +3665,7 @@ fn main() -> io::Result<()> {
                     colored(color::YELLOW, "warning:"),
                     colored(color::BOLD, format!("'{}' already exists", path.display()))
                 );
-                if !confirm("Overwrite?") {
+                if !confirm("Continue?") {
                     eprintln!();
                     println!("{} Operation cancelled", colored(color::YELLOW, "○"));
                     println!(
