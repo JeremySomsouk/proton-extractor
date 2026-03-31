@@ -182,11 +182,22 @@ impl Spinner {
         self.finish();
         println!("{} {}", colored(color::GREEN, "✓"), message);
     }
-    
+
     /// Finish with an error message
     fn finish_with_error(&self, message: &str) {
         self.finish();
         eprintln!("{} {}", colored(color::RED, "✗"), message);
+    }
+
+    /// Finish with warning message
+    fn finish_with_warning(&self, message: &str) {
+        self.finish();
+        eprintln!("{} {}", colored(color::YELLOW, "⚠"), message);
+    }
+
+    /// Update spinner message
+    fn set_message(&mut self, message: &str) {
+        self.message = message.to_string();
     }
 }
 
@@ -2919,6 +2930,16 @@ fn main() -> io::Result<()> {
     let all_events = expand_events(all_raw_events);
 
     debug!("Expanded events: {}", all_events.len());
+    
+    // Show verbose progress for event expansion (recurring events)
+    if args.verbose && total_raw_events < all_events.len() {
+        eprintln!(
+            "{} {} raw events → {} expanded events (including recurring)",
+            colored(color::DIM, "→"),
+            total_raw_events,
+            all_events.len()
+        );
+    }
 
     // Remove duplicate events if --dedupe or --dedupe-by-summary is set
     let all_events: Vec<Event> = if args.dedupe || args.dedupe_by_summary {
