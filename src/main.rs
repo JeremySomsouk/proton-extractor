@@ -292,6 +292,10 @@ struct Args {
     #[arg(long)]
     last_week: bool,
 
+    /// Show events from the last N days (including today)
+    #[arg(long)]
+    recent: Option<u32>,
+
     /// Filter out events shorter than this duration (e.g., "30m", "1h", "2h30m")
     #[arg(long)]
     min_duration: Option<String>,
@@ -1138,6 +1142,17 @@ fn matches_week_number_filter(event: &Event, week_filter: &Option<String>) -> bo
     }
 }
 
+/// Returns true if event is within the last N days (including today).
+/// Returns true if no recent filter is set.
+fn matches_recent_filter(event: &Event, recent_days: &Option<u32>, today: &NaiveDate) -> bool {
+    if let Some(days) = recent_days {
+        let cutoff = *today - Duration::days(*days as i64 - 1); // inclusive of N days
+        event.start.date() >= cutoff && event.start.date() <= *today
+    } else {
+        true
+    }
+}
+
 // Map day abbreviation to weekday number (Monday = 1)
 fn weekday_abbrev_to_num(day: &str) -> Option<u32> {
     match day.to_uppercase().as_str() {
@@ -1546,6 +1561,9 @@ fn main() -> io::Result<()> {
     if args.weekly {
         debug!("Quick filter --weekly: enabled");
     }
+    if let Some(days) = args.recent {
+        debug!("Quick filter --recent: last {} days", days);
+    }
 
     let has_stdin = args.stdin;
     let has_files = !args.files.is_empty();
@@ -1732,6 +1750,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_duration_filter(e, &min_duration, &max_duration))
         .filter(|e| matches_exclude_recurring_filter(e, args.exclude_recurring))
         .filter(|e| matches_include_recurring_filter(e, args.include_recurring))
+        .filter(|e| matches_recent_filter(e, &args.recent, &now.date()))
         .take(args.limit.unwrap_or(usize::MAX))
         .collect();
 
@@ -2518,6 +2537,66 @@ fn main() -> io::Result<()> {
 mod tests {
     use super::*;
     use chrono::Timelike;
+
+    #[test]
+    fn test_matches_recent_filter() {
+        let today = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        
+        // Event on today
+        let today_event = Event::new(
+            "Today meeting [Alice]".to_string(),
+            today.and_hms_opt(9, 0, 0).unwrap(),
+            today.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        // Event 2 days ago
+        let two_days_ago = today - Duration::days(2);
+        let two_days_ago_event = Event::new(
+            "Two days ago [Bob]".to_string(),
+            two_days_ago.and_hms_opt(9, 0, 0).unwrap(),
+            two_days_ago.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        // Event 5 days ago
+        let five_days_ago = today - Duration::days(5);
+        let five_days_ago_event = Event::new(
+            "Five days ago [Carol]".to_string(),
+            five_days_ago.and_hms_opt(9, 0, 0).unwrap(),
+            five_days_ago.and_hms_opt(10, 0, 0).unwrap(),
+        );
+        
+        // Event 10 days ago
+        let ten_days_ago = today - Duration::days(10);
+        let ten_days_ago_event = Event::new(
+            "Ten days ago [Dave]".to_string(),
+            ten_days_ago.and_hms_opt(9, 0, 0).unwrap(),
+            ten_days_ago.and_hms_opt(10, 0, 0).unwrap(),
+        );
+
+        // No filter = all pass
+        assert!(matches_recent_filter(&today_event, &None, &today));
+        assert!(matches_recent_filter(&two_days_ago_event, &None, &today));
+        assert!(matches_recent_filter(&five_days_ago_event, &None, &today));
+        
+        // --recent 3: today, yesterday, 2 days ago (3 days inclusive)
+        let recent_3 = Some(3);
+        assert!(matches_recent_filter(&today_event, &recent_3, &today));
+        assert!(matches_recent_filter(&two_days_ago_event, &recent_3, &today));
+        assert!(!matches_recent_filter(&five_days_ago_event, &recent_3, &today));
+        assert!(!matches_recent_filter(&ten_days_ago_event, &recent_3, &today));
+        
+        // --recent 7: last week inclusive
+        let recent_7 = Some(7);
+        assert!(matches_recent_filter(&today_event, &recent_7, &today));
+        assert!(matches_recent_filter(&two_days_ago_event, &recent_7, &today));
+        assert!(matches_recent_filter(&five_days_ago_event, &recent_7, &today));
+        assert!(!matches_recent_filter(&ten_days_ago_event, &recent_7, &today));
+        
+        // --recent 1: today only
+        let recent_1 = Some(1);
+        assert!(matches_recent_filter(&today_event, &recent_1, &today));
+        assert!(!matches_recent_filter(&two_days_ago_event, &recent_1, &today));
+    }
 
     #[test]
     fn test_extract_person_valid() {
