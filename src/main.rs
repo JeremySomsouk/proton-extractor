@@ -86,11 +86,6 @@ fn print_exported(count: usize, path: &Path) {
     );
 }
 
-/// Styled info message output - neutral informational messages
-fn print_info(msg: &str) {
-    println!("{}", msg);
-}
-
 /// Styled hint message output - helpful suggestions with user's specific values
 /// Use for actionable tips after errors
 fn print_hint<S: AsRef<str>>(msg: S) {
@@ -119,11 +114,6 @@ fn print_list_summary(count: usize, label: &str) {
         colored(color::CYAN, count.to_string()),
         colored(color::CYAN, item)
     );
-}
-
-/// Styled success message - for successful validations and completions
-fn print_success(msg: &str) {
-    println!("{} {}", colored(color::GREEN, "✓"), msg);
 }
 
 /// Prompt user for confirmation in interactive mode.
