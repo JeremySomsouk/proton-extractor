@@ -933,6 +933,8 @@ fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yeste
 
 // ISO week number calculation using chrono's built-in support
 
+/// Returns true if event matches the person filter (case-insensitive).
+/// Returns true if no filter is set.
 fn matches_person_filter(event: &Event, person_filter: &Option<String>) -> bool {
     let Some(filter) = person_filter else {
         return true;
@@ -955,6 +957,8 @@ fn matches_persons_filter(event: &Event, persons: &[String]) -> bool {
     persons.iter().any(|p| event_person_lower.contains(&p.to_lowercase()))
 }
 
+/// Returns true if event matches the project filter (case-insensitive).
+/// Returns true if no filter is set.
 fn matches_project_filter(event: &Event, project_filter: &Option<String>) -> bool {
     let Some(filter) = project_filter else {
         return true;
@@ -964,6 +968,8 @@ fn matches_project_filter(event: &Event, project_filter: &Option<String>) -> boo
         .unwrap_or(false)
 }
 
+/// Returns true if event should NOT be excluded based on project exclude filters.
+/// Returns true if no exclude filters are set.
 fn matches_exclude_project_filter(event: &Event, exclude_filters: &[String]) -> bool {
     let Some(project) = extract_project(&event.summary) else {
         return true;
@@ -972,6 +978,8 @@ fn matches_exclude_project_filter(event: &Event, exclude_filters: &[String]) -> 
     !exclude_filters.iter().any(|f| project_lower.contains(&f.to_lowercase()))
 }
 
+/// Returns true if event should NOT be excluded based on person exclude filters.
+/// Returns true if no exclude filters are set.
 fn matches_exclude_filter(event: &Event, exclude_filters: &[String]) -> bool {
     let Some(person) = extract_person(&event.summary) else {
         return true;
