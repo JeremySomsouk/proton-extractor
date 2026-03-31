@@ -447,6 +447,23 @@ fn validate_month(month: Option<u32>) -> io::Result<()> {
     Ok(())
 }
 
+fn validate_time_filter(time_str: &str, flag_name: &str) -> io::Result<()> {
+    if let Some((hours, minutes)) = parse_time(time_str) {
+        if hours > 23 || minutes > 59 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("--{} must be HH:MM format (00:00-23:59), got '{}'", flag_name, time_str),
+            ));
+        }
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("--{} must be in HH:MM format (e.g., '09:00' or '17:30'), got '{}'", flag_name, time_str),
+        ))
+    }
+}
+
 fn validate_ics_file(path: &Path) -> io::Result<()> {
     let extension = path
         .extension()
@@ -1893,6 +1910,20 @@ fn main() -> io::Result<()> {
 
     validate_date_range(&args.from, &args.to)?;
     validate_month(args.month)?;
+
+    // Validate time filters
+    if let Some(ref t) = args.start_after {
+        validate_time_filter(t, "start-after")?;
+    }
+    if let Some(ref t) = args.start_before {
+        validate_time_filter(t, "start-before")?;
+    }
+    if let Some(ref t) = args.end_after {
+        validate_time_filter(t, "end-after")?;
+    }
+    if let Some(ref t) = args.end_before {
+        validate_time_filter(t, "end-before")?;
+    }
 
     let mut all_raw_events = Vec::new();
 
@@ -4470,6 +4501,34 @@ mod tests {
         // Include recurring filter: only pass recurring events
         assert!(matches_include_recurring_filter(&recurring_event, true));
         assert!(!matches_include_recurring_filter(&non_recurring_event, true));
+    }
+
+    #[test]
+    fn test_validate_time_filter_valid() {
+        assert!(validate_time_filter("00:00", "start-after").is_ok());
+        assert!(validate_time_filter("09:00", "start-before").is_ok());
+        assert!(validate_time_filter("12:30", "end-after").is_ok());
+        assert!(validate_time_filter("23:59", "end-before").is_ok());
+        assert!(validate_time_filter("9:5", "test").is_ok()); // single digit
+    }
+
+    #[test]
+    fn test_validate_time_filter_invalid() {
+        // Invalid format (non-parseable)
+        let err = validate_time_filter("invalid", "start-after").unwrap_err();
+        assert!(err.to_string().contains("HH:MM format"));
+
+        // Invalid hours (> 23) - parse_time returns None, so format error
+        let err = validate_time_filter("25:00", "start-after").unwrap_err();
+        assert!(err.to_string().contains("HH:MM format"));
+
+        // Invalid minutes (>= 60) - parse_time returns None, so format error
+        let err = validate_time_filter("09:60", "start-before").unwrap_err();
+        assert!(err.to_string().contains("HH:MM format"));
+
+        // Missing parts
+        let err = validate_time_filter("09", "end-after").unwrap_err();
+        assert!(err.to_string().contains("HH:MM format"));
     }
 
     #[test]
