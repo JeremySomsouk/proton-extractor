@@ -225,6 +225,10 @@ struct Args {
     #[arg(long)]
     group_by_person: bool,
 
+    /// Group output by project instead of by month
+    #[arg(long)]
+    group_by_project: bool,
+
     /// Filter by ISO week number (1-53), optionally with year (e.g., "10" or "2024-W10")
     #[arg(long, alias = "iso-week")]
     week_number: Option<String>,
@@ -851,6 +855,16 @@ fn group_by_person<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>>
         by_person.entry(person).or_default().push(*event);
     }
     by_person
+}
+
+/// Groups events by project, sorted alphabetically; events without project go to "(none)"
+fn group_by_project<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>> {
+    let mut by_project: BTreeMap<String, Vec<&'a Event>> = BTreeMap::new();
+    for event in events {
+        let project = extract_project(&event.summary).unwrap_or("(none)").to_string();
+        by_project.entry(project).or_default().push(*event);
+    }
+    by_project
 }
 
 fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yesterday: &NaiveDateTime, tomorrow: &NaiveDateTime) -> bool {
@@ -2124,6 +2138,28 @@ fn main() -> io::Result<()> {
                     writeln!(out_writer)?;
                     writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
                 }
+            } else if args.group_by_project {
+                // Group by project instead of month if --group-by-project is set
+                let by_project = group_by_project(&filtered);
+                for (project, events) in &by_project {
+                    let project_total: i64 = events.iter().filter_map(|e| event_duration_minutes(e)).sum();
+                    writeln!(out_writer)?;
+                    writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {{{}}} ---", project)))?;
+                    
+                    if !args.quiet && !args.sum_only {
+                        for event in events {
+                            if let Some(mins) = event_duration_minutes(event) {
+                                writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                            }
+                        }
+                    }
+                    writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(project_total)), colored(color::BOLD, "TOTAL"))?;
+                }
+                
+                if grand_total_minutes > 0 {
+                    writeln!(out_writer)?;
+                    writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
+                }
             } else {
             for ((year, _month), summary) in &grouped {
                 writeln!(out_writer)?;
@@ -3281,5 +3317,40 @@ mod tests {
         assert!(!matches_duration_filter(&short_event, &min_30m, &max_3h)); // 15min < 30m
         assert!(matches_duration_filter(&medium_event, &min_30m, &max_3h)); // 1h in range
         assert!(!matches_duration_filter(&long_event, &min_30m, &max_3h)); // 4h > 3h
+    }
+
+    #[test]
+    fn test_group_by_project() {
+        use super::group_by_project;
+
+        let events = vec![
+            Event::new(
+                "Meeting {Alpha}".to_string(),
+                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            ),
+            Event::new(
+                "Standup {Alpha}".to_string(),
+                NaiveDate::from_ymd_opt(2024, 3, 16).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 16).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            ),
+            Event::new(
+                "Workshop {Beta}".to_string(),
+                NaiveDate::from_ymd_opt(2024, 3, 17).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 17).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            ),
+            Event::new(
+                "No project meeting".to_string(),
+                NaiveDate::from_ymd_opt(2024, 3, 18).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 18).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            ),
+        ];
+        let event_refs: Vec<_> = events.iter().collect();
+        let grouped = group_by_project(&event_refs);
+
+        assert_eq!(grouped.len(), 3); // Alpha, Beta, (none)
+        assert_eq!(grouped.get("Alpha").unwrap().len(), 2);
+        assert_eq!(grouped.get("Beta").unwrap().len(), 1);
+        assert_eq!(grouped.get("(none)").unwrap().len(), 1);
     }
 }
