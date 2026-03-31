@@ -3184,8 +3184,12 @@ fn main() -> io::Result<()> {
         }
         let mut sorted: Vec<_> = persons.into_iter().collect();
         sorted.sort();
+        let count = sorted.len();
         for person in sorted {
             writeln!(out_writer, "{}", person)?;
+        }
+        if count > 0 {
+            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} person{}", count, if count == 1 {""} else {"s"})));
         }
         return Ok(());
     }
@@ -3200,8 +3204,12 @@ fn main() -> io::Result<()> {
         }
         let mut sorted: Vec<_> = projects.into_iter().collect();
         sorted.sort();
+        let count = sorted.len();
         for project in sorted {
             writeln!(out_writer, "{}", project)?;
+        }
+        if count > 0 {
+            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} project{}", count, if count == 1 {""} else {"s"})));
         }
         return Ok(());
     }
@@ -3218,8 +3226,12 @@ fn main() -> io::Result<()> {
         }
         let mut sorted: Vec<_> = locations.into_iter().collect();
         sorted.sort();
+        let count = sorted.len();
         for location in sorted {
             writeln!(out_writer, "{}", location)?;
+        }
+        if count > 0 {
+            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} location{}", count, if count == 1 {""} else {"s"})));
         }
         return Ok(());
     }
@@ -3236,8 +3248,12 @@ fn main() -> io::Result<()> {
         }
         let mut sorted: Vec<_> = categories.into_iter().collect();
         sorted.sort();
+        let count = sorted.len();
         for category in sorted {
             writeln!(out_writer, "{}", category)?;
+        }
+        if count > 0 {
+            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} categor{}", count, if count == 1 {"y"} else {"ies"})));
         }
         return Ok(());
     }
@@ -3271,6 +3287,13 @@ fn main() -> io::Result<()> {
                 writeln!(out_writer, "  {{{}}}", project)?;
             }
         }
+        let total = sorted_persons.len() + sorted_projects.len();
+        if total > 0 {
+            eprintln!("{} {} found ({} persons, {} projects)", colored(color::DIM, "→"), 
+                colored(color::CYAN, format!("{} tag{}", total, if total == 1 {""} else {"s"})),
+                colored(color::CYAN, sorted_persons.len().to_string()),
+                colored(color::CYAN, sorted_projects.len().to_string()));
+        }
         return Ok(());
     }
 
@@ -3280,8 +3303,12 @@ fn main() -> io::Result<()> {
         for event in &filtered {
             years.insert(event.start.year());
         }
+        let count = years.len();
         for year in years {
             writeln!(out_writer, "{}", year)?;
+        }
+        if count > 0 {
+            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} year{}", count, if count == 1 {""} else {"s"})));
         }
         return Ok(());
     }
@@ -3296,14 +3323,19 @@ fn main() -> io::Result<()> {
                 }
             }
         }
+        let count = uids.len();
         for uid in uids {
             writeln!(out_writer, "{}", uid)?;
+        }
+        if count > 0 {
+            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} UID{}", count, if count == 1 {""} else {"s"})));
         }
         return Ok(());
     }
 
     // List all unique events if --list-events is requested
     if args.list_events {
+        let count = filtered.len();
         for event in &filtered {
             writeln!(
                 out_writer,
@@ -3312,6 +3344,9 @@ fn main() -> io::Result<()> {
                 event.summary,
                 format_hours(event_duration_minutes(event).unwrap_or(0))
             )?;
+        }
+        if count > 0 {
+            eprintln!("{} {} listed", colored(color::DIM, "→"), colored(color::CYAN, format!("{} event{}", count, if count == 1 {""} else {"s"})));
         }
         return Ok(());
     }
