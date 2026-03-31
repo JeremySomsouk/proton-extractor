@@ -160,7 +160,7 @@ fn print_list_summary(count: usize, label: &str) {
     } else {
         &format!("{}s", label)
     };
-    eprintln!(
+    println!(
         "{} {} {} found",
         colored(color::GREEN, "✓"),
         colored(color::BOLD, count.to_string()),
@@ -536,7 +536,7 @@ struct Args {
     #[arg(long, conflicts_with_all = ["quiet", "sum_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "stats", "top", "bottom", "group_by_person", "group_by_project", "group_by_weekday", "group_by_location", "group_by_category", "dry_run", "silent"])]
     total_only: bool,
 
-    /// Force overwrite of output file without confirmation
+    /// Auto-confirm destructive actions (overwrite files, delete data)
     #[arg(short = 'y', long = "yes", visible_alias = "force")]
     yes: bool,
 
