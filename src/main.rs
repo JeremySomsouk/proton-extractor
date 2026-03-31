@@ -362,6 +362,10 @@ struct Args {
     #[arg(short, long, value_enum, default_value = "text")]
     format: OutputFormat,
 
+    /// Output JSON format (shorthand for --format json)
+    #[arg(short = 'j', long = "json", hide = true)]
+    json_format: bool,
+
     /// Exclude events matching this person name (case-insensitive, can be repeated)
     #[arg(long)]
     exclude_person: Vec<String>,
@@ -3824,7 +3828,14 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
-    match args.format {
+    // Handle --json / -j flag
+    let effective_format = if args.json_format {
+        OutputFormat::Json
+    } else {
+        args.format.clone()
+    };
+
+    match effective_format {
         OutputFormat::Csv => {
             let mut wtr = csv::Writer::from_writer(out_writer);
 
