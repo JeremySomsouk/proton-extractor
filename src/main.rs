@@ -334,6 +334,10 @@ struct Args {
     #[arg(long)]
     group_by_category: bool,
 
+    /// Group output by year instead of by month
+    #[arg(long)]
+    group_by_year: bool,
+
     /// Filter by ISO week number (1-53), optionally with year (e.g., "10" or "2024-W10")
     #[arg(long, alias = "iso-week")]
     week_number: Option<String>,
@@ -1111,6 +1115,15 @@ fn group_by_category<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event
         by_category.entry(category).or_default().push(*event);
     }
     by_category
+}
+
+/// Groups events by year, sorted chronologically
+fn group_by_year<'a>(events: &'a [&Event]) -> BTreeMap<i32, Vec<&'a Event>> {
+    let mut by_year: BTreeMap<i32, Vec<&'a Event>> = BTreeMap::new();
+    for event in events {
+        by_year.entry(event.start.year()).or_default().push(*event);
+    }
+    by_year
 }
 
 fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yesterday: &NaiveDateTime, tomorrow: &NaiveDateTime) -> bool {
@@ -3005,6 +3018,28 @@ fn main() -> io::Result<()> {
                         }
                     }
                     writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(category_total)), colored(color::BOLD, "TOTAL"))?;
+                }
+                
+                if grand_total_minutes > 0 {
+                    writeln!(out_writer)?;
+                    writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
+                }
+            } else if args.group_by_year {
+                // Group by year instead of month if --group-by-year is set
+                let by_year = group_by_year(&filtered);
+                for (year, events) in &by_year {
+                    let year_total: i64 = events.iter().filter_map(|e| event_duration_minutes(e)).sum();
+                    writeln!(out_writer)?;
+                    writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {} ---", year)))?;
+                    
+                    if !args.quiet && !args.sum_only {
+                        for event in events {
+                            if let Some(mins) = event_duration_minutes(event) {
+                                writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                            }
+                        }
+                    }
+                    writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(year_total)), colored(color::BOLD, "TOTAL"))?;
                 }
                 
                 if grand_total_minutes > 0 {
