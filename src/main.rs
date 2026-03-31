@@ -133,7 +133,7 @@ fn print_banner(message: &str) {
     println!(
         "{} {}",
         colored(color::CYAN, "━━━"),
-        colored(color::CYAN, message)
+        colored(color::BOLD, message)
     );
 }
 
