@@ -592,6 +592,11 @@ fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::
                 ),
             ));
         }
+        // Warn if date range is very large (> 2 years)
+        let days_diff = (*to_date - *from_date).num_days();
+        if days_diff > 730 {
+            debug!("Large date range detected: {} days", days_diff);
+        }
     }
     Ok(())
 }
@@ -2783,6 +2788,10 @@ fn main() -> io::Result<()> {
                         if !response.is_empty() && !response.eq("y") && !response.eq("yes") {
                             eprintln!();
                             print_info("Operation cancelled");
+                            eprintln!("  {} Use {} or {} to skip this prompt",
+                                colored(color::DIM, "→"),
+                                colored(color::CYAN, "--yes"),
+                                colored(color::CYAN, "--force"));
                             std::process::exit(1);
                         }
                     }
