@@ -298,7 +298,7 @@ Enable shell completion for faster CLI usage:
   proton-extractor calendar.ics -J                           # List all projects
   proton-extractor calendar.ics -E                           # List all events
   proton-extractor calendar.ics -L                           # List all locations
-  proton-extractor calendar.ics --list-tags                  # List all tags
+  proton-extractor calendar.ics -T                           # List all tags
 
   # ── Grouping ─────────────────────────────────────────────────────────────────
   proton-extractor calendar.ics --group-by-person            # Group by person
@@ -425,7 +425,7 @@ struct Args {
     list_events: bool,
 
     /// List all unique locations found in events
-    #[arg(long)]
+    #[arg(short = 'L', long)]
     list_locations: bool,
 
     /// List all unique categories found in events
@@ -566,7 +566,7 @@ struct Args {
     bottom: Option<usize>,
 
     /// Quick filter: show only today's events
-    #[arg(long)]
+    #[arg(short = 't', long)]
     today: bool,
 
     /// Quick filter: show only yesterday's events
@@ -582,7 +582,7 @@ struct Args {
     weekly: bool,
 
     /// Quick filter: show only last week's events (Monday to Sunday)
-    #[arg(long)]
+    #[arg(short = 'l', long)]
     last_week: bool,
 
     /// Show events from the last N days (including today)
@@ -606,7 +606,7 @@ struct Args {
     stdin: bool,
 
     /// List all unique tags found in events (shows [person] and {project} separately)
-    #[arg(long)]
+    #[arg(short = 'T', long)]
     list_tags: bool,
 
     /// List all unique years found in events
