@@ -1939,8 +1939,7 @@ fn main() -> io::Result<()> {
     // Create output directory if --output-dir is specified
     if let Some(ref output_dir) = args.output_dir {
         std::fs::create_dir_all(output_dir)
-            .map_err(|e| io::Error::new(
-                io::ErrorKind::Other,
+            .map_err(|e| io::Error::other(
                 format!("Failed to create output directory '{}': {}", output_dir.display(), e)
             ))?;
     }
