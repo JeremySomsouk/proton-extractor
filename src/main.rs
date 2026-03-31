@@ -1053,6 +1053,8 @@ fn weekday_abbrev_to_num(day: &str) -> Option<u32> {
     }
 }
 
+/// Check if event's weekday matches any of the given weekday abbreviations (case-insensitive).
+/// Returns true if weekdays list is empty.
 fn matches_weekday_filter(event: &Event, weekdays: &[String]) -> bool {
     if weekdays.is_empty() {
         return true;
@@ -1063,14 +1065,13 @@ fn matches_weekday_filter(event: &Event, weekdays: &[String]) -> bool {
     })
 }
 
+/// Check if event's weekday matches any of the exclude_weekdays (negation of matches_weekday_filter).
+/// Returns true (keep event) if no exclude filters are set.
 fn matches_exclude_weekday_filter(event: &Event, exclude_weekdays: &[String]) -> bool {
     if exclude_weekdays.is_empty() {
-        return true;
+        return true; // Nothing to exclude
     }
-    let event_weekday = event.start.weekday().num_days_from_monday() + 1;
-    !exclude_weekdays.iter().any(|day| {
-        weekday_abbrev_to_num(day).map(|wd| wd == event_weekday).unwrap_or(false)
-    })
+    !matches_weekday_filter(event, exclude_weekdays)
 }
 
 fn matches_exclude_summary_filter(event: &Event, exclude_filters: &[String]) -> bool {
