@@ -401,7 +401,7 @@ struct Args {
     total_only: bool,
 
     /// Force overwrite of output file without confirmation
-    #[arg(short = 'y', long = "yes", alias = "force", visible_alias = "force")]
+    #[arg(short = 'y', long = "yes", visible_alias = "force")]
     yes: bool,
 
     /// Output file path (default: stdout)
