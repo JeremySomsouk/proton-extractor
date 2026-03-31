@@ -784,3 +784,382 @@ fn test_cli_sort_reverse() {
     cmd.assert()
         .success();
 }
+
+#[test]
+fn test_cli_today_filter() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--today");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_weekly_filter() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--weekly");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_output_file() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    let temp_output = std::env::temp_dir().join("proton_test_output.txt");
+    
+    cmd.arg(ics_path)
+        .arg("--output")
+        .arg(&temp_output);
+    
+    cmd.assert()
+        .success();
+    
+    assert!(temp_output.exists());
+    std::fs::read_to_string(&temp_output).unwrap().contains("March");
+    
+    std::fs::remove_file(temp_output).ok();
+}
+
+#[test]
+fn test_cli_compact_json() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--format")
+        .arg("json")
+        .arg("--compact");
+    
+    cmd.assert()
+        .success();
+    let output = cmd.output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Compact JSON should not have newlines between properties
+    assert!(stdout.contains("\"grand_total_minutes\""));
+}
+
+#[test]
+fn test_cli_group_by_weekday() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--group-by-weekday");
+    
+    cmd.assert()
+        .success();
+    let output = cmd.output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Monday") || stdout.contains("Friday"));
+}
+
+#[test]
+fn test_cli_group_by_location() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--group-by-location");
+    
+    cmd.assert()
+        .success();
+    let output = cmd.output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Office") || stdout.contains("Remote"));
+}
+
+#[test]
+fn test_cli_group_by_category() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--group-by-category");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_group_by_year() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--group-by-year");
+    
+    cmd.assert()
+        .success();
+    let output = cmd.output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("2024"));
+}
+
+#[test]
+fn test_cli_recent_filter() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--recent")
+        .arg("7");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_start_time_filter() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--start-after")
+        .arg("08:00")
+        .arg("--start-before")
+        .arg("18:00");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_end_time_filter() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--end-after")
+        .arg("10:00")
+        .arg("--end-before")
+        .arg("20:00");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_year_filter() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--year")
+        .arg("2024");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_month_filter() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--year")
+        .arg("2024")
+        .arg("--month")
+        .arg("3");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_invalid_month() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--year")
+        .arg("2024")
+        .arg("--month")
+        .arg("13");
+    
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("between 1 and 12"));
+}
+
+#[test]
+fn test_cli_invalid_time_format() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--start-after")
+        .arg("invalid");
+    
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("HH:MM"));
+}
+
+#[test]
+fn test_cli_include_summary() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--include-summary")
+        .arg("standup");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_only_untagged() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::complex_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--only-untagged");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_status_filter() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::complex_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--status")
+        .arg("confirmed");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_exclude_status() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::complex_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--exclude-status")
+        .arg("tentative");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_dedupe() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::complex_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--dedupe");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_dedupe_by_summary() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::complex_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--dedupe-by-summary");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_bottom_events() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--bottom")
+        .arg("3");
+    
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Bottom 3"));
+}
+
+#[test]
+fn test_cli_week_number_filter() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--week-number")
+        .arg("11");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_list_events() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--list-events");
+    
+    cmd.assert()
+        .success();
+    let output = cmd.output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("2024-03-15"));
+}
+
+#[test]
+fn test_cli_exclude_weekdays() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::complex_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--exclude-weekdays")
+        .arg("SA,SU");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_invalid_duration_format() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--min-duration")
+        .arg("invalid");
+    
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid --min-duration"));
+}
+
+#[test]
+fn test_cli_combined_filters() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--person")
+        .arg("Alice")
+        .arg("--project")
+        .arg("Alpha")
+        .arg("--quiet");
+    
+    cmd.assert()
+        .success();
+}
