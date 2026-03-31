@@ -3531,11 +3531,12 @@ fn main() -> io::Result<()> {
         let total = person_count + project_count;
         if total > 0 {
             eprintln!(
-                "{} {} {} found {}",
+                "{} {} {} found ({}/{} projects)",
                 colored(color::GREEN, "✓"),
-                colored(color::BOLD, format!("{} tag{}", total, if total == 1 {""} else {"s"})),
-                colored(color::DIM, "found"),
-                colored(color::DIM, format!("({} persons, {} projects)", person_count, project_count))
+                colored(color::BOLD, format!("{}", total)),
+                if total == 1 { "tag" } else { "tags" },
+                colored(color::BOLD, person_count.to_string()),
+                colored(color::BOLD, project_count.to_string())
             );
         }
         return Ok(());
