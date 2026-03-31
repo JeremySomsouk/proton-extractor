@@ -256,6 +256,14 @@ struct Args {
     #[arg(long)]
     group_by_weekday: bool,
 
+    /// Group output by location instead of by month
+    #[arg(long)]
+    group_by_location: bool,
+
+    /// Group output by category instead of by month
+    #[arg(long)]
+    group_by_category: bool,
+
     /// Filter by ISO week number (1-53), optionally with year (e.g., "10" or "2024-W10")
     #[arg(long, alias = "iso-week")]
     week_number: Option<String>,
@@ -955,6 +963,30 @@ fn group_by_weekday<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>
         by_weekday.entry(day_name).or_default().push(*event);
     }
     by_weekday
+}
+
+/// Groups events by location, sorted alphabetically; events without location go to "(none)"
+fn group_by_location<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>> {
+    let mut by_location: BTreeMap<String, Vec<&'a Event>> = BTreeMap::new();
+    for event in events {
+        let location = event.location.clone().unwrap_or_else(|| "(none)".to_string());
+        by_location.entry(location).or_default().push(*event);
+    }
+    by_location
+}
+
+/// Groups events by category, sorted alphabetically; events without category go to "(none)"
+fn group_by_category<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>> {
+    let mut by_category: BTreeMap<String, Vec<&'a Event>> = BTreeMap::new();
+    for event in events {
+        let category = if event.categories.is_empty() {
+            "(none)".to_string()
+        } else {
+            event.categories.join(", ")
+        };
+        by_category.entry(category).or_default().push(*event);
+    }
+    by_category
 }
 
 fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yesterday: &NaiveDateTime, tomorrow: &NaiveDateTime) -> bool {
@@ -2441,6 +2473,50 @@ fn main() -> io::Result<()> {
                         }
                     }
                     writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(day_total)), colored(color::BOLD, "TOTAL"))?;
+                }
+                
+                if grand_total_minutes > 0 {
+                    writeln!(out_writer)?;
+                    writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
+                }
+            } else if args.group_by_location {
+                // Group by location instead of month if --group-by-location is set
+                let by_location = group_by_location(&filtered);
+                for (location, events) in &by_location {
+                    let location_total: i64 = events.iter().filter_map(|e| event_duration_minutes(e)).sum();
+                    writeln!(out_writer)?;
+                    writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {} ---", location)))?;
+                    
+                    if !args.quiet && !args.sum_only {
+                        for event in events {
+                            if let Some(mins) = event_duration_minutes(event) {
+                                writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                            }
+                        }
+                    }
+                    writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(location_total)), colored(color::BOLD, "TOTAL"))?;
+                }
+                
+                if grand_total_minutes > 0 {
+                    writeln!(out_writer)?;
+                    writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
+                }
+            } else if args.group_by_category {
+                // Group by category instead of month if --group-by-category is set
+                let by_category = group_by_category(&filtered);
+                for (category, events) in &by_category {
+                    let category_total: i64 = events.iter().filter_map(|e| event_duration_minutes(e)).sum();
+                    writeln!(out_writer)?;
+                    writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {} ---", category)))?;
+                    
+                    if !args.quiet && !args.sum_only {
+                        for event in events {
+                            if let Some(mins) = event_duration_minutes(event) {
+                                writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                            }
+                        }
+                    }
+                    writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(category_total)), colored(color::BOLD, "TOTAL"))?;
                 }
                 
                 if grand_total_minutes > 0 {
