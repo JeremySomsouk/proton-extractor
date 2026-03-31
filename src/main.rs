@@ -254,6 +254,10 @@ struct Args {
     #[arg(long, conflicts_with_all = ["quiet", "sum_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "stats", "top", "bottom", "group_by_person", "group_by_project", "group_by_weekday", "group_by_location", "group_by_category", "dry_run"])]
     total_only: bool,
 
+    /// Force overwrite of output file without confirmation
+    #[arg(long)]
+    force: bool,
+
     /// Output file path (default: stdout)
     #[arg(short = 'o', long)]
     output: Option<PathBuf>,
@@ -2482,16 +2486,30 @@ fn main() -> io::Result<()> {
     // Setup output: file or stdout
     let out_writer: Box<dyn Write> = match &output_path {
         Some(path) => {
+            // Check if file exists and prompt for confirmation unless --force is set
+            if path.exists() && !args.force {
+                eprintln!(
+                    "{} File '{}' already exists.",
+                    colored(color::YELLOW, "warning:"),
+                    path.display()
+                );
+                eprint!("  {} Overwrite? [y/N] ", colored(color::DIM, "→"));
+                io::stderr().flush().ok();
+                let mut response = String::new();
+                if io::stdin().read_line(&mut response).is_err() {
+                    std::process::exit(1);
+                }
+                if !response.trim().eq_ignore_ascii_case("y") {
+                    eprintln!("  {} Aborted.", colored(color::DIM, "→"));
+                    std::process::exit(1);
+                }
+            }
             let file = File::create(path).map_err(|e| {
                 io::Error::new(
                     io::ErrorKind::Other,
                     format!("Failed to create output file '{}': {}", path.display(), e),
                 )
             })?;
-            // Success message for file output (but not in quiet mode)
-            if !args.quiet {
-                print_success(&format!("Writing to '{}'", path.display()));
-            }
             Box::new(file)
         }
         None => Box::new(std::io::stdout()),
