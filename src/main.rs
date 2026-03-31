@@ -2559,7 +2559,7 @@ fn main() -> io::Result<()> {
         validated_count += 1;
         if let Err(e) = validate_date_range(&args.from, &args.to) {
             has_errors = true;
-            print_error(&e.to_string());
+            print_error(e.to_string());
             print_hints(&["--from must be before or equal to --to"][..]);
         }
         
@@ -2567,7 +2567,7 @@ fn main() -> io::Result<()> {
         validated_count += 1;
         if let Err(e) = validate_month(args.month) {
             has_errors = true;
-            print_error(&e.to_string());
+            print_error(e.to_string());
             print_hints(&["Month must be 1-12 (e.g., --month 3 for March)"][..]);
         }
         
@@ -2575,7 +2575,7 @@ fn main() -> io::Result<()> {
         validated_count += 1;
         if let Err(e) = validate_week_number(&args.week_number) {
             has_errors = true;
-            print_error(&e.to_string());
+            print_error(e.to_string());
             print_hints(&["Format: W10 (current year) or 2024-W10 (specific year)"][..]);
         }
         
@@ -2583,12 +2583,12 @@ fn main() -> io::Result<()> {
         validated_count += 2;
         if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
             has_errors = true;
-            print_error(&e.to_string());
+            print_error(e.to_string());
             print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
         }
         if let Err(e) = validate_weekdays(&args.exclude_weekdays, "exclude-weekdays") {
             has_errors = true;
-            print_error(&e.to_string());
+            print_error(e.to_string());
             print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
         }
 
@@ -2597,25 +2597,25 @@ fn main() -> io::Result<()> {
         if let Some(ref t) = args.start_after {
             if let Err(e) = validate_time_filter(t, "start-after") {
                 has_errors = true;
-                print_error(&e.to_string());
+                print_error(e.to_string());
             }
         }
         if let Some(ref t) = args.start_before {
             if let Err(e) = validate_time_filter(t, "start-before") {
                 has_errors = true;
-                print_error(&e.to_string());
+                print_error(e.to_string());
             }
         }
         if let Some(ref t) = args.end_after {
             if let Err(e) = validate_time_filter(t, "end-after") {
                 has_errors = true;
-                print_error(&e.to_string());
+                print_error(e.to_string());
             }
         }
         if let Some(ref t) = args.end_before {
             if let Err(e) = validate_time_filter(t, "end-before") {
                 has_errors = true;
-                print_error(&e.to_string());
+                print_error(e.to_string());
             }
         }
 
@@ -2624,7 +2624,7 @@ fn main() -> io::Result<()> {
         if let Some(ref s) = args.min_duration {
             if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
                 has_errors = true;
-                print_error(&format!("invalid '{}' for --min-duration", s));
+                print_error(format!("invalid '{}' for --min-duration", s));
                 print_hints(&[
                     "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
                     "Examples: --min-duration 30m  --min-duration 1h30m"
@@ -2634,7 +2634,7 @@ fn main() -> io::Result<()> {
         if let Some(ref s) = args.max_duration {
             if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
                 has_errors = true;
-                print_error(&format!("invalid '{}' for --max-duration", s));
+                print_error(format!("invalid '{}' for --max-duration", s));
                 print_hints(&[
                     "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
                     "Examples: --max-duration 4h  --max-duration 8h"
@@ -2689,27 +2689,27 @@ fn main() -> io::Result<()> {
     // Validate filter arguments early (before checking for files)
     // This provides better error messages for invalid filter values
     if let Err(e) = validate_date_range(&args.from, &args.to) {
-        print_error(&e.to_string());
+        print_error(e.to_string());
         print_hints(&["--from must be before or equal to --to"][..]);
         std::process::exit(1);
     }
     if let Err(e) = validate_month(args.month) {
-        print_error(&e.to_string());
+        print_error(e.to_string());
         print_hints(&["Month must be 1-12 (e.g., --month 3 for March)"][..]);
         std::process::exit(1);
     }
     if let Err(e) = validate_week_number(&args.week_number) {
-        print_error(&e.to_string());
+        print_error(e.to_string());
         print_hints(&["Format: W10 (current year) or 2024-W10 (specific year)"][..]);
         std::process::exit(1);
     }
     if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
-        print_error(&e.to_string());
+        print_error(e.to_string());
         print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
         std::process::exit(1);
     }
     if let Err(e) = validate_weekdays(&args.exclude_weekdays, "exclude-weekdays") {
-        print_error(&e.to_string());
+        print_error(e.to_string());
         print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
         std::process::exit(1);
     }
@@ -2717,28 +2717,28 @@ fn main() -> io::Result<()> {
     // Validate time filters
     if let Some(ref t) = args.start_after {
         if let Err(e) = validate_time_filter(t, "start-after") {
-            print_error(&e.to_string());
+            print_error(e.to_string());
             print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.start_before {
         if let Err(e) = validate_time_filter(t, "start-before") {
-            print_error(&e.to_string());
+            print_error(e.to_string());
             print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.end_after {
         if let Err(e) = validate_time_filter(t, "end-after") {
-            print_error(&e.to_string());
+            print_error(e.to_string());
             print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.end_before {
         if let Err(e) = validate_time_filter(t, "end-before") {
-            print_error(&e.to_string());
+            print_error(e.to_string());
             print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
             std::process::exit(1);
         }
@@ -2747,7 +2747,7 @@ fn main() -> io::Result<()> {
     // Validate duration filters
     if let Some(ref s) = args.min_duration {
         if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
-            print_error(&format!("invalid '{}' for --min-duration", s));
+            print_error(format!("invalid '{}' for --min-duration", s));
             print_hints(&[
                 "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
                 "Examples: --min-duration 30m  --min-duration 1h30m"
@@ -2757,7 +2757,7 @@ fn main() -> io::Result<()> {
     }
     if let Some(ref s) = args.max_duration {
         if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
-            print_error(&format!("invalid '{}' for --max-duration", s));
+            print_error(format!("invalid '{}' for --max-duration", s));
             print_hints(&[
                 "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
                 "Examples: --max-duration 4h  --max-duration 8h"
@@ -2818,7 +2818,7 @@ fn main() -> io::Result<()> {
         // Validate file extensions before processing
         for path in &args.files {
             if let Err(e) = validate_ics_file(path) {
-                print_error(&format!("'{}': {}", path.display(), e));
+                print_error(format!("'{}': {}", path.display(), e));
                 print_hints(&["Expected: .ics file"][..]);
                 std::process::exit(1);
             }
@@ -2906,7 +2906,7 @@ fn main() -> io::Result<()> {
                         // Suppress parse errors in quiet mode
                     }
                     Err(e) => {
-                        print_warn(&format!("Failed to parse '{}': {}", path.display(), e));
+                        print_warn(format!("Failed to parse '{}': {}", path.display(), e));
                     }
                 }
             }
@@ -2979,7 +2979,7 @@ fn main() -> io::Result<()> {
         match parse_human_duration(s).or_else(|| parse_duration(s)) {
             Some(d) => Some(d),
             None => {
-                print_error(&format!("invalid '{}' for --min-duration", s));
+                print_error(format!("invalid '{}' for --min-duration", s));
                 print_hints(&[
                     "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
                     "Examples: --min-duration 30m  --min-duration 1h30m"
@@ -2995,7 +2995,7 @@ fn main() -> io::Result<()> {
         match parse_human_duration(s).or_else(|| parse_duration(s)) {
             Some(d) => Some(d),
             None => {
-                print_error(&format!("invalid '{}' for --max-duration", s));
+                print_error(format!("invalid '{}' for --max-duration", s));
                 print_hints(&[
                     "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
                     "Examples: --max-duration 4h  --max-duration 8h"
@@ -3012,7 +3012,7 @@ fn main() -> io::Result<()> {
         if min.num_minutes() > max.num_minutes() {
             let min_str = format!("{}h {}m", min.num_minutes() / 60, min.num_minutes() % 60);
             let max_str = format!("{}h {}m", max.num_minutes() / 60, max.num_minutes() % 60);
-            print_error(&format!("--min-duration ({}) must be ≤ --max-duration ({})", min_str, max_str));
+            print_error(format!("--min-duration ({}) must be ≤ --max-duration ({})", min_str, max_str));
             print_hints(&["Ensure --min-duration value is less than or equal to --max-duration"][..]);
             std::process::exit(1);
         }
@@ -3035,7 +3035,7 @@ fn main() -> io::Result<()> {
                     if has_contents {
                         // Non-interactive mode: fail safely
                         if !atty::is(atty::Stream::Stdin) {
-                            print_error(&format!(
+                            print_error(format!(
                                 "Output directory '{}' is not empty (use --yes or --force to overwrite)",
                                 output_dir.display()
                             ));
@@ -3102,7 +3102,7 @@ fn main() -> io::Result<()> {
             if path.exists() && !args.yes {
                 // Non-interactive mode: fail safely instead of hanging
                 if !atty::is(atty::Stream::Stdin) {
-                    print_error(&format!(
+                    print_error(format!(
                         "Output file '{}' already exists (use --yes or --force to overwrite)",
                         path.display()
                     ));
@@ -3261,70 +3261,51 @@ fn main() -> io::Result<()> {
     if filtered.is_empty() {
         if !args.quiet && !args.silent {
             eprintln!();
-            eprintln!("{}  {}", colored(color::YELLOW, "╭─"), colored(color::DIM, "─".repeat(30)));
-            eprintln!("{}  {}", colored(color::YELLOW, "│"), colored(color::CYAN, "no events found"));
-            eprintln!("{}  {}", colored(color::YELLOW, "╰─"), colored(color::DIM, "─".repeat(30)));
-            eprintln!();
-            eprintln!("  {} Use {} to debug argument issues", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [your args]"));
-            eprintln!("  {} Quick check: {} (show all events)", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor [file] -d all"));
-        }
-
-        // Show active date context if a date filter is active
-        if !args.quiet && !args.silent {
+            print_notice("No events found");
+            
+            // Show what date context is active
             match &effective_date {
-                DateFilter::Today => eprintln!("  {}  Showing events for today ({})", colored(color::DIM, "→"), now.format("%Y-%m-%d")),
-                DateFilter::Yesterday => eprintln!("  {}  Showing events for yesterday ({})", colored(color::DIM, "→"), yesterday.format("%Y-%m-%d")),
-                DateFilter::Tomorrow => eprintln!("  {}  Showing events for tomorrow ({})", colored(color::DIM, "→"), tomorrow.format("%Y-%m-%d")),
-                DateFilter::Week => eprintln!("  {}  Showing events for ISO week {} ({} to {})", colored(color::DIM, "→"), now.format("%V"), now.date().year().to_string() + "-W" + &now.format("%V").to_string(), tomorrow.format("%Y-%m-%d")),
-                DateFilter::LastWeek => eprintln!("  {}  Showing events for last week", colored(color::DIM, "→")),
-                DateFilter::Current => eprintln!("  {}  Showing events for {} {}", colored(color::DIM, "→"), now.format("%B"), now.year()),
+                DateFilter::Today => eprintln!("  {} showing today ({})", colored(color::DIM, "→"), now.format("%Y-%m-%d")),
+                DateFilter::Yesterday => eprintln!("  {} showing yesterday ({})", colored(color::DIM, "→"), yesterday.format("%Y-%m-%d")),
+                DateFilter::Tomorrow => eprintln!("  {} showing tomorrow ({})", colored(color::DIM, "→"), tomorrow.format("%Y-%m-%d")),
+                DateFilter::Week => eprintln!("  {} showing ISO week {}", colored(color::DIM, "→"), now.format("%V")),
+                DateFilter::LastWeek => eprintln!("  {} showing last week", colored(color::DIM, "→")),
+                DateFilter::Current => eprintln!("  {} showing {}", colored(color::DIM, "→"), now.format("%B")),
                 DateFilter::Previous => {
                     let (y, m) = if now.month() == 1 { (now.year() - 1, 12) } else { (now.year(), now.month() - 1) };
-                    eprintln!("  {}  Showing events for {} {}", colored(color::DIM, "→"), chrono::Month::try_from(u8::try_from(m).unwrap_or(1)).unwrap_or(chrono::Month::January).name(), y);
+                    eprintln!("  {} showing {} {}", colored(color::DIM, "→"), chrono::Month::try_from(u8::try_from(m).unwrap_or(1)).unwrap_or(chrono::Month::January).name(), y);
                 },
                 DateFilter::All => {}
             }
-
+            
             // Show date range if --from/--to is set
             if let (Some(from), Some(to)) = (&args.from, &args.to) {
-                eprintln!("  {}  Date range: {} to {}", colored(color::DIM, "→"), from, to);
+                eprintln!("  {} date range: {} to {}", colored(color::DIM, "→"), from, to);
             }
 
+            // Context-aware quick fixes
             eprintln!();
-            eprintln!("  {} Try these options:", colored(color::CYAN, "→"));
-
-            // Context-aware suggestions based on active filters
+            eprintln!("  {} Quick fixes:", colored(color::CYAN, "→"));
             if args.today || args.yesterday || args.tomorrow || args.weekly || args.last_week {
-                eprintln!("    {} {:<22} Show all events (no date filter)", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
+                eprintln!("    {} -d all  Show all events", colored(color::DIM, "•"));
             }
             if args.person.is_some() || !args.persons.clone().unwrap_or_default().is_empty() {
-                eprintln!("    {} {:<22} Remove person filter", colored(color::DIM, "•"), colored(color::CYAN, "--person ''"));
+                eprintln!("    {} Remove person filter", colored(color::DIM, "•"));
             }
             if args.project.is_some() {
-                eprintln!("    {} {:<22} Remove project filter", colored(color::DIM, "•"), colored(color::CYAN, "--project ''"));
+                eprintln!("    {} Remove project filter", colored(color::DIM, "•"));
             }
             if args.exclude_recurring {
-                eprintln!("    {} {:<22} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
-            }
-            if args.only_untagged {
-                eprintln!("    {} {:<22} Include tagged events", colored(color::DIM, "•"), colored(color::CYAN, "--only-untagged=false"));
-            }
-            if args.from.is_none() && args.to.is_none() {
-                eprintln!("    {} {:<22} Filter by date range", colored(color::DIM, "•"), colored(color::CYAN, "--from YYYY-MM-DD --to YYYY-MM-DD"));
-            }
-            if args.verbose {
-                eprintln!("    {} {:<22} Disable verbose mode", colored(color::DIM, "•"), colored(color::CYAN, "-v"));
-            } else {
-                eprintln!("    {} {:<22} Show debug info", colored(color::DIM, "•"), colored(color::CYAN, "-v"));
+                eprintln!("    {} --include-recurring  Include recurring", colored(color::DIM, "•"));
             }
             if args.recent.is_some() {
-                eprintln!("    {} {:<22} Show events from last N days (no limit)", colored(color::DIM, "•"), colored(color::CYAN, "--recent 30"));
+                eprintln!("    {} --recent 30  Show last 30 days", colored(color::DIM, "•"));
             }
-
+            if args.from.is_none() && args.to.is_none() {
+                eprintln!("    {} --from/--to  Filter by date range", colored(color::DIM, "•"));
+            }
             eprintln!();
-            eprintln!("  {} Run {} for all filter options",
-                colored(color::DIM, "→"),
-                colored(color::CYAN, "proton-extractor --help"));
+            eprintln!("  {} See {} for all options", colored(color::DIM, "→"), colored(color::CYAN, "--help"));
         }
         return Ok(());
     }
@@ -3341,7 +3322,7 @@ fn main() -> io::Result<()> {
             eprintln!("  {} Check that your .ics files contain valid VEVENT components", colored(color::DIM, "→"));
         } else {
             // Events exist but were filtered out
-            print_notice(&format!("No events match your filters ({} events in {} files)",
+            print_notice(format!("No events match your filters ({} events in {} files)",
                 colored(color::YELLOW, total_raw.to_string()),
                 colored(color::YELLOW, args.files.len().to_string())));
             eprintln!();
