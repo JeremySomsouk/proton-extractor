@@ -15,6 +15,7 @@ tracing-subscriber = "0.3.23"
 clap_complete = "4.6.0"
 serde_yaml = "0.9.34"
 toml = { version = "1.1.0", features = ["preserve_order"] }
+atty = "0.2"
 
 [dev-dependencies]
 assert_cmd = "2.0"

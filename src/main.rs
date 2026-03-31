@@ -73,9 +73,17 @@ fn print_warn(msg: &str) {
     eprintln!("{} {}", colored(color::YELLOW, "warning:"), msg);
 }
 
-/// Styled success message output - confirms completed actions
-fn print_success<S: AsRef<str>>(msg: S) {
-    println!("{} {}", colored(color::GREEN, "✓"), msg.as_ref());
+/// Styled success with count - for export operations
+fn print_exported(count: usize, duration: &str, path: &Path) {
+    let event_label = if count == 1 { "event" } else { "events" };
+    println!(
+        "{} Exported {} {} ({}) → {}",
+        colored(color::GREEN, "✓"),
+        colored(color::YELLOW, count.to_string()),
+        event_label,
+        duration,
+        colored(color::CYAN, path.display().to_string())
+    );
 }
 
 /// Styled info message output - neutral informational messages
@@ -2590,6 +2598,14 @@ fn main() -> io::Result<()> {
             output_file_path = Some(path.clone());
             // Check if file exists and prompt for confirmation unless --force or --yes is set
             if path.exists() && !args.force && !args.yes {
+                // Non-interactive mode: fail safely instead of hanging
+                if !atty::is(atty::Stream::Stdin) {
+                    print_error(&format!(
+                        "Output file '{}' already exists (use --yes or --force to overwrite)",
+                        path.display()
+                    ));
+                    std::process::exit(1);
+                }
                 eprintln!();
                 eprintln!(
                     "{} {}",
@@ -4104,14 +4120,7 @@ fn main() -> io::Result<()> {
         if let Some(ref path) = output_file_path {
             let event_count = filtered.len();
             let duration_str = format_hours(grand_total_minutes);
-            // Consistent success format: "✓ <action> <details>"
-            print_success(format!(
-                "Exported {} {} ({}) → {}",
-                event_count,
-                if event_count == 1 { "event" } else { "events" },
-                duration_str,
-                path.display()
-            ));
+            print_exported(event_count, &duration_str, path);
         }
     }
 
