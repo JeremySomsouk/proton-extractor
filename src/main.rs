@@ -2822,6 +2822,23 @@ fn main() -> io::Result<()> {
             }
         }
 
+        // Validate min <= max duration
+        if let (Some(min_s), Some(max_s)) = (&args.min_duration, &args.max_duration) {
+            if let (Some(min_d), Some(max_d)) = (
+                parse_human_duration(min_s).or_else(|| parse_duration(min_s)),
+                parse_human_duration(max_s).or_else(|| parse_duration(max_s)),
+            ) {
+                if min_d.num_minutes() > max_d.num_minutes() {
+                    has_errors = true;
+                    print_error(format!(
+                        "--min-duration ({}) must be ≤ --max-duration ({})",
+                        min_s, max_s
+                    ));
+                    print_hints(&["Ensure --min-duration value is less than or equal to --max-duration"][..]);
+                }
+            }
+        }
+
         // Validate --compact flag (only applies to JSON/YAML formats)
         validated_count += 1;
         if args.compact {
