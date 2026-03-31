@@ -121,6 +121,10 @@ struct Args {
     #[arg(long)]
     person: Option<String>,
 
+    /// Filter by any of these persons (OR logic, case-insensitive, can be repeated)
+    #[arg(long, value_delimiter = ',', value_name = "PERSONS")]
+    persons: Option<Vec<String>>,
+
     /// Filter by project name in {project} tags (case-insensitive)
     #[arg(long)]
     project: Option<String>,
@@ -929,6 +933,19 @@ fn matches_person_filter(event: &Event, person_filter: &Option<String>) -> bool 
         .unwrap_or(false)
 }
 
+/// Returns true if event's person matches ANY of the given person names (OR logic, case-insensitive).
+/// Empty list returns true.
+fn matches_persons_filter(event: &Event, persons: &[String]) -> bool {
+    if persons.is_empty() {
+        return true;
+    }
+    let Some(event_person) = extract_person(&event.summary) else {
+        return false;
+    };
+    let event_person_lower = event_person.to_lowercase();
+    persons.iter().any(|p| event_person_lower.contains(&p.to_lowercase()))
+}
+
 fn matches_project_filter(event: &Event, project_filter: &Option<String>) -> bool {
     let Some(filter) = project_filter else {
         return true;
@@ -1548,6 +1565,7 @@ fn main() -> io::Result<()> {
         .iter()
         .filter(|e| matches_filter(e, &effective_date, &now, &yesterday, &tomorrow))
         .filter(|e| matches_person_filter(e, &args.person))
+        .filter(|e| matches_persons_filter(e, &args.persons.clone().unwrap_or_default()))
         .filter(|e| matches_project_filter(e, &args.project))
         .filter(|e| matches_exclude_filter(e, &args.exclude_person))
         .filter(|e| matches_exclude_project_filter(e, &args.exclude_project))
@@ -2453,6 +2471,53 @@ mod tests {
         assert!(matches_person_filter(&event, &Some("John".to_string())));
         assert!(matches_person_filter(&event, &Some("john".to_string())));
         assert!(!matches_person_filter(&event, &Some("Jane".to_string())));
+    }
+
+    #[test]
+    fn test_matches_persons_filter() {
+        let alice_event = Event::new(
+            "Meeting with [Alice]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        let bob_event = Event::new(
+            "Meeting with [Bob]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(11, 0, 0).unwrap(),
+        );
+        let carol_event = Event::new(
+            "Meeting with [Carol]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(11, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(12, 0, 0).unwrap(),
+        );
+
+        // Empty list matches all
+        assert!(matches_persons_filter(&alice_event, &[]));
+        assert!(matches_persons_filter(&bob_event, &[]));
+
+        // Single person (OR with 1 element = same as regular person filter)
+        assert!(matches_persons_filter(&alice_event, &["Alice".to_string()]));
+        assert!(matches_persons_filter(&alice_event, &["alice".to_string()])); // case insensitive
+        assert!(!matches_persons_filter(&alice_event, &["Bob".to_string()]));
+
+        // Multiple persons (OR logic)
+        assert!(matches_persons_filter(&alice_event, &["Alice".to_string(), "Bob".to_string()]));
+        assert!(matches_persons_filter(&bob_event, &["Alice".to_string(), "Bob".to_string()]));
+        assert!(!matches_persons_filter(&carol_event, &["Alice".to_string(), "Bob".to_string()]));
+
+        // Case insensitive
+        assert!(matches_persons_filter(&alice_event, &["ALICE".to_string(), "bob".to_string()]));
+
+        // Partial match
+        assert!(matches_persons_filter(&alice_event, &["Ali".to_string(), "Carol".to_string()]));
+
+        // Event without person doesn't match
+        let no_person = Event::new(
+            "Regular meeting".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+        assert!(!matches_persons_filter(&no_person, &["Alice".to_string()]));
     }
 
     #[test]
