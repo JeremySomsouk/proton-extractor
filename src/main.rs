@@ -102,6 +102,11 @@ fn print_notice<S: AsRef<str>>(msg: S) {
     println!("{} {}", colored(color::YELLOW, "○"), msg.as_ref());
 }
 
+/// Styled success message - for successful validations and completions
+fn print_success(msg: &str) {
+    println!("{} {}", colored(color::GREEN, "✓"), msg);
+}
+
 #[derive(Debug, Clone, ValueEnum)]
 enum DateFilter {
     Current,
@@ -2418,10 +2423,7 @@ fn main() -> io::Result<()> {
         }
         let _ = validate_time_filter("09:00", "start-after");
         
-        println!(
-            "{} All arguments validated successfully",
-            colored(color::GREEN, "✓")
-        );
+        print_success("All arguments validated successfully");
         return Ok(());
     }
 
@@ -2429,6 +2431,8 @@ fn main() -> io::Result<()> {
         print_error("No .ics files provided");
         eprintln!("  {} Use {} to pipe ICS content, or provide file paths as arguments", 
             colored(color::DIM, "→"), colored(color::CYAN, "--stdin"));
+        eprintln!("  {} Validate your args (CI/CD): {}", 
+            colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [args]"));
         eprintln!("  {} Run {} for usage information", 
             colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --help"));
         std::process::exit(1);
@@ -2637,7 +2641,7 @@ fn main() -> io::Result<()> {
             Some(d) => Some(d),
             None => {
                 print_error(&format!("Invalid --min-duration format '{}'", s));
-                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
+                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w', '90'", colored(color::DIM, "→"));
                 std::process::exit(1);
             }
         }
@@ -2650,7 +2654,7 @@ fn main() -> io::Result<()> {
             Some(d) => Some(d),
             None => {
                 print_error(&format!("Invalid --max-duration format '{}'", s));
-                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
+                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w', '90'", colored(color::DIM, "→"));
                 std::process::exit(1);
             }
         }
@@ -2883,6 +2887,28 @@ fn main() -> io::Result<()> {
     if filtered.is_empty() {
         print_notice("No events found matching your criteria");
         eprintln!();
+        
+        // Show active date context if a date filter is active
+        match &effective_date {
+            DateFilter::Today => eprintln!("  {} Showing events for today ({})", colored(color::DIM, "→"), now.format("%Y-%m-%d")),
+            DateFilter::Yesterday => eprintln!("  {} Showing events for yesterday ({})", colored(color::DIM, "→"), yesterday.format("%Y-%m-%d")),
+            DateFilter::Tomorrow => eprintln!("  {} Showing events for tomorrow ({})", colored(color::DIM, "→"), tomorrow.format("%Y-%m-%d")),
+            DateFilter::Week => eprintln!("  {} Showing events for ISO week {} ({} to {})", colored(color::DIM, "→"), now.format("%V"), now.date().year().to_string() + "-W" + &now.format("%V").to_string(), tomorrow.format("%Y-%m-%d")),
+            DateFilter::LastWeek => eprintln!("  {} Showing events for last week", colored(color::DIM, "→")),
+            DateFilter::Current => eprintln!("  {} Showing events for {} {}", colored(color::DIM, "→"), now.format("%B"), now.year()),
+            DateFilter::Previous => {
+                let (y, m) = if now.month() == 1 { (now.year() - 1, 12) } else { (now.year(), now.month() - 1) };
+                eprintln!("  {} Showing events for {} {}", colored(color::DIM, "→"), chrono::Month::try_from(u8::try_from(m).unwrap_or(1)).unwrap_or(chrono::Month::January).name(), y);
+            },
+            DateFilter::All => {}
+        }
+        
+        // Show date range if --from/--to is set
+        if let (Some(from), Some(to)) = (&args.from, &args.to) {
+            eprintln!("  {} Date range: {} to {}", colored(color::DIM, "→"), from, to);
+        }
+        
+        eprintln!();
         eprintln!("  {} Try these options:", colored(color::CYAN, "→"));
 
         // Context-aware suggestions based on active filters
@@ -2908,6 +2934,9 @@ fn main() -> io::Result<()> {
             eprintln!("    {} {:<22} Disable verbose mode", colored(color::DIM, "•"), colored(color::CYAN, "-v"));
         } else {
             eprintln!("    {} {:<22} Show debug info", colored(color::DIM, "•"), colored(color::CYAN, "-v"));
+        }
+        if args.recent.is_some() {
+            eprintln!("    {} {:<22} Show events from last N days (no limit)", colored(color::DIM, "•"), colored(color::CYAN, "--recent 30"));
         }
 
         eprintln!();
