@@ -487,11 +487,11 @@ struct Args {
     dry_run: bool,
 
     /// Filter by day of week: MO,TU,WE,TH,FR,SA,SU (can be repeated, e.g., --weekdays MO --weekdays WE)
-    #[arg(long, value_delimiter = ',', value_name = "DAYS")]
+    #[arg(long = "weekdays", alias = "weekday", value_delimiter = ',', value_name = "DAYS")]
     weekdays: Option<Vec<String>>,
 
     /// Exclude events on these days of week: MO,TU,WE,TH,FR,SA,SU (can be repeated, complements --weekdays)
-    #[arg(long, value_delimiter = ',', value_name = "DAYS")]
+    #[arg(long = "exclude-weekdays", alias = "exclude-weekday", value_delimiter = ',', value_name = "DAYS")]
     exclude_weekdays: Option<Vec<String>>,
 
     /// Exclude events whose summary contains this text (case-insensitive, can be repeated)
@@ -3261,6 +3261,7 @@ fn main() -> io::Result<()> {
             eprintln!("{}  {}", colored(color::YELLOW, "╰─"), colored(color::DIM, "─".repeat(30)));
             eprintln!();
             eprintln!("  {} Use {} to debug argument issues", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [your args]"));
+            eprintln!("  {} Quick check: {} (show all events)", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor [file] -d all"));
         }
 
         // Show active date context if a date filter is active
