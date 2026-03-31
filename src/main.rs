@@ -2753,6 +2753,45 @@ fn main() -> io::Result<()> {
 
     // Create output directory if --output-dir is specified
     if let Some(ref output_dir) = args.output_dir {
+        if output_dir.exists() && !args.yes {
+            // Check if directory has contents
+            match std::fs::read_dir(output_dir) {
+                Ok(entries) => {
+                    let has_contents = entries.into_iter().any(|e| e.is_ok());
+                    if has_contents {
+                        // Non-interactive mode: fail safely
+                        if !atty::is(atty::Stream::Stdin) {
+                            print_error(&format!(
+                                "Output directory '{}' is not empty (use --yes or --force to overwrite)",
+                                output_dir.display()
+                            ));
+                            std::process::exit(1);
+                        }
+                        eprintln!();
+                        eprintln!(
+                            "{} {}",
+                            colored(color::YELLOW, "warning:"),
+                            colored(color::BOLD, format!("'{}' is not empty", output_dir.display()))
+                        );
+                        eprint!("  {} Continue? [{}/N] ", colored(color::CYAN, "→"), colored(color::GREEN, "y"));
+                        io::stderr().flush().ok();
+                        let mut response = String::new();
+                        if io::stdin().read_line(&mut response).is_err() {
+                            std::process::exit(1);
+                        }
+                        let response = response.trim().to_lowercase();
+                        if !response.is_empty() && !response.eq("y") && !response.eq("yes") {
+                            eprintln!();
+                            print_info("Operation cancelled");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                Err(_) => {
+                    // Can't read dir, proceed anyway
+                }
+            }
+        }
         std::fs::create_dir_all(output_dir).map_err(|e| {
             io::Error::other(format!(
                 "Failed to create output directory '{}': {}",
@@ -4341,6 +4380,7 @@ fn main() -> io::Result<()> {
             let event_count = filtered.len();
             let duration_str = format_hours(grand_total_minutes);
             print_exported(event_count, &duration_str, path);
+            print_hint(format!("View with: cat {}", path.display()));
         }
     }
 
