@@ -2997,27 +2997,27 @@ fn main() -> io::Result<()> {
     if let Err(e) = validate_date_range(&args.from, &args.to) {
         print_error(e.to_string());
         print_hint("--from must be before or equal to --to");
-        std::process::exit(1);
+        std::process::exit(exit_codes::INVALID_ARGS);
     }
     if let Err(e) = validate_month(args.month) {
         print_error(e.to_string());
         print_hint("Month must be 1-12 (e.g., --month 3 for March)");
-        std::process::exit(1);
+        std::process::exit(exit_codes::INVALID_ARGS);
     }
     if let Err(e) = validate_week_number(&args.week_number) {
         print_error(e.to_string());
         print_hint("Format: W10 (current year) or 2024-W10 (specific year)");
-        std::process::exit(1);
+        std::process::exit(exit_codes::INVALID_ARGS);
     }
     if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
         print_error(e.to_string());
         print_hint("Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')");
-        std::process::exit(1);
+        std::process::exit(exit_codes::INVALID_ARGS);
     }
     if let Err(e) = validate_weekdays(&args.exclude_weekdays, "exclude-weekdays") {
         print_error(e.to_string());
         print_hint("Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')");
-        std::process::exit(1);
+        std::process::exit(exit_codes::INVALID_ARGS);
     }
 
     // Validate time filters
@@ -3025,28 +3025,28 @@ fn main() -> io::Result<()> {
         if let Err(e) = validate_time_filter(t, "start-after") {
             print_error(e.to_string());
             print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
-            std::process::exit(1);
+            std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
     if let Some(ref t) = args.start_before {
         if let Err(e) = validate_time_filter(t, "start-before") {
             print_error(e.to_string());
             print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
-            std::process::exit(1);
+            std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
     if let Some(ref t) = args.end_after {
         if let Err(e) = validate_time_filter(t, "end-after") {
             print_error(e.to_string());
             print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
-            std::process::exit(1);
+            std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
     if let Some(ref t) = args.end_before {
         if let Err(e) = validate_time_filter(t, "end-before") {
             print_error(e.to_string());
             print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
-            std::process::exit(1);
+            std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
 
@@ -3069,14 +3069,14 @@ fn main() -> io::Result<()> {
         if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
             print_error(format!("invalid '{}' for --min-duration", s));
             print_hint("Valid: '30m', '1h', '2h30m' (e.g., --min-duration 1h)");
-            std::process::exit(1);
+            std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
     if let Some(ref s) = args.max_duration {
         if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
             print_error(format!("invalid '{}' for --max-duration", s));
             print_hint("Valid: '30m', '1h', '2h30m' (e.g., --max-duration 4h)");
-            std::process::exit(1);
+            std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
 
@@ -3149,7 +3149,7 @@ fn main() -> io::Result<()> {
     if has_files && has_stdin {
         print_error("Cannot use both --stdin and file arguments simultaneously");
         print_hint("Use either --stdin OR file paths, not both");
-        std::process::exit(1);
+        std::process::exit(exit_codes::INVALID_ARGS);
     }
 
     let mut all_raw_events = Vec::new();
@@ -3364,7 +3364,7 @@ fn main() -> io::Result<()> {
             None => {
                 print_error(format!("invalid '{}' for --min-duration", s));
                 print_hint("Valid: '30m', '1h', '2h30m' (e.g., --min-duration 1h)");
-                std::process::exit(1);
+                std::process::exit(exit_codes::INVALID_ARGS);
             }
         }
     } else {
@@ -3377,7 +3377,7 @@ fn main() -> io::Result<()> {
             None => {
                 print_error(format!("invalid '{}' for --max-duration", s));
                 print_hint("Valid: '30m', '1h', '2h30m' (e.g., --max-duration 4h)");
-                std::process::exit(1);
+                std::process::exit(exit_codes::INVALID_ARGS);
             }
         }
     } else {
