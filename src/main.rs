@@ -358,6 +358,7 @@ EXAMPLES:
   proton-extractor calendar.ics -q                           # Quiet (totals only)
   proton-extractor calendar.ics --total-only                 # Single line total (scripts)
   proton-extractor calendar.ics -s                           # Statistics summary
+  proton-extractor calendar.ics -s --stats-quiet             # Compact stats (single line)
   proton-extractor calendar.ics --dry-run                    # Preview without output
 
   # ── Listing & Discovery ──────────────────────────────────────────────────────
@@ -617,6 +618,10 @@ struct Args {
     /// Output format for statistics (only applies when --stats is used)
     #[arg(long, value_enum, default_value = "text")]
     stats_format: StatsFormat,
+
+    /// Compact stats output (single line, useful for scripting)
+    #[arg(long, conflicts_with_all = ["quiet", "silent", "total_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "dry_run", "top", "bottom"])]
+    stats_quiet: bool,
 
     /// Reverse chronological order (newest first)
     #[arg(long)]
@@ -2614,6 +2619,7 @@ fn print_examples() {
     println!("    -f html -o report.html   # HTML report");
     println!("    -q                       # Quiet mode (totals only)");
     println!("    --stats                  # Statistics summary");
+    println!("    --stats-quiet            # Compact stats (single line)");
     println!();
     println!("  {} Automation", colored(color::BOLD, "›"));
     println!("    --validate               # Validate args (CI/CD)");
@@ -4029,8 +4035,27 @@ fn main() -> io::Result<()> {
             (0, 0)
         };
 
-        // Top person
+        // Top person (compute early for stats-quiet)
         let top_person_entry = by_person.iter().max_by_key(|(_, v)| *v);
+
+        // Show compact stats if --stats-quiet is set
+        if args.stats_quiet {
+            writeln!(
+                out_writer,
+                "{} events | {} total",
+                colored(color::YELLOW, total_events.to_string()),
+                colored(color::GREEN, format_hours(total_mins))
+            )?;
+            if let Some((person, _)) = top_person_entry {
+                let person_mins = *by_person.get(person).unwrap_or(&0);
+                writeln!(
+                    out_writer,
+                    "  {}",
+                    colored(color::CYAN, format!("top: {} ({} hrs)", person, format_hours(person_mins)))
+                )?;
+            }
+            return Ok(());
+        }
 
         match args.stats_format {
             StatsFormat::Text => {
