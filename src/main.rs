@@ -314,13 +314,15 @@ Enable shell completion for faster CLI usage:
 
   # ── Export ───────────────────────────────────────────────────────────────────
   proton-extractor calendar.ics -f csv -o report.csv         # CSV export
-  proton-extractor calendar.ics -f json -o report.json       # JSON export
+  proton-extractor calendar.ics -f json -o report.json       # JSON export (pretty)
+  proton-extractor calendar.ics -f json --compact -o r.json  # JSON export (compact)
   proton-extractor calendar.ics -f html -o report.html       # HTML report
   proton-extractor calendar.ics -f pivot -o pivot.txt        # Pivot table
   proton-extractor calendar.ics -f yaml -o report.yaml       # YAML export
   proton-extractor calendar.ics -f toml -o report.toml       # TOML export
   proton-extractor calendar.ics -f markdown -o report.md     # Markdown table
   proton-extractor calendar.ics -f ical -o events.ics        # iCalendar format
+  # Pipe to jq: proton-extractor -f json | jq '.grand_total_minutes'
   # Formats: text, json, jsonl, csv, markdown, ical, html, yaml, toml, pivot
 
   # ── Convenience ──────────────────────────────────────────────────────────────
@@ -333,7 +335,8 @@ Enable shell completion for faster CLI usage:
 
 TIP: Use --validate to check your arguments before running in CI/CD pipelines.
 TIP: Use --total-only for clean numeric output in scripts: $(proton-extractor -q -d today)
-TIP: Use -q (shorthand) instead of --quiet for faster typing")]
+TIP: Use -q (shorthand) instead of --quiet for faster typing
+TIP: Use --no-color for clean output in files/logs (or pipe to 'cat')")]
 #[command(version = VERSION)]
 struct Args {
     /// Paths to .ics files
@@ -520,8 +523,8 @@ struct Args {
     #[arg(long)]
     end_before: Option<String>,
 
-    /// Enable compact JSON output (no pretty-printing)
-    #[arg(long, requires = "format")]
+    /// Enable compact JSON/YAML output (single line, no pretty-printing)
+    #[arg(long)]
     compact: bool,
 
     /// Show statistics about events (count, avg/day, top person, busiest day)
