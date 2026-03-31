@@ -381,6 +381,14 @@ struct Args {
     #[arg(long)]
     dedupe: bool,
 
+    /// Remove duplicate events by summary only (keeps first occurrence)
+    #[arg(long)]
+    dedupe_by_summary: bool,
+
+    /// Show only events without [person] or {project} tags (untagged events)
+    #[arg(long)]
+    only_untagged: bool,
+
     /// Sort events by: date (default), duration, person, project, start time, end time
     #[arg(long, value_enum, default_value = "date")]
     sort_by: SortBy,
@@ -1384,6 +1392,16 @@ fn matches_include_summary_filter(event: &Event, include_terms: &[String]) -> bo
     include_terms.iter().any(|term| summary_lower.contains(&term.to_lowercase()))
 }
 
+/// Returns true if event has no [person] tag AND no {project} tag.
+/// Returns true if --only-untagged is not set (filter not active).
+fn matches_only_untagged_filter(event: &Event, only_untagged: bool) -> bool {
+    if only_untagged {
+        extract_person(&event.summary).is_none() && extract_project(&event.summary).is_none()
+    } else {
+        true
+    }
+}
+
 /// Parse a time string in HH:MM format
 fn parse_time(time_str: &str) -> Option<(u32, u32)> {
     let parts: Vec<&str> = time_str.split(':').collect();
@@ -1879,16 +1897,28 @@ fn main() -> io::Result<()> {
 
     debug!("Expanded events: {}", all_events.len());
 
-    // Remove duplicate events if --dedupe is set
-    let all_events: Vec<Event> = if args.dedupe {
+    // Remove duplicate events if --dedupe or --dedupe-by-summary is set
+    let all_events: Vec<Event> = if args.dedupe || args.dedupe_by_summary {
         let before = all_events.len();
-        let mut unique: BTreeSet<(String, NaiveDateTime, NaiveDateTime)> = BTreeSet::new();
-        let deduped: Vec<Event> = all_events
-            .into_iter()
-            .filter(|e| unique.insert((e.summary.clone(), e.start, e.end)))
-            .collect();
+        let deduped: Vec<Event> = if args.dedupe_by_summary {
+            // Dedupe by summary only
+            let mut seen: BTreeSet<String> = BTreeSet::new();
+            all_events
+                .into_iter()
+                .filter(|e| seen.insert(e.summary.clone()))
+                .collect()
+        } else {
+            // Dedupe by summary + start + end
+            let mut unique: BTreeSet<(String, NaiveDateTime, NaiveDateTime)> = BTreeSet::new();
+            all_events
+                .into_iter()
+                .filter(|e| unique.insert((e.summary.clone(), e.start, e.end)))
+                .collect()
+        };
         let after = deduped.len();
-        debug!("Deduplication: {} events -> {} events (removed {})", before, after, before - after);
+        debug!("Deduplication (by {}): {} events -> {} events (removed {})",
+            if args.dedupe_by_summary { "summary" } else { "summary+time" },
+            before, after, before - after);
         deduped
     } else {
         all_events
@@ -2025,6 +2055,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_end_after_filter(e, &args.end_after))
         .filter(|e| matches_end_before_filter(e, &args.end_before))
         .filter(|e| matches_include_summary_filter(e, &args.include_summary))
+        .filter(|e| matches_only_untagged_filter(e, args.only_untagged))
         .take(args.limit.unwrap_or(usize::MAX))
         .collect();
 
