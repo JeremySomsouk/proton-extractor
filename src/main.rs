@@ -271,7 +271,14 @@ impl std::fmt::Display for EventStatus {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "proton-extractor", about = "Sum calendar event hours from ICS files", version = VERSION)]
+#[command(
+    name = "proton-extractor",
+    about = "🦀 Extract and sum calendar event hours from ICS files",
+    version,
+    after_help = "Run with --examples to see common usage patterns.
+Run with --validate to check your arguments before processing.
+Use --no-color for clean output in logs or CI/CD pipelines."
+)]
 #[command(long_about = "Sum calendar event hours from ICS files
 
 proton-extractor parses .ics calendar files, extracts events with [person] tags and {project} tags,
@@ -507,6 +514,10 @@ struct Args {
     /// Generate shell completion script for bash, zsh, fish, or powershell
     #[arg(long, value_enum)]
     generate_completion: Option<clap_complete::Shell>,
+
+    /// Show usage examples and exit
+    #[arg(long)]
+    examples: bool,
 
     /// Preview mode: show event count without processing output
     #[arg(short = 'n', long)]
@@ -2493,6 +2504,48 @@ fn build_json_output(
     }
 }
 
+/// Print usage examples - shown with --examples flag
+fn print_examples() {
+    println!();
+    println!("{} {}", colored(color::CYAN, "━━━"), colored(color::CYAN, "Usage Examples"));
+    println!();
+    println!("  {} Getting Started", colored(color::BOLD, "›"));
+    println!("    proton-extractor calendar.ics");
+    println!("    cat calendar.ics | proton-extractor --stdin");
+    println!();
+    println!("  {} Quick Filters", colored(color::BOLD, "›"));
+    println!("    -d current              # Current month (default)");
+    println!("    -d previous             # Previous month");
+    println!("    -d all                  # All events");
+    println!("    -t                       # Today's events");
+    println!("    -w                       # This week");
+    println!();
+    println!("  {} Person & Project", colored(color::BOLD, "›"));
+    println!("    --person \"Alice\"         # Filter by person");
+    println!("    --project \"Backend\"      # Filter by project");
+    println!("    --tag urgent            # Filter by tag (person OR project)");
+    println!();
+    println!("  {} Date Ranges", colored(color::BOLD, "›"));
+    println!("    --from 2024-01-01 --to 2024-03-31");
+    println!("    --weekdays MO,WE,FR      # Specific days");
+    println!("    --recent 30              # Last 30 days");
+    println!();
+    println!("  {} Output Formats", colored(color::BOLD, "›"));
+    println!("    -f json -o report.json   # JSON export");
+    println!("    -f csv -o report.csv     # CSV export");
+    println!("    -f html -o report.html   # HTML report");
+    println!("    -q                       # Quiet mode (totals only)");
+    println!("    --stats                  # Statistics summary");
+    println!();
+    println!("  {} Automation", colored(color::BOLD, "›"));
+    println!("    --validate               # Validate args (CI/CD)");
+    println!("    --yes                    # Auto-confirm prompts");
+    println!("    --no-color               # Disable colors");
+    println!();
+    println!("  {} Run {} for full help", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --help"));
+    println!();
+}
+
 fn main() -> io::Result<()> {
     let args = Args::parse();
 
@@ -2501,6 +2554,12 @@ fn main() -> io::Result<()> {
         let mut cmd = Args::command();
         let name = env!("CARGO_PKG_NAME");
         clap_complete::generate(*shell, &mut cmd, name, &mut std::io::stdout());
+        return Ok(());
+    }
+
+    // Show usage examples and exit if requested
+    if args.examples {
+        print_examples();
         return Ok(());
     }
 
@@ -3333,7 +3392,8 @@ fn main() -> io::Result<()> {
             // Context-aware quick fixes
             eprintln!();
             eprintln!("  {} Quick fixes:", colored(color::CYAN, "→"));
-            if args.today || args.yesterday || args.tomorrow || args.weekly || args.last_week {
+            // Show -d all when date filter is active (explicit flags OR -d filter)
+            if args.today || args.yesterday || args.tomorrow || args.weekly || args.last_week || !matches!(args.date, DateFilter::All) {
                 eprintln!("    {} -d all  Show all events", colored(color::DIM, "•"));
             }
             if args.person.is_some() || !args.persons.clone().unwrap_or_default().is_empty() {
