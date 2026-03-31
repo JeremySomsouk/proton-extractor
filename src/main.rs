@@ -84,6 +84,7 @@ fn print_info(msg: &str) {
 }
 
 /// Styled hint message output - helpful suggestions with user's specific values
+/// Styled hint message output - helpful suggestions with user's specific values
 fn print_hint<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::DIM, "hint:"), colored(color::CYAN, msg.as_ref()));
 }
@@ -3989,13 +3990,7 @@ fn main() -> io::Result<()> {
     // Success feedback when writing to file
     if write_to_file {
         if let Some(ref path) = output_file_path {
-            eprintln!();
-            eprintln!(
-                "{} {} → {}",
-                colored(color::GREEN, "✓"),
-                colored(color::BOLD, "Saved"),
-                path.display()
-            );
+            print_success(format!("Saved → {}", path.display()));
         }
     }
 
