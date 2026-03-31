@@ -376,16 +376,22 @@ struct Event {
     location: Option<String>,
     categories: Vec<String>,
     is_recurring: bool,
+    source_file: Option<String>,
 }
 
 impl Event {
     #[allow(dead_code)]
     fn new(summary: String, start: NaiveDateTime, end: NaiveDateTime) -> Self {
-        Self { summary, start, end, location: None, categories: vec![], is_recurring: false }
+        Self { summary, start, end, location: None, categories: vec![], is_recurring: false, source_file: None }
     }
 
     fn with_recurring(summary: String, start: NaiveDateTime, end: NaiveDateTime, location: Option<String>, categories: Vec<String>, is_recurring: bool) -> Self {
-        Self { summary, start, end, location, categories, is_recurring }
+        Self { summary, start, end, location, categories, is_recurring, source_file: None }
+    }
+
+    fn with_source(mut self, source: String) -> Self {
+        self.source_file = Some(source);
+        self
     }
 }
 
@@ -399,6 +405,7 @@ struct RawEvent {
     recurrence_id: Option<NaiveDateTime>,
     location: Option<String>,
     categories: Vec<String>,
+    source_file: Option<String>,
 }
 
 fn parse_ical_datetime(value: &str) -> Option<NaiveDateTime> {
@@ -601,7 +608,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
     result.extend(override_events.into_iter().filter_map(|e| {
         let duration = e.end - e.start;
         if duration.num_minutes() > 0 {
-            Some(Event::with_recurring(e.summary, e.start, e.end, e.location, e.categories, e.rrule.is_some()))
+            Some(Event::with_recurring(e.summary, e.start, e.end, e.location, e.categories, e.rrule.is_some()).with_source(e.source_file.unwrap_or_default()))
         } else {
             None
         }
@@ -615,7 +622,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
             None => {
                 let duration = event.end - event.start;
                 if duration.num_minutes() > 0 {
-                    result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), false));
+                    result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), false).with_source(event.source_file.clone().unwrap_or_default()));
                 }
             }
             Some(rrule) => {
@@ -623,7 +630,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     // Can't parse RRULE, just add the single event
                     let duration = event.end - event.start;
                     if duration.num_minutes() > 0 {
-                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true));
+                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()));
                     }
                     continue;
                 };
@@ -641,7 +648,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     "YEARLY" => Duration::days(0),  // Placeholder - handled separately
                     _ => {
                         // Unsupported frequency, add single event
-                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true));
+                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()));
                         continue;
                     }
                 };
@@ -675,7 +682,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                         && !exdate_set.contains(&date)
                         && !overrides.contains(&(event.uid.clone(), date))
                     {
-                        result.push(Event::with_recurring(event.summary.clone(), current, current + duration, event.location.clone(), event.categories.clone(), true));
+                        result.push(Event::with_recurring(event.summary.clone(), current, current + duration, event.location.clone(), event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()));
                     }
 
                     // Increment to next occurrence
@@ -772,7 +779,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
     result
 }
 
-fn extract_raw_events(ical_events: Vec<IcalEvent>) -> Vec<RawEvent> {
+fn extract_raw_events(ical_events: Vec<IcalEvent>, source_file: Option<String>) -> Vec<RawEvent> {
     ical_events
         .into_iter()
         .filter_map(|e| {
@@ -835,6 +842,7 @@ fn extract_raw_events(ical_events: Vec<IcalEvent>) -> Vec<RawEvent> {
                 recurrence_id,
                 location,
                 categories,
+                source_file: source_file.clone(),
             })
         })
         .collect()
@@ -1592,7 +1600,7 @@ fn main() -> io::Result<()> {
             match calendar {
                 Ok(cal) => {
                     debug!("Found {} events from stdin", cal.events.len());
-                    all_raw_events.extend(extract_raw_events(cal.events));
+                    all_raw_events.extend(extract_raw_events(cal.events, None));
                 }
                 Err(_e) if args.quiet => {}
                 Err(e) => {
@@ -1623,7 +1631,8 @@ fn main() -> io::Result<()> {
                         if !cal.events.is_empty() {
                             debug!("Found {} events in {}", cal.events.len(), path.display());
                         }
-                        all_raw_events.extend(extract_raw_events(cal.events));
+                        let source = path.to_string_lossy().to_string();
+                        all_raw_events.extend(extract_raw_events(cal.events, Some(source)));
                     }
                     Err(_e) if args.quiet => {
                         // Suppress parse errors in quiet mode
@@ -3106,7 +3115,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![raw]);
         assert_eq!(expanded.len(), 1);
         assert_eq!(expanded[0].summary, "Meeting [Alice]");
@@ -3124,7 +3133,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![zero_duration]);
         assert!(expanded.is_empty());
     }
@@ -3141,7 +3150,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![daily]);
         // 5 days: March 1, 2, 3, 4, 5
         assert_eq!(expanded.len(), 5);
@@ -3161,7 +3170,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![with_exdate]);
         // 3 weeks, minus 1 exdate = 2 events (March 1, 15)
         assert_eq!(expanded.len(), 2);
@@ -3180,7 +3189,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![biweekly]);
         assert_eq!(expanded.len(), 3);
         assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
@@ -3201,7 +3210,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![daily_count]);
         // Should only produce 5 events despite no UNTIL
         assert_eq!(expanded.len(), 5);
@@ -3222,7 +3231,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![combined]);
         assert_eq!(expanded.len(), 4);
         assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
@@ -3301,7 +3310,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![monthly]);
         // 6 months: Jan, Feb, Mar, Apr, May, Jun
         assert_eq!(expanded.len(), 6);
@@ -3323,7 +3332,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![monthly_31st]);
         // 4 months: Jan 31, Feb 28 (clamped), Mar 31, Apr 30 (clamped)
         assert_eq!(expanded.len(), 4);
@@ -3346,7 +3355,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![monthly_15th]);
         // 6 months: Jan 15, Feb 15, Mar 15, Apr 15, May 15, Jun 15
         assert_eq!(expanded.len(), 6);
@@ -3371,7 +3380,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![monthly_last]);
         // Last days: Jan 31, Feb 29 (leap year 2024), Mar 31, Apr 30, May 31, Jun 30
         assert_eq!(expanded.len(), 6);
@@ -3650,7 +3659,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![yearly]);
         // 4 years: 2022, 2023, 2024, 2025
         assert_eq!(expanded.len(), 4);
@@ -3673,7 +3682,7 @@ mod tests {
             recurrence_id: None,
             location: None,
             categories: vec![],
-        };
+        source_file: None,};
         let expanded = expand_events(vec![leap_day]);
         // Feb 29 gets clamped to Feb 28 in non-leap years
         // Limited by 5-year recurrence limit: 2020-2024 = 5 occurrences
