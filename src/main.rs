@@ -107,6 +107,7 @@ enum StatsFormat {
 #[derive(Parser, Debug)]
 #[command(name = "proton-extractor", about = "Sum calendar event hours from ICS files", version = VERSION)]
 #[command(after_help = "For shell completion, run:\n  proton-extractor --generate-completion bash\n  proton-extractor --generate-completion zsh\n  proton-extractor --generate-completion fish\n  proton-extractor --generate-completion powershell\n\nOr source the output directly, e.g.:\n  source <(proton-extractor --generate-completion bash)")]
+#[command(version = VERSION)]
 struct Args {
     /// Paths to .ics files
     files: Vec<PathBuf>,
@@ -178,6 +179,10 @@ struct Args {
     /// Output file path (default: stdout)
     #[arg(short = 'o', long)]
     output: Option<PathBuf>,
+
+    /// Output directory for batch processing (creates one file per input file)
+    #[arg(short = 'O', long)]
+    output_dir: Option<PathBuf>,
 
     /// List all unique persons found in events
     #[arg(long)]
@@ -1526,6 +1531,22 @@ fn toml_escape(s: &str) -> String {
         .replace('\t', "\\t")
 }
 
+/// Returns the appropriate file extension for the given output format
+fn get_output_extension(format: &OutputFormat) -> &'static str {
+    match format {
+        OutputFormat::Text => "txt",
+        OutputFormat::Json => "json",
+        OutputFormat::Jsonl => "jsonl",
+        OutputFormat::Csv => "csv",
+        OutputFormat::Markdown => "md",
+        OutputFormat::Ical => "ics",
+        OutputFormat::Html => "html",
+        OutputFormat::Yaml => "yaml",
+        OutputFormat::Toml => "toml",
+        OutputFormat::Pivot => "txt",
+    }
+}
+
 /// Escapes a string for HTML output
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -1814,8 +1835,35 @@ fn main() -> io::Result<()> {
         debug!("Max duration filter: {} minutes", d.num_minutes());
     }
 
+    // Create output directory if --output-dir is specified
+    if let Some(ref output_dir) = args.output_dir {
+        std::fs::create_dir_all(output_dir)
+            .map_err(|e| io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to create output directory '{}': {}", output_dir.display(), e)
+            ))?;
+    }
+
+    // Determine output path
+    let output_path: Option<PathBuf> = match (&args.output, &args.output_dir) {
+        (Some(path), _) => Some(path.clone()),
+        (None, Some(dir)) => {
+            // Use the first input file's stem as the output filename
+            let filename = if let Some(first_input) = args.files.first() {
+                let stem = first_input.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("output");
+                format!("{}.{}", stem, get_output_extension(&args.format))
+            } else {
+                format!("output.{}", get_output_extension(&args.format))
+            };
+            Some(dir.join(filename))
+        }
+        (None, None) => None,
+    };
+
     // Setup output: file or stdout
-    let out_writer: Box<dyn Write> = match &args.output {
+    let out_writer: Box<dyn Write> = match &output_path {
         Some(path) => {
             let file = File::create(path)?;
             Box::new(file)
