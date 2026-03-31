@@ -165,7 +165,7 @@ fn confirm(prompt: &str) -> bool {
         eprintln!(
             "{} Cannot prompt in non-interactive mode: {}",
             colored(color::YELLOW, "warning:"),
-            colored(color::CYAN, "(use --yes or --force)")
+            "use --yes or --force to auto-confirm"
         );
         return false;
     }
@@ -311,7 +311,14 @@ impl std::fmt::Display for EventStatus {
     name = "proton-extractor",
     about = "🦀 Extract and sum calendar event hours from ICS files",
     version,
-    after_help = "Run with --examples to see common usage patterns.
+    after_help = "QUICK START:
+  proton-extractor calendar.ics                    # Basic usage
+  proton-extractor calendar.ics --person \"Alice\"     # By person
+  proton-extractor calendar.ics -f json -o out.json  # Export to JSON
+  proton-extractor calendar.ics --stats             # Show statistics
+  cat calendar.ics | proton-extractor --stdin       # Pipe input
+
+Run with --examples to see common usage patterns.
 Run with --validate to check your arguments before processing.
 Use --no-color for clean output in logs or CI/CD pipelines."
 )]
@@ -3292,8 +3299,8 @@ fn main() -> io::Result<()> {
                         );
                         if !confirm("Continue?") {
                             eprintln!();
-                            eprintln!("{} Operation cancelled", colored(color::YELLOW, "○"));
-                            eprintln!(
+                            println!("{} Operation cancelled", colored(color::YELLOW, "○"));
+                            println!(
                                 "  {} Use {} or {} to auto-confirm",
                                 colored(color::DIM, "→"),
                                 colored(color::CYAN, "--yes"),
@@ -3361,8 +3368,8 @@ fn main() -> io::Result<()> {
                 );
                 if !confirm("Overwrite?") {
                     eprintln!();
-                    eprintln!("{} Operation cancelled", colored(color::YELLOW, "○"));
-                    eprintln!(
+                    println!("{} Operation cancelled", colored(color::YELLOW, "○"));
+                    println!(
                         "  {} Use {} or {} to auto-confirm",
                         colored(color::DIM, "→"),
                         colored(color::CYAN, "--yes"),
