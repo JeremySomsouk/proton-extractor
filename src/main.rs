@@ -2866,15 +2866,15 @@ fn main() -> io::Result<()> {
         if let Some(ref s) = args.min_duration {
             if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
                 has_errors = true;
-                print_error(format!("invalid '{}' for --min-duration", s));
-                print_hint("Valid: '30m', '1h', '2h30m' (e.g., --min-duration 1h)");
+                print_error(format!("invalid duration '{}' for --min-duration", s));
+                print_hint("Valid formats: '30m', '1h', '2h30m', '1d' (e.g., --min-duration 1h)");
             }
         }
         if let Some(ref s) = args.max_duration {
             if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
                 has_errors = true;
-                print_error(format!("invalid '{}' for --max-duration", s));
-                print_hint("Valid: '30m', '1h', '2h30m' (e.g., --max-duration 4h)");
+                print_error(format!("invalid duration '{}' for --max-duration", s));
+                print_hint("Valid formats: '30m', '1h', '2h30m', '1d' (e.g., --max-duration 4h)");
             }
         }
 
@@ -2909,6 +2909,37 @@ fn main() -> io::Result<()> {
                     print_hint("Remove --compact or use -f json/yaml");
                 }
             }
+        }
+
+        // Validate empty string filters
+        validated_count += 3;
+        if args.person.as_ref().map_or(false, |s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("Empty value provided for --person");
+            print_hint("Specify a person name: --person \"Alice\"");
+        }
+        if args.project.as_ref().map_or(false, |s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("Empty value provided for --project");
+            print_hint("Specify a project name: --project \"Backend\"");
+        }
+        if args.tag.as_ref().map_or(false, |s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("Empty value provided for --tag");
+            print_hint("Specify a tag to filter: --tag \"urgent\"");
+        }
+
+        // Validate empty string filters for category and location
+        validated_count += 2;
+        if args.category.as_ref().map_or(false, |s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("Empty value provided for --category");
+            print_hint("Specify a category name: --category \"Work\"");
+        }
+        if args.location.as_ref().map_or(false, |s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("Empty value provided for --location");
+            print_hint("Specify a location: --location \"Office\"");
         }
 
         if has_errors {
@@ -3039,11 +3070,12 @@ fn main() -> io::Result<()> {
         match args.format {
             OutputFormat::Json | OutputFormat::Yaml | OutputFormat::Jsonl => {}
             _ => {
-                print_warn(format!(
-                    "--compact has no effect with {} format (only affects JSON/YAML)",
+                print_error(format!(
+                    "--compact only applies to JSON/YAML formats, not '{}'",
                     args.format
                 ));
                 print_hint("Remove --compact or use -f json/yaml");
+                std::process::exit(exit_codes::INVALID_ARGS);
             }
         }
     }
@@ -3051,15 +3083,15 @@ fn main() -> io::Result<()> {
     // Validate duration filters
     if let Some(ref s) = args.min_duration {
         if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
-            print_error(format!("invalid '{}' for --min-duration", s));
-            print_hint("Valid: '30m', '1h', '2h30m' (e.g., --min-duration 1h)");
+            print_error(format!("invalid duration '{}' for --min-duration", s));
+            print_hint("Valid formats: '30m', '1h', '2h30m', '1d' (e.g., --min-duration 1h)");
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
     if let Some(ref s) = args.max_duration {
         if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
-            print_error(format!("invalid '{}' for --max-duration", s));
-            print_hint("Valid: '30m', '1h', '2h30m' (e.g., --max-duration 4h)");
+            print_error(format!("invalid duration '{}' for --max-duration", s));
+            print_hint("Valid formats: '30m', '1h', '2h30m', '1d' (e.g., --max-duration 4h)");
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3083,6 +3115,20 @@ fn main() -> io::Result<()> {
         if s.trim().is_empty() {
             print_error("Empty value provided for --tag");
             print_hint("Specify a tag to filter: --tag \"urgent\"");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+    if let Some(ref s) = args.category {
+        if s.trim().is_empty() {
+            print_error("Empty value provided for --category");
+            print_hint("Specify a category name: --category \"Work\"");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+    if let Some(ref s) = args.location {
+        if s.trim().is_empty() {
+            print_error("Empty value provided for --location");
+            print_hint("Specify a location: --location \"Office\"");
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3337,8 +3383,8 @@ fn main() -> io::Result<()> {
         match parse_human_duration(s).or_else(|| parse_duration(s)) {
             Some(d) => Some(d),
             None => {
-                print_error(format!("invalid '{}' for --min-duration", s));
-                print_hint("Valid: '30m', '1h', '2h30m' (e.g., --min-duration 1h)");
+                print_error(format!("invalid duration '{}' for --min-duration", s));
+                print_hint("Valid formats: '30m', '1h', '2h30m', '1d' (e.g., --min-duration 1h)");
                 std::process::exit(exit_codes::INVALID_ARGS);
             }
         }
@@ -3350,8 +3396,8 @@ fn main() -> io::Result<()> {
         match parse_human_duration(s).or_else(|| parse_duration(s)) {
             Some(d) => Some(d),
             None => {
-                print_error(format!("invalid '{}' for --max-duration", s));
-                print_hint("Valid: '30m', '1h', '2h30m' (e.g., --max-duration 4h)");
+                print_error(format!("invalid duration '{}' for --max-duration", s));
+                print_hint("Valid formats: '30m', '1h', '2h30m', '1d' (e.g., --max-duration 4h)");
                 std::process::exit(exit_codes::INVALID_ARGS);
             }
         }
