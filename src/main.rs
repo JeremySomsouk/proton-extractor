@@ -243,6 +243,16 @@ impl std::fmt::Display for EventStatus {
 
 #[derive(Parser, Debug)]
 #[command(name = "proton-extractor", about = "Sum calendar event hours from ICS files", version = VERSION)]
+#[command(long_about = "Sum calendar event hours from ICS files
+
+proton-extractor parses .ics calendar files, extracts events with [person] tags and {project} tags, 
+and computes total hours worked per person. Supports filtering, grouping, multiple output formats 
+(text, JSON, CSV, HTML, YAML, TOML, iCal), and statistics.
+
+Enable shell completion for faster CLI usage:
+  source <(proton-extractor --generate-completion bash)   # bash
+  source <(proton-extractor --generate-completion zsh)    # zsh
+  proton-extractor --generate-completion fish | source   # fish")]
 #[command(after_help = "EXAMPLES:
   # ── Quick Start ──────────────────────────────────────────────────────────────
   # Basic usage - show all events from a file
