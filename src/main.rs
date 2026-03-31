@@ -84,9 +84,14 @@ fn print_info(msg: &str) {
 }
 
 /// Styled hint message output - helpful suggestions with user's specific values
-/// Styled hint message output - helpful suggestions with user's specific values
 fn print_hint<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::DIM, "hint:"), colored(color::CYAN, msg.as_ref()));
+}
+
+/// Styled notice message output - neutral notices that aren't errors
+/// Used when there's nothing to report but it's not a failure
+fn print_notice<S: AsRef<str>>(msg: S) {
+    println!("{} {}", colored(color::YELLOW, "○"), msg.as_ref());
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -2532,7 +2537,7 @@ fn main() -> io::Result<()> {
                 eprintln!();
                 eprintln!(
                     "{} {}",
-                    colored(color::YELLOW, "⚠"),
+                    colored(color::YELLOW, "warning:"),
                     colored(color::BOLD, format!("'{}' already exists", path.display()))
                 );
                 eprint!("  {} Overwrite? [y/N] ", colored(color::CYAN, "→"));
@@ -2683,7 +2688,7 @@ fn main() -> io::Result<()> {
     }
 
     if filtered.is_empty() {
-        print_info("No events found matching your criteria");
+        print_notice("No events found matching your criteria");
         eprintln!();
         eprintln!("  {} Try these options:", colored(color::CYAN, "→"));
 
@@ -2722,8 +2727,7 @@ fn main() -> io::Result<()> {
     let grouped: BTreeMap<(i32, u32), MonthSummary> = group_by_month(&filtered);
 
     if grouped.is_empty() {
-        println!("{}", 
-            colored(color::DIM, "No events found for the selected period."));
+        print_notice("No events found for the selected period.");
         return Ok(());
     }
 
