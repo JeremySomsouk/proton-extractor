@@ -99,7 +99,18 @@ fn print_hint<S: AsRef<str>>(msg: S) {
 /// Styled notice message output - neutral notices that aren't errors
 /// Used when there's nothing to report but it's not a failure
 fn print_notice<S: AsRef<str>>(msg: S) {
-    println!("{} {}", colored(color::YELLOW, "○"), msg.as_ref());
+    eprintln!("{} {}", colored(color::YELLOW, "○"), msg.as_ref());
+}
+
+/// Styled info message for successful list operations
+fn print_list_summary(count: usize, label: &str) {
+    let item = if count == 1 { label } else { &format!("{}s", label) };
+    eprintln!(
+        "{} {} {} found",
+        colored(color::DIM, "→"),
+        colored(color::CYAN, count.to_string()),
+        colored(color::CYAN, item)
+    );
 }
 
 /// Styled success message - for successful validations and completions
@@ -255,105 +266,68 @@ Enable shell completion for faster CLI usage:
   proton-extractor --generate-completion fish | source   # fish")]
 #[command(after_help = "EXAMPLES:
   # ── Quick Start ──────────────────────────────────────────────────────────────
-  # Basic usage - show all events from a file
-  proton-extractor calendar.ics
+  proton-extractor calendar.ics                              # Basic usage
+  cat calendar.ics | proton-extractor --stdin                # Pipe ICS content
 
-  # ── Filtering ──────────────────────────────────────────────────────────────
-  # Filter by person (case-insensitive)
-  proton-extractor calendar.ics --person \"Alice\"
+  # ── Filtering ───────────────────────────────────────────────────────────────
+  proton-extractor calendar.ics --person \"Alice\"             # By person
+  proton-extractor calendar.ics --project \"Backend\"          # By project
+  proton-extractor calendar.ics --tag \"urgent\"              # By tag (person OR project)
+  proton-extractor calendar.ics -d week                       # This week's events
+  proton-extractor calendar.ics --yesterday                   # Yesterday
+  proton-extractor calendar.ics --from 2024-01-01 --to 2024-03-31  # Date range
+  proton-extractor calendar.ics --week-number W10             # ISO week (current year)
+  proton-extractor calendar.ics --week-number 2024-W10        # ISO week (specific year)
+  proton-extractor calendar.ics --start-after 09:00 --end-before 17:00  # Business hours
+  proton-extractor calendar.ics --min-duration 30m --max-duration 2h  # Duration range
+  proton-extractor calendar.ics --recent 7                    # Last 7 days
+  proton-extractor calendar.ics --weekdays MO,WE,FR          # Specific weekdays
+  proton-extractor calendar.ics --exclude-recurring          # Skip recurring events
 
-  # Filter by project
-  proton-extractor calendar.ics --project \"Backend\"
-
-  # Filter by tag (matches both [person] and {project})
-  proton-extractor calendar.ics --tag \"urgent\"
-
-  # Show only this week's events
-  proton-extractor calendar.ics -w          # or --weekly
-
-  # Show yesterday's events
-  proton-extractor calendar.ics --yesterday
-
-  # Date range filter
-  proton-extractor calendar.ics --from 2024-01-01 --to 2024-03-31
-
-  # Filter by ISO week
-  proton-extractor calendar.ics --week-number W10
-  proton-extractor calendar.ics --week-number 2024-W10
-
-  # Time-of-day filters
-  proton-extractor calendar.ics --start-after 09:00 --end-before 17:00
-
-  # Filter by duration
-  proton-extractor calendar.ics --min-duration 30m   # events ≥ 30 minutes
-  proton-extractor calendar.ics --max-duration 2h    # events ≤ 2 hours
-
-  # ── Output Control ──────────────────────────────────────────────────────────
-  # Quiet mode (totals only)
-  proton-extractor calendar.ics -q           # or --quiet
-
-  # Get just total hours (great for scripts)
-  proton-extractor calendar.ics --total-only
-
-  # Statistics summary
-  proton-extractor calendar.ics -s           # or --stats
-  proton-extractor calendar.ics -s --stats-format json
-
-  # Dry run (preview without output)
-  proton-extractor calendar.ics -n           # or --dry-run
+  # ── Output Modes ─────────────────────────────────────────────────────────────
+  proton-extractor calendar.ics -q                           # Quiet (totals only)
+  proton-extractor calendar.ics --total-only                 # Single line total (scripts)
+  proton-extractor calendar.ics -s                           # Statistics summary
+  proton-extractor calendar.ics --dry-run                    # Preview without output
 
   # ── Listing & Discovery ──────────────────────────────────────────────────────
-  # List all unique persons
-  proton-extractor calendar.ics -P           # or --list-persons
-
-  # List all unique projects
-  proton-extractor calendar.ics -J          # or --list-projects
-
-  # List all events
-  proton-extractor calendar.ics -E           # or --list-events
+  proton-extractor calendar.ics -P                           # List all persons
+  proton-extractor calendar.ics -J                           # List all projects
+  proton-extractor calendar.ics -E                           # List all events
+  proton-extractor calendar.ics -L                           # List all locations
+  proton-extractor calendar.ics --list-tags                  # List all tags
 
   # ── Grouping ─────────────────────────────────────────────────────────────────
-  # Group by person
-  proton-extractor calendar.ics --group-by-person
+  proton-extractor calendar.ics --group-by-person            # Group by person
+  proton-extractor calendar.ics --group-by-project           # Group by project
+  proton-extractor calendar.ics --group-by-weekday           # Group by weekday
+  proton-extractor calendar.ics --group-by-location          # Group by location
 
-  # Group by project
-  proton-extractor calendar.ics --group-by-project
+  # ── Top/Bottom Events ────────────────────────────────────────────────────────
+  proton-extractor calendar.ics --top 10                     # Top 10 longest events
+  proton-extractor calendar.ics --bottom 5                   # Bottom 5 shortest events
 
-  # Group by day of week
-  proton-extractor calendar.ics --group-by-weekday
+  # ── Sorting ─────────────────────────────────────────────────────────────────
+  proton-extractor calendar.ics --sort-by duration --reverse  # Longest first
+  proton-extractor calendar.ics --sort-by person             # Alphabetical by person
 
   # ── Export ───────────────────────────────────────────────────────────────────
-  # Export to CSV
-  proton-extractor calendar.ics --format csv --output report.csv
+  proton-extractor calendar.ics -f csv -o report.csv         # CSV export
+  proton-extractor calendar.ics -f json -o report.json       # JSON export
+  proton-extractor calendar.ics -f html -o report.html       # HTML report
+  proton-extractor calendar.ics -f pivot -o pivot.txt        # Pivot table
+  # Formats: text, json, jsonl, csv, markdown, ical, html, yaml, toml, pivot
 
-  # Export to JSON
-  proton-extractor calendar.ics -f json -o report.json
+  # ── Convenience ──────────────────────────────────────────────────────────────
+  proton-extractor calendar.ics --yes                         # Auto-confirm overwrite
+  proton-extractor --validate [args]                          # Validate without running
+  proton-extractor --generate-completion bash | source        # Shell completion
 
-  # Multiple output formats supported: text, json, jsonl, csv, markdown, ical, html, yaml, toml, pivot
+  # ── Multiple Files ───────────────────────────────────────────────────────────
+  proton-extractor calendar1.ics calendar2.ics -O ./output/     # Batch process
 
-  # ── Convenience Flags ───────────────────────────────────────────────────────
-  # Auto-confirm file overwrite
-  proton-extractor calendar.ics -o report.csv --yes   # or -y, --force
-
-  # Validate arguments without processing files (CI/CD pre-flight)
-  proton-extractor --validate --from 2024-01-01 --to 2024-03-31
-
-  # Reverse chronological order (newest first)
-  proton-extractor calendar.ics --reverse
-
-  # Show top 5 longest events
-  proton-extractor calendar.ics --top 5
-
-  # ── Input Options ────────────────────────────────────────────────────────────
-  # Read from stdin (pipe ICS content)
-  cat calendar.ics | proton-extractor --stdin
-
-  # Multiple files at once
-  proton-extractor calendar1.ics calendar2.ics calendar3.ics
-
-  # ── Shell Completion ─────────────────────────────────────────────────────────
-  source <(proton-extractor --generate-completion bash)
-  # Also supports: zsh, fish, powershell")]
+TIP: Use --validate to check your arguments before running in CI/CD pipelines.
+TIP: Use --total-only for clean numeric output in scripts: $(proton-extractor -q -d today)")]
 #[command(version = VERSION)]
 struct Args {
     /// Paths to .ics files
@@ -3301,7 +3275,7 @@ fn main() -> io::Result<()> {
             writeln!(out_writer, "{}", person)?;
         }
         if count > 0 {
-            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} person{}", count, if count == 1 {""} else {"s"})));
+            print_list_summary(count, "person");
         }
         return Ok(());
     }
@@ -3321,7 +3295,7 @@ fn main() -> io::Result<()> {
             writeln!(out_writer, "{}", project)?;
         }
         if count > 0 {
-            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} project{}", count, if count == 1 {""} else {"s"})));
+            print_list_summary(count, "project");
         }
         return Ok(());
     }
@@ -3343,7 +3317,7 @@ fn main() -> io::Result<()> {
             writeln!(out_writer, "{}", location)?;
         }
         if count > 0 {
-            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} location{}", count, if count == 1 {""} else {"s"})));
+            print_list_summary(count, "location");
         }
         return Ok(());
     }
@@ -3365,7 +3339,7 @@ fn main() -> io::Result<()> {
             writeln!(out_writer, "{}", category)?;
         }
         if count > 0 {
-            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} categor{}", count, if count == 1 {"y"} else {"ies"})));
+            print_list_summary(count, "category");
         }
         return Ok(());
     }
@@ -3399,12 +3373,17 @@ fn main() -> io::Result<()> {
                 writeln!(out_writer, "  {{{}}}", project)?;
             }
         }
-        let total = sorted_persons.len() + sorted_projects.len();
+        let person_count = sorted_persons.len();
+        let project_count = sorted_projects.len();
+        let total = person_count + project_count;
         if total > 0 {
-            eprintln!("{} {} found ({} persons, {} projects)", colored(color::DIM, "→"), 
+            eprintln!(
+                "{} {} found ({} persons, {} projects)",
+                colored(color::DIM, "→"),
                 colored(color::CYAN, format!("{} tag{}", total, if total == 1 {""} else {"s"})),
-                colored(color::CYAN, sorted_persons.len().to_string()),
-                colored(color::CYAN, sorted_projects.len().to_string()));
+                colored(color::CYAN, person_count.to_string()),
+                colored(color::CYAN, project_count.to_string())
+            );
         }
         return Ok(());
     }
@@ -3420,7 +3399,7 @@ fn main() -> io::Result<()> {
             writeln!(out_writer, "{}", year)?;
         }
         if count > 0 {
-            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} year{}", count, if count == 1 {""} else {"s"})));
+            print_list_summary(count, "year");
         }
         return Ok(());
     }
@@ -3440,7 +3419,7 @@ fn main() -> io::Result<()> {
             writeln!(out_writer, "{}", uid)?;
         }
         if count > 0 {
-            eprintln!("{} {} found", colored(color::DIM, "→"), colored(color::CYAN, format!("{} UID{}", count, if count == 1 {""} else {"s"})));
+            print_list_summary(count, "UID");
         }
         return Ok(());
     }
@@ -3458,7 +3437,7 @@ fn main() -> io::Result<()> {
             )?;
         }
         if count > 0 {
-            eprintln!("{} {} listed", colored(color::DIM, "→"), colored(color::CYAN, format!("{} event{}", count, if count == 1 {""} else {"s"})));
+            print_list_summary(count, "event");
         }
         return Ok(());
     }
