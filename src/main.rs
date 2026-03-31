@@ -3091,12 +3091,12 @@ fn main() -> io::Result<()> {
                 colored(color::YELLOW, args.files.len().to_string())));
             eprintln!();
             eprintln!("  {} Suggestions:", colored(color::CYAN, "→"));
-            eprintln!("    {} {:<22} Show all events (no filter)", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
+            eprintln!("    {} {:<28} Show all events", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
             if args.person.is_none() && args.project.is_none() && args.tag.is_none() {
-                eprintln!("    {} {:<22} List available persons", colored(color::DIM, "•"), colored(color::CYAN, "-P"));
+                eprintln!("    {} {:<28} List available persons", colored(color::DIM, "•"), colored(color::CYAN, "-P"));
             }
-            eprintln!("    {} {:<22} Show events from last 30 days", colored(color::DIM, "•"), colored(color::CYAN, "--recent 30"));
-            eprintln!("    {} {:<22} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
+            eprintln!("    {} {:<28} Last 30 days", colored(color::DIM, "•"), colored(color::CYAN, "--recent 30"));
+            eprintln!("    {} {:<28} Include recurring", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
         }
         eprintln!();
         eprintln!("  {} Run {} for filter options",
@@ -4419,7 +4419,11 @@ fn main() -> io::Result<()> {
             let event_count = filtered.len();
             let duration_str = format_hours(grand_total_minutes);
             print_exported(event_count, &duration_str, path);
-            print_hint(format!("View with: cat {}", path.display()));
+            if path.extension().map(|e| e == "html").unwrap_or(false) {
+                print_hint(format!("Open in browser: open {}", path.display()));
+            } else {
+                print_hint(format!("View: cat {}", path.display()));
+            }
         }
     }
 
