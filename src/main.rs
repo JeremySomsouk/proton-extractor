@@ -2622,18 +2622,30 @@ fn main() -> io::Result<()> {
         // Read from stdin
         debug!("Reading from stdin");
         let reader = BufReader::new(std::io::stdin());
+        let mut found_content = false;
+        let mut parse_warnings = Vec::new();
         let parser = IcalParser::new(reader);
         for calendar in parser {
             match calendar {
                 Ok(cal) => {
+                    found_content = true;
                     debug!("Found {} events from stdin", cal.events.len());
                     all_raw_events.extend(extract_raw_events(cal.events, None));
                 }
                 Err(_e) if args.quiet => {}
                 Err(e) => {
-                    print_warn(&format!("Failed to parse stdin: {}", e));
+                    parse_warnings.push(e.to_string());
                 }
             }
+        }
+        
+        // Detect empty stdin early
+        if !found_content && !parse_warnings.is_empty() && !args.quiet {
+            print_warn("stdin appears to be empty or not valid ICS content");
+            eprintln!("  {} Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin", colored(color::DIM, "→"));
+        } else if !found_content && !args.quiet && parse_warnings.is_empty() {
+            print_warn("stdin is empty");
+            eprintln!("  {} Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin", colored(color::DIM, "→"));
         }
     } else {
         // Validate file extensions before processing
@@ -3057,65 +3069,69 @@ fn main() -> io::Result<()> {
     }
 
     if filtered.is_empty() {
-        eprintln!();
-        print_notice("No events found matching your criteria");
-        eprintln!("  {} Use {} to debug argument issues", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [your args]"));
+        if !args.quiet {
+            eprintln!();
+            print_notice("No events found matching your criteria");
+            eprintln!("  {} Use {} to debug argument issues", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [your args]"));
+        }
         
         // Show active date context if a date filter is active
-        match &effective_date {
-            DateFilter::Today => eprintln!("  {}  Showing events for today ({})", colored(color::DIM, "→"), now.format("%Y-%m-%d")),
-            DateFilter::Yesterday => eprintln!("  {}  Showing events for yesterday ({})", colored(color::DIM, "→"), yesterday.format("%Y-%m-%d")),
-            DateFilter::Tomorrow => eprintln!("  {}  Showing events for tomorrow ({})", colored(color::DIM, "→"), tomorrow.format("%Y-%m-%d")),
-            DateFilter::Week => eprintln!("  {}  Showing events for ISO week {} ({} to {})", colored(color::DIM, "→"), now.format("%V"), now.date().year().to_string() + "-W" + &now.format("%V").to_string(), tomorrow.format("%Y-%m-%d")),
-            DateFilter::LastWeek => eprintln!("  {}  Showing events for last week", colored(color::DIM, "→")),
-            DateFilter::Current => eprintln!("  {}  Showing events for {} {}", colored(color::DIM, "→"), now.format("%B"), now.year()),
-            DateFilter::Previous => {
-                let (y, m) = if now.month() == 1 { (now.year() - 1, 12) } else { (now.year(), now.month() - 1) };
-                eprintln!("  {}  Showing events for {} {}", colored(color::DIM, "→"), chrono::Month::try_from(u8::try_from(m).unwrap_or(1)).unwrap_or(chrono::Month::January).name(), y);
-            },
-            DateFilter::All => {}
-        }
-        
-        // Show date range if --from/--to is set
-        if let (Some(from), Some(to)) = (&args.from, &args.to) {
-            eprintln!("  {}  Date range: {} to {}", colored(color::DIM, "→"), from, to);
-        }
-        
-        eprintln!();
-        eprintln!("  {} Try these options:", colored(color::CYAN, "→"));
+        if !args.quiet {
+            match &effective_date {
+                DateFilter::Today => eprintln!("  {}  Showing events for today ({})", colored(color::DIM, "→"), now.format("%Y-%m-%d")),
+                DateFilter::Yesterday => eprintln!("  {}  Showing events for yesterday ({})", colored(color::DIM, "→"), yesterday.format("%Y-%m-%d")),
+                DateFilter::Tomorrow => eprintln!("  {}  Showing events for tomorrow ({})", colored(color::DIM, "→"), tomorrow.format("%Y-%m-%d")),
+                DateFilter::Week => eprintln!("  {}  Showing events for ISO week {} ({} to {})", colored(color::DIM, "→"), now.format("%V"), now.date().year().to_string() + "-W" + &now.format("%V").to_string(), tomorrow.format("%Y-%m-%d")),
+                DateFilter::LastWeek => eprintln!("  {}  Showing events for last week", colored(color::DIM, "→")),
+                DateFilter::Current => eprintln!("  {}  Showing events for {} {}", colored(color::DIM, "→"), now.format("%B"), now.year()),
+                DateFilter::Previous => {
+                    let (y, m) = if now.month() == 1 { (now.year() - 1, 12) } else { (now.year(), now.month() - 1) };
+                    eprintln!("  {}  Showing events for {} {}", colored(color::DIM, "→"), chrono::Month::try_from(u8::try_from(m).unwrap_or(1)).unwrap_or(chrono::Month::January).name(), y);
+                },
+                DateFilter::All => {}
+            }
+            
+            // Show date range if --from/--to is set
+            if let (Some(from), Some(to)) = (&args.from, &args.to) {
+                eprintln!("  {}  Date range: {} to {}", colored(color::DIM, "→"), from, to);
+            }
+            
+            eprintln!();
+            eprintln!("  {} Try these options:", colored(color::CYAN, "→"));
 
-        // Context-aware suggestions based on active filters
-        if args.today || args.yesterday || args.tomorrow || args.weekly || args.last_week {
-            eprintln!("    {} {:<22} Show all events (no date filter)", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
-        }
-        if args.person.is_some() || !args.persons.clone().unwrap_or_default().is_empty() {
-            eprintln!("    {} {:<22} Remove person filter", colored(color::DIM, "•"), colored(color::CYAN, "--person ''"));
-        }
-        if args.project.is_some() {
-            eprintln!("    {} {:<22} Remove project filter", colored(color::DIM, "•"), colored(color::CYAN, "--project ''"));
-        }
-        if args.exclude_recurring {
-            eprintln!("    {} {:<22} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
-        }
-        if args.only_untagged {
-            eprintln!("    {} {:<22} Include tagged events", colored(color::DIM, "•"), colored(color::CYAN, "--only-untagged=false"));
-        }
-        if args.from.is_none() && args.to.is_none() {
-            eprintln!("    {} {:<22} Filter by date range", colored(color::DIM, "•"), colored(color::CYAN, "--from YYYY-MM-DD --to YYYY-MM-DD"));
-        }
-        if args.verbose {
-            eprintln!("    {} {:<22} Disable verbose mode", colored(color::DIM, "•"), colored(color::CYAN, "-v"));
-        } else {
-            eprintln!("    {} {:<22} Show debug info", colored(color::DIM, "•"), colored(color::CYAN, "-v"));
-        }
-        if args.recent.is_some() {
-            eprintln!("    {} {:<22} Show events from last N days (no limit)", colored(color::DIM, "•"), colored(color::CYAN, "--recent 30"));
-        }
+            // Context-aware suggestions based on active filters
+            if args.today || args.yesterday || args.tomorrow || args.weekly || args.last_week {
+                eprintln!("    {} {:<22} Show all events (no date filter)", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
+            }
+            if args.person.is_some() || !args.persons.clone().unwrap_or_default().is_empty() {
+                eprintln!("    {} {:<22} Remove person filter", colored(color::DIM, "•"), colored(color::CYAN, "--person ''"));
+            }
+            if args.project.is_some() {
+                eprintln!("    {} {:<22} Remove project filter", colored(color::DIM, "•"), colored(color::CYAN, "--project ''"));
+            }
+            if args.exclude_recurring {
+                eprintln!("    {} {:<22} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
+            }
+            if args.only_untagged {
+                eprintln!("    {} {:<22} Include tagged events", colored(color::DIM, "•"), colored(color::CYAN, "--only-untagged=false"));
+            }
+            if args.from.is_none() && args.to.is_none() {
+                eprintln!("    {} {:<22} Filter by date range", colored(color::DIM, "•"), colored(color::CYAN, "--from YYYY-MM-DD --to YYYY-MM-DD"));
+            }
+            if args.verbose {
+                eprintln!("    {} {:<22} Disable verbose mode", colored(color::DIM, "•"), colored(color::CYAN, "-v"));
+            } else {
+                eprintln!("    {} {:<22} Show debug info", colored(color::DIM, "•"), colored(color::CYAN, "-v"));
+            }
+            if args.recent.is_some() {
+                eprintln!("    {} {:<22} Show events from last N days (no limit)", colored(color::DIM, "•"), colored(color::CYAN, "--recent 30"));
+            }
 
-        eprintln!();
-        eprintln!("  {} Run {} for all filter options",
-            colored(color::DIM, "→"),
-            colored(color::CYAN, "proton-extractor --help"));
+            eprintln!();
+            eprintln!("  {} Run {} for all filter options",
+                colored(color::DIM, "→"),
+                colored(color::CYAN, "proton-extractor --help"));
+        }
         return Ok(());
     }
 
