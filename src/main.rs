@@ -268,7 +268,7 @@ Enable shell completion for faster CLI usage:
 #[command(after_help = "EXAMPLES:
   # ── Quick Start ──────────────────────────────────────────────────────────────
   proton-extractor calendar.ics                              # Basic usage
-  cat calendar.ics | proton-extractor --stdin                # Pipe ICS content
+  proton-extractor --stdin < calendar.ics                # Pipe ICS content
 
   # ── Filtering ───────────────────────────────────────────────────────────────
   proton-extractor calendar.ics --person \"Alice\"             # By person
@@ -2653,29 +2653,29 @@ fn main() -> io::Result<()> {
         if args.verbose {
             println!();
             println!("  {} Effective filters:", colored(color::CYAN, "→"));
-            if args.quiet { eprintln!("    {:<22} quiet mode", colored(color::DIM, "-q,")); }
-            if args.silent { eprintln!("    {:<22} silent mode", colored(color::DIM, "--silent")); }
-            if args.today { eprintln!("    {:<22} today", colored(color::DIM, "-t,")); }
-            if args.yesterday { eprintln!("    {:<22} yesterday", colored(color::DIM, "--yesterday")); }
-            if args.weekly { eprintln!("    {:<22} this week", colored(color::DIM, "-w,")); }
-            if args.last_week { eprintln!("    {:<22} last week", colored(color::DIM, "-l,")); }
+            if args.quiet { println!("    {:<22} quiet mode", colored(color::DIM, "-q,")); }
+            if args.silent { println!("    {:<22} silent mode", colored(color::DIM, "--silent")); }
+            if args.today { println!("    {:<22} today", colored(color::DIM, "-t,")); }
+            if args.yesterday { println!("    {:<22} yesterday", colored(color::DIM, "--yesterday")); }
+            if args.weekly { println!("    {:<22} this week", colored(color::DIM, "-w,")); }
+            if args.last_week { println!("    {:<22} last week", colored(color::DIM, "-l,")); }
             if !matches!(args.date, DateFilter::All) {
-                eprintln!("    {:<22} date filter: {:?}", colored(color::DIM, "-d,"), args.date);
+                println!("    {:<22} date filter: {:?}", colored(color::DIM, "-d,"), args.date);
             }
             if let Some(ref p) = args.person {
-                eprintln!("    {:<22} person: {}", colored(color::DIM, "--person"), p);
+                println!("    {:<22} person: {}", colored(color::DIM, "--person"), p);
             }
             if let Some(ref p) = args.project {
-                eprintln!("    {:<22} project: {}", colored(color::DIM, "--project"), p);
+                println!("    {:<22} project: {}", colored(color::DIM, "--project"), p);
             }
             if let Some(ref t) = args.tag {
-                eprintln!("    {:<22} tag: {}", colored(color::DIM, "--tag"), t);
+                println!("    {:<22} tag: {}", colored(color::DIM, "--tag"), t);
             }
             if let Some(ref f) = args.from {
-                eprintln!("    {:<22} from: {}", colored(color::DIM, "--from"), f);
+                println!("    {:<22} from: {}", colored(color::DIM, "--from"), f);
             }
             if let Some(ref t) = args.to {
-                eprintln!("    {:<22} to: {}", colored(color::DIM, "--to"), t);
+                println!("    {:<22} to: {}", colored(color::DIM, "--to"), t);
             }
         }
         
@@ -2766,7 +2766,7 @@ fn main() -> io::Result<()> {
         print_error("No .ics files provided");
         print_hints(&[
             "Provide file paths: proton-extractor calendar.ics",
-            "Or pipe ICS content: cat calendar.ics | proton-extractor --stdin",
+            "Or pipe ICS content: proton-extractor --stdin < calendar.ics",
             "Validate args (CI/CD): proton-extractor --validate [args]",
             "Get help: proton-extractor --help"
         ]);
@@ -2805,10 +2805,10 @@ fn main() -> io::Result<()> {
         // Detect empty stdin early
         if !found_content && !parse_warnings.is_empty() && !args.quiet && !args.silent {
             print_warn("stdin appears to be empty or not valid ICS content");
-            print_hints(&["Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin"][..]);
+            print_hints(&["Provide ICS content via pipe: proton-extractor --stdin < calendar.ics"][..]);
         } else if !found_content && !args.quiet && !args.silent && parse_warnings.is_empty() {
             print_warn("stdin is empty");
-            print_hints(&["Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin"][..]);
+            print_hints(&["Provide ICS content via pipe: proton-extractor --stdin < calendar.ics"][..]);
         }
     } else {
         // Validate file extensions before processing
