@@ -82,14 +82,13 @@ fn print_warn<S: AsRef<str>>(msg: S) {
 }
 
 /// Styled success with count - for export operations
-fn print_exported(count: usize, duration: &str, path: &Path) {
+fn print_exported(count: usize, path: &Path) {
     let event_label = if count == 1 { "event" } else { "events" };
     println!(
-        "{} Exported {} {} ({}) → {}",
+        "{} Exported {} {} → {}",
         colored(color::GREEN, "✓"),
         colored(color::YELLOW, count.to_string()),
         event_label,
-        duration,
         colored(color::CYAN, path.display().to_string())
     );
 }
@@ -132,18 +131,6 @@ fn print_list_summary(count: usize, label: &str) {
 /// Styled success message - for successful validations and completions
 fn print_success(msg: &str) {
     println!("{} {}", colored(color::GREEN, "✓"), msg);
-}
-
-/// Show export completion message with file path
-fn print_export_done(count: usize, path: &Path) {
-    let event_label = if count == 1 { "event" } else { "events" };
-    eprintln!(
-        "{} Exported {} {} → {}",
-        colored(color::GREEN, "✓"),
-        colored(color::YELLOW, count.to_string()),
-        event_label,
-        colored(color::CYAN, path.display().to_string())
-    );
 }
 
 /// Prompt user for confirmation in interactive mode.
@@ -3733,7 +3720,7 @@ fn main() -> io::Result<()> {
         if write_to_file {
             if let Some(ref path) = output_file_path {
                 let count = filtered.len();
-                print_export_done(count, path);
+                print_exported(count, path);
             }
         }
 
@@ -4612,8 +4599,7 @@ fn main() -> io::Result<()> {
     if write_to_file {
         if let Some(ref path) = output_file_path {
             let event_count = filtered.len();
-            let duration_str = format_hours(grand_total_minutes);
-            print_exported(event_count, &duration_str, path);
+            print_exported(event_count, path);
             if path.extension().map(|e| e == "html").unwrap_or(false) {
                 print_hint(format!("Open in browser: open {}", path.display()));
             } else {
