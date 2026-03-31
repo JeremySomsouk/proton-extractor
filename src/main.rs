@@ -119,8 +119,20 @@ fn print_export_done(count: usize, path: &Path) {
     );
 }
 
-/// Prompt user for confirmation in interactive mode
+/// Prompt user for confirmation in interactive mode.
+/// Returns false immediately in non-interactive (piped) mode to avoid hanging.
 fn confirm(prompt: &str) -> bool {
+    // In non-interactive mode, fail safely instead of hanging
+    if !atty::is(atty::Stream::Stdin) {
+        eprintln!(
+            "{} {} {}",
+            colored(color::YELLOW, "warning:"),
+            "Cannot prompt for confirmation in non-interactive mode",
+            colored(color::CYAN, "(use --yes or --force to auto-confirm)")
+        );
+        return false;
+    }
+    
     eprint!("  {} {} [{}/N] ", colored(color::CYAN, "→"), prompt, colored(color::GREEN, "y"));
     io::stderr().flush().ok();
     let mut response = String::new();
