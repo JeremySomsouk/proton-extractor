@@ -130,7 +130,7 @@ struct Args {
     files: Vec<PathBuf>,
 
     /// Filter by date: current month, previous, all, or today
-    #[arg(short, long, value_enum, default_value = "all")]
+    #[arg(short = 'd', long, value_enum, default_value = "all")]
     date: DateFilter,
 
     /// Filter by a specific year (e.g., 2024)
@@ -1899,7 +1899,7 @@ fn main() -> io::Result<()> {
     let has_files = !args.files.is_empty();
 
     if !has_stdin && !has_files {
-        warn!("No .ics files provided and stdin not enabled");
+        eprintln!("No .ics files provided. Use --stdin to pipe ICS content, or provide file paths.");
         std::process::exit(1);
     }
 
@@ -2218,6 +2218,13 @@ fn main() -> io::Result<()> {
             println!("\nBy person:");
             for (person, count) in &by_person {
                 println!("  {}: {}", person, count);
+            }
+        }
+        if let Some(first) = filtered.first() {
+            if let Some(last) = filtered.last() {
+                println!("\nDate range: {} to {}", 
+                    first.start.format("%Y-%m-%d"), 
+                    last.start.format("%Y-%m-%d"));
             }
         }
         return Ok(());
