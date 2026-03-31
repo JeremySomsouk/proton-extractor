@@ -2587,8 +2587,8 @@ fn print_examples() {
     println!("    --stats-quiet            # Compact stats (single line)");
     println!();
     println!("  {} Automation", colored(color::BOLD, "›"));
+    println!("    --yes, --force          # Auto-confirm prompts");
     println!("    --validate               # Validate args (CI/CD)");
-    println!("    --yes                    # Auto-confirm prompts");
     println!("    --no-color               # Disable colors");
     println!();
     println!(
@@ -3372,7 +3372,7 @@ fn main() -> io::Result<()> {
     };
     let mut out_writer = out_writer;
 
-    let weekdays_filter = args.weekdays.unwrap_or_default();
+    let weekdays_filter = args.weekdays.clone().unwrap_or_default();
     let exclude_weekdays_filter = args.exclude_weekdays.unwrap_or_default();
 
     // Determine effective date filter: explicit flags override --date
@@ -3526,6 +3526,17 @@ fn main() -> io::Result<()> {
             if args.exclude_recurring { eprintln!("  {} --include-recurring", colored(color::DIM, "•")); }
             if args.recent.is_none() && args.from.is_none() {
                 eprintln!("  {} --recent 30  Last 30 days", colored(color::DIM, "•"));
+            }
+            // Suggest --validate if any date/person/project filters are set
+            if args.from.is_some() || args.to.is_some() || args.person.is_some()
+                || args.project.is_some() || args.tag.is_some() || args.month.is_some()
+                || args.week_number.is_some()
+            {
+                eprintln!(
+                    "  {} {:<28} Validate filters",
+                    colored(color::DIM, "•"),
+                    colored(color::CYAN, "--validate")
+                );
             }
             eprintln!("  {} --help for more options", colored(color::DIM, "→"));
         }
