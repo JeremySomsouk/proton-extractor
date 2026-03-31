@@ -2842,30 +2842,39 @@ fn main() -> io::Result<()> {
                 io::stderr().flush().ok();
             }
 
-            let file = File::open(path).map_err(|e| {
-                let path_str = path.display().to_string();
-                match e.kind() {
-                    std::io::ErrorKind::NotFound => {
-                        print_error(&format!("'{}' not found", path_str));
-                        print_hints(&[
-                            &format!("Verify the path is correct: ls -la {}", path_str)[..],
-                            "Check that the file exists and is readable"
-                        ]);
-                        std::process::exit(1);
+            let file = match File::open(path) {
+                Ok(f) => f,
+                Err(e) => {
+                    let path_str = path.display().to_string();
+                    let (msg, hints) = match e.kind() {
+                        std::io::ErrorKind::NotFound => (
+                            format!("'{}' not found", path_str),
+                            vec![
+                                format!("Verify the path is correct: ls -la {}", path_str),
+                                "Check that the file exists and is readable".to_string(),
+                            ],
+                        ),
+                        std::io::ErrorKind::PermissionDenied => (
+                            format!("Permission denied: '{}'", path_str),
+                            vec![format!("Run: chmod +r {}", path_str)],
+                        ),
+                        _ => (
+                            format!("Failed to open '{}': {}", path_str, e),
+                            vec![],
+                        ),
+                    };
+                    // Use spinner error finish if spinner exists, otherwise just print error
+                    if let Some(ref s) = spinner {
+                        s.finish_with_error(&msg);
+                    } else {
+                        print_error(&msg);
                     }
-                    std::io::ErrorKind::PermissionDenied => {
-                        print_error(&format!("Permission denied: '{}'", path_str));
-                        print_hints(&[
-                            &format!("Run: chmod +r {}", path_str)[..]
-                        ]);
-                        std::process::exit(1);
+                    if !hints.is_empty() {
+                        print_hints(&hints.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                     }
-                    _ => io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("Failed to open {}: {}", path.display(), e),
-                    ),
+                    std::process::exit(1);
                 }
-            })?;
+            };
 
             let reader = BufReader::new(file);
             let parser = IcalParser::new(reader);
