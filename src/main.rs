@@ -93,11 +93,12 @@ fn print_success<S: AsRef<str>>(msg: S) {
     println!("{} {}", colored(color::GREEN, "✓"), msg.as_ref());
 }
 
-/// Styled success with count - for export operations
-fn print_exported(count: usize, path: &Path) {
+/// Styled success message for file output operations
+/// Used for both export and stats output to a file
+fn print_saved(count: usize, path: &Path) {
     let event_label = if count == 1 { "event" } else { "events" };
     println!(
-        "{} Exported {} {} → {}",
+        "{} Saved {} {} → {}",
         colored(color::GREEN, "✓"),
         colored(color::YELLOW, count.to_string()),
         event_label,
@@ -4193,7 +4194,7 @@ fn main() -> io::Result<()> {
         if write_to_file {
             if let Some(ref path) = output_file_path {
                 let count = filtered.len();
-                print_exported(count, path);
+                print_saved(count, path);
             }
         }
 
@@ -5079,7 +5080,7 @@ fn main() -> io::Result<()> {
     if write_to_file {
         if let Some(ref path) = output_file_path {
             let event_count = filtered.len();
-            print_exported(event_count, path);
+            print_saved(event_count, path);
             if path.extension().map(|e| e == "html").unwrap_or(false) {
                 print_hint(format!("Open in browser: open {}", path.display()));
             } else {
