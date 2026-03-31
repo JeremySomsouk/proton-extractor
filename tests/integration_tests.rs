@@ -731,3 +731,43 @@ fn test_cli_total_only() {
         .success()
         .stdout(predicate::str::contains("h"));
 }
+
+#[test]
+fn test_cli_sort_by_duration() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--sort-by")
+        .arg("duration");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_sort_by_person() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--sort-by")
+        .arg("person");
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_cli_sort_reverse() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--sort-by")
+        .arg("duration")
+        .arg("--sort-reverse");
+    
+    cmd.assert()
+        .success();
+}

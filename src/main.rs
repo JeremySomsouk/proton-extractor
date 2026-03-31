@@ -74,6 +74,16 @@ enum DateFilter {
 }
 
 #[derive(Debug, Clone, ValueEnum)]
+enum SortBy {
+    Date,
+    Duration,
+    Person,
+    Project,
+    Start,
+    End,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
 enum OutputFormat {
     Text,
     Json,
@@ -340,6 +350,14 @@ struct Args {
     /// Remove duplicate events (same summary, start, and end time)
     #[arg(long)]
     dedupe: bool,
+
+    /// Sort events by: date (default), duration, person, project, start time, end time
+    #[arg(long, value_enum, default_value = "date")]
+    sort_by: SortBy,
+
+    /// Reverse the sort order (use with --sort-by)
+    #[arg(long)]
+    sort_reverse: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -1841,14 +1859,46 @@ fn main() -> io::Result<()> {
 
     debug!("Events after filtering: {}", filtered.len());
 
-    // Apply reverse order if requested
-    let filtered: Vec<&Event> = if args.reverse {
-        let mut rev = filtered;
-        rev.reverse();
-        rev
-    } else {
-        filtered
-    };
+    // Apply sorting based on --sort-by and --sort-reverse flags
+    let mut filtered: Vec<&Event> = filtered;
+    match args.sort_by {
+        SortBy::Date | SortBy::Start => {
+            filtered.sort_by(|a, b| {
+                let cmp = a.start.cmp(&b.start);
+                if args.sort_reverse { cmp.reverse() } else { cmp }
+            });
+        }
+        SortBy::End => {
+            filtered.sort_by(|a, b| {
+                let cmp = a.end.cmp(&b.end);
+                if args.sort_reverse { cmp.reverse() } else { cmp }
+            });
+        }
+        SortBy::Duration => {
+            filtered.sort_by(|a, b| {
+                let dur_a = event_duration_minutes(a).unwrap_or(0);
+                let dur_b = event_duration_minutes(b).unwrap_or(0);
+                let cmp = dur_a.cmp(&dur_b);
+                if args.sort_reverse { cmp.reverse() } else { cmp }
+            });
+        }
+        SortBy::Person => {
+            filtered.sort_by(|a, b| {
+                let pers_a = extract_person(&a.summary).unwrap_or("(unknown)");
+                let pers_b = extract_person(&b.summary).unwrap_or("(unknown)");
+                let cmp = pers_a.to_lowercase().cmp(&pers_b.to_lowercase());
+                if args.sort_reverse { cmp.reverse() } else { cmp }
+            });
+        }
+        SortBy::Project => {
+            filtered.sort_by(|a, b| {
+                let proj_a = extract_project(&a.summary).unwrap_or("(none)");
+                let proj_b = extract_project(&b.summary).unwrap_or("(none)");
+                let cmp = proj_a.to_lowercase().cmp(&proj_b.to_lowercase());
+                if args.sort_reverse { cmp.reverse() } else { cmp }
+            });
+        }
+    }
 
     if filtered.is_empty() {
         println!("No events found for the selected period.");
