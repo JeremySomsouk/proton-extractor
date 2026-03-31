@@ -487,7 +487,7 @@ fn parse_duration(duration: &str) -> Option<Duration> {
 }
 
 /// Parse a human-readable duration string like "30m", "1h", "2h30m", "1d"
-pub fn parse_human_duration(s: &str) -> Option<Duration> {
+fn parse_human_duration(s: &str) -> Option<Duration> {
     let s = s.trim();
     if s.is_empty() {
         return None;
