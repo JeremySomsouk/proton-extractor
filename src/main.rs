@@ -258,15 +258,15 @@ struct Args {
     today: bool,
 
     /// Quick filter: show only yesterday's events
-    #[arg(long)]
+    #[arg(short = 'y', long)]
     yesterday: bool,
 
     /// Quick filter: show only tomorrow's events
-    #[arg(long)]
+    #[arg(short = 'm', long)]
     tomorrow: bool,
 
     /// Quick filter: show only this week's events (Monday to Sunday)
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     weekly: bool,
 
     /// Quick filter: show only last week's events (Monday to Sunday)
