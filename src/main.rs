@@ -163,11 +163,6 @@ fn print_list_summary(count: usize, label: &str) {
 fn confirm(prompt: &str) -> bool {
     // In non-interactive mode, fail safely instead of hanging
     if !atty::is(atty::Stream::Stdin) {
-        eprintln!(
-            "{} Cannot prompt in non-interactive mode: {}",
-            colored(color::YELLOW, "warning:"),
-            "use --yes or --force to auto-confirm"
-        );
         return false;
     }
 
@@ -791,34 +786,20 @@ fn validate_month(month: Option<u32>) -> io::Result<()> {
 fn validate_time_filter(time_str: &str, flag_name: &str) -> io::Result<()> {
     if let Some((hours, minutes)) = parse_time(time_str) {
         if hours > 23 || minutes > 59 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "invalid time '{}' for --{}: hours must be 0-23, minutes must be 0-59",
-                    time_str, flag_name
-                ),
-            ));
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                format!("'{}': hours 0-23, minutes 0-59", time_str)));
         }
         Ok(())
     } else {
-        // Provide actionable hint for common mistakes
-        let hint: &str = if time_str.len() == 4 && time_str.chars().all(|c| c.is_ascii_digit()) {
-            "did you mean ':' separator? (e.g., '09:00')"
+        let hint = if time_str.len() == 4 && time_str.chars().all(|c| c.is_ascii_digit()) {
+            "use ':' separator (e.g., '09:00')"
         } else if time_str.contains('.') {
-            "use ':' as separator (e.g., '09:00' not '09.00')"
-        } else if time_str.len() < 4 {
-            "time format should be HH:MM (e.g., '09:00' or '17:30')"
+            "use ':' not '.'"
         } else {
-            "use HH:MM format (24-hour)"
+            "use HH:MM format"
         };
-
-        Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!(
-                "invalid time '{}' for --{}: {}\n    {} Valid format: HH:MM (e.g., '09:00', '17:30', '23:59')",
-                time_str, flag_name, hint, colored(color::DIM, "→")
-            ),
-        ))
+        Err(io::Error::new(io::ErrorKind::InvalidInput,
+            format!("'{}': {}", time_str, hint)))
     }
 }
 
@@ -855,70 +836,30 @@ fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
     Ok(())
 }
 
-/// Validate weekday abbreviations with actionable suggestions for common mistakes
 fn validate_weekdays(weekdays: &Option<Vec<String>>, flag_name: &str) -> io::Result<()> {
     if let Some(ref days) = weekdays {
         let valid_abbrevs = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
-        let valid_full = [
-            "MONDAY",
-            "TUESDAY",
-            "WEDNESDAY",
-            "THURSDAY",
-            "FRIDAY",
-            "SATURDAY",
-            "SUNDAY",
-        ];
 
         for day in days {
             let upper = day.to_uppercase();
-            // Check if it's a valid abbreviation
             if !valid_abbrevs.contains(&upper.as_str()) {
-                // Check if it's a full day name (common mistake)
-                if valid_full.contains(&upper.as_str()) {
-                    let suggested =
-                        valid_abbrevs[valid_full.iter().position(|&d| d == upper).unwrap()];
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!(
-                            "invalid weekday '{}' for --{}: use abbreviation '{}' (not '{}')",
-                            day, flag_name, suggested, day
-                        ),
-                    ));
+                // Check for full day name typo
+                if ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"].contains(&upper.as_str()) {
+                    let suggested = valid_abbrevs[["MON","TUE","WED","THU","FRI","SAT","SUN"]
+                        .iter().position(|&d| d == &upper[..2]).unwrap_or(0)];
+                    return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                        format!("'{}': use '{}' (not '{}')", day, suggested, day)));
                 }
 
-                // Check for common typos
-                let typo_suggestions: Vec<&str> = valid_abbrevs
-                    .iter()
-                    .filter(|&&abbr| {
-                        // Check Levenshtein distance of 1 or same starting letter
-                        abbr.chars().next() == upper.chars().next()
-                            || levenshtein_distance(&upper.to_lowercase(), &abbr.to_lowercase())
-                                <= 2
-                    })
-                    .copied()
-                    .collect();
+                // Levenshtein-based typo suggestions
+                let typo: Option<&str> = valid_abbrevs.iter()
+                    .find(|&&abbr| levenshtein_distance(&upper.to_lowercase(), &abbr.to_lowercase()) <= 1)
+                    .copied();
 
-                let msg = if !typo_suggestions.is_empty() {
-                    format!(
-                        "invalid weekday '{}' for --{}: valid values are {}{}",
-                        day,
-                        flag_name,
-                        valid_abbrevs.join(", "),
-                        if typo_suggestions.len() == 1 {
-                            format!(" (did you mean '{}'?)", typo_suggestions[0])
-                        } else {
-                            String::new()
-                        }
-                    )
-                } else {
-                    format!(
-                        "invalid weekday '{}' for --{}: valid values are {}",
-                        day,
-                        flag_name,
-                        valid_abbrevs.join(", ")
-                    )
+                let msg = match typo {
+                    Some(s) => format!("'{}': did you mean '{}'? Valid: {}", day, s, valid_abbrevs.join(",")),
+                    None => format!("'{}': invalid. Valid: {}", day, valid_abbrevs.join(",")),
                 };
-
                 return Err(io::Error::new(io::ErrorKind::InvalidInput, msg));
             }
         }
@@ -3534,107 +3475,35 @@ fn main() -> io::Result<()> {
             eprintln!();
             print_notice("No events found");
 
-            // Show what date context is active
+            // Show date context
             match &effective_date {
-                DateFilter::Today => eprintln!(
-                    "  {} showing today ({})",
-                    colored(color::DIM, "→"),
-                    now.format("%Y-%m-%d")
-                ),
-                DateFilter::Yesterday => eprintln!(
-                    "  {} showing yesterday ({})",
-                    colored(color::DIM, "→"),
-                    yesterday.format("%Y-%m-%d")
-                ),
-                DateFilter::Tomorrow => eprintln!(
-                    "  {} showing tomorrow ({})",
-                    colored(color::DIM, "→"),
-                    tomorrow.format("%Y-%m-%d")
-                ),
-                DateFilter::Week => eprintln!(
-                    "  {} showing ISO week {}",
-                    colored(color::DIM, "→"),
-                    now.format("%V")
-                ),
-                DateFilter::LastWeek => {
-                    eprintln!("  {} showing last week", colored(color::DIM, "→"))
-                }
-                DateFilter::Current => eprintln!(
-                    "  {} showing {}",
-                    colored(color::DIM, "→"),
-                    now.format("%B")
-                ),
+                DateFilter::Today => eprintln!("  {} today ({})", colored(color::DIM, "→"), now.format("%Y-%m-%d")),
+                DateFilter::Yesterday => eprintln!("  {} yesterday", colored(color::DIM, "→")),
+                DateFilter::Tomorrow => eprintln!("  {} tomorrow", colored(color::DIM, "→")),
+                DateFilter::Week => eprintln!("  {} ISO week {}", colored(color::DIM, "→"), now.format("%V")),
+                DateFilter::LastWeek => eprintln!("  {} last week", colored(color::DIM, "→")),
+                DateFilter::Current => eprintln!("  {} {}", colored(color::DIM, "→"), now.format("%B")),
                 DateFilter::Previous => {
-                    let (y, m) = if now.month() == 1 {
-                        (now.year() - 1, 12)
-                    } else {
-                        (now.year(), now.month() - 1)
-                    };
-                    eprintln!(
-                        "  {} showing {} {}",
-                        colored(color::DIM, "→"),
-                        chrono::Month::try_from(u8::try_from(m).unwrap_or(1))
-                            .unwrap_or(chrono::Month::January)
-                            .name(),
-                        y
-                    );
+                    let (y, m) = if now.month() == 1 { (now.year() - 1, 12) } else { (now.year(), now.month() - 1) };
+                    eprintln!("  {} {} {}", colored(color::DIM, "→"),
+                        chrono::Month::try_from(u8::try_from(m).unwrap_or(1)).unwrap_or(chrono::Month::January).name(), y);
                 }
                 DateFilter::All => {}
             }
 
-            // Show date range if --from/--to is set
-            if let (Some(from), Some(to)) = (&args.from, &args.to) {
-                eprintln!(
-                    "  {} date range: {} to {}",
-                    colored(color::DIM, "→"),
-                    from,
-                    to
-                );
-            }
-
-            // Context-aware quick fixes
+            // Quick fixes (only show relevant ones)
             eprintln!();
-            eprintln!("  {} Quick fixes:", colored(color::CYAN, "→"));
-            // Show -d all when date filter is active (explicit flags OR -d filter)
-            if args.today
-                || args.yesterday
-                || args.tomorrow
-                || args.weekly
-                || args.last_week
-                || !matches!(args.date, DateFilter::All)
-            {
-                eprintln!("    {} -d all  Show all events", colored(color::DIM, "•"));
+            if !matches!(args.date, DateFilter::All) || args.today || args.yesterday || args.weekly || args.last_week {
+                eprintln!("  {} -d all  Show all events", colored(color::DIM, "•"));
             }
             if args.person.is_some() || !args.persons.clone().unwrap_or_default().is_empty() {
-                eprintln!("    {} Remove person filter", colored(color::DIM, "•"));
+                eprintln!("  {} --person  Check filter", colored(color::DIM, "•"));
             }
-            if args.project.is_some() {
-                eprintln!("    {} Remove project filter", colored(color::DIM, "•"));
+            if args.exclude_recurring { eprintln!("  {} --include-recurring", colored(color::DIM, "•")); }
+            if args.recent.is_none() && args.from.is_none() {
+                eprintln!("  {} --recent 30  Last 30 days", colored(color::DIM, "•"));
             }
-            if args.exclude_recurring {
-                eprintln!(
-                    "    {} --include-recurring  Include recurring",
-                    colored(color::DIM, "•")
-                );
-            }
-            if args.recent.is_some() {
-                eprintln!(
-                    "    {} --recent 30  Show last 30 days",
-                    colored(color::DIM, "•")
-                );
-            }
-            if args.from.is_none() && args.to.is_none() {
-                eprintln!(
-                    "    {} --from/--to  Filter by date range",
-                    colored(color::DIM, "•")
-                );
-            }
-            eprintln!();
-            eprintln!(
-                "  {} See {} for all options",
-                colored(color::DIM, "→"),
-                colored(color::CYAN, "--help")
-            );
+            eprintln!("  {} --help for more options", colored(color::DIM, "→"));
         }
         return Ok(());
     }
