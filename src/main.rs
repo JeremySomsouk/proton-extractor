@@ -117,6 +117,15 @@ fn print_hint<S: AsRef<str>>(msg: S) {
     );
 }
 
+/// Print hint about exit codes for errors
+fn print_exit_code_hint() {
+    eprintln!(
+        "  {} See {} for error code reference",
+        colored(color::DIM, "→"),
+        colored(color::CYAN, "--exit-codes")
+    );
+}
+
 /// Multiple hints at once - accepts slice of &str
 fn print_hints(hints: &[&str]) {
     for hint in hints {
@@ -2727,8 +2736,9 @@ fn print_examples() {
     println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Advanced"));
     println!("    --dry-run                # Preview without output");
     println!("    --top 10                 # Top 10 longest events");
-    println!("    --bottom 5               # Bottom 5 shortest events");
-    println!("    --sort-by duration       # Sort by duration");
+    println!("    --bottom 5              # Bottom 5 shortest events");
+    println!("    --sort-by duration      # Sort by duration");
+    println!("    --dedupe                 # Remove duplicate events");
     println!();
 
     println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Automation"));
@@ -2736,6 +2746,11 @@ fn print_examples() {
     println!("    --validate               # Validate args (CI/CD)");
     println!("    --exit-codes             # List exit codes");
     println!("    --no-color               # Disable colors");
+    println!();
+
+    println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Pipeline"));
+    println!("    proton-extractor -f json | jq '.grand_total_minutes'");
+    println!("    cat calendar.ics | proton-extractor -q --today");
     println!();
 
     println!(
@@ -2846,6 +2861,7 @@ fn main() -> io::Result<()> {
         if s.trim().is_empty() {
             print_error("Empty value provided for --person");
             print_hint("Specify a person name: --person \"Alice\"");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -2853,6 +2869,7 @@ fn main() -> io::Result<()> {
         if s.trim().is_empty() {
             print_error("Empty value provided for --project");
             print_hint("Specify a project name: --project \"Backend\"");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -2860,6 +2877,7 @@ fn main() -> io::Result<()> {
         if s.trim().is_empty() {
             print_error("Empty value provided for --tag");
             print_hint("Specify a tag to filter: --tag \"urgent\"");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3044,6 +3062,7 @@ fn main() -> io::Result<()> {
                 colored(color::DIM, "→"),
                 colored(color::YELLOW, validated_count.to_string())
             );
+            print_exit_code_hint();
             std::process::exit(exit_codes::VALIDATION_FAILED);
         }
 
@@ -3111,26 +3130,31 @@ fn main() -> io::Result<()> {
     if let Err(e) = validate_date_range(&args.from, &args.to) {
         print_error(e.to_string());
         print_hint("--from must be before or equal to --to");
+        print_exit_code_hint();
         std::process::exit(exit_codes::INVALID_ARGS);
     }
     if let Err(e) = validate_month(args.month) {
         print_error(e.to_string());
         print_hint("Month must be 1-12 (e.g., --month 3 for March)");
+        print_exit_code_hint();
         std::process::exit(exit_codes::INVALID_ARGS);
     }
     if let Err(e) = validate_week_number(&args.week_number) {
         print_error(e.to_string());
         print_hint("Format: W10 (current year) or 2024-W10 (specific year)");
+        print_exit_code_hint();
         std::process::exit(exit_codes::INVALID_ARGS);
     }
     if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
         print_error(e.to_string());
         print_hint("Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')");
+        print_exit_code_hint();
         std::process::exit(exit_codes::INVALID_ARGS);
     }
     if let Err(e) = validate_weekdays(&args.exclude_weekdays, "exclude-weekdays") {
         print_error(e.to_string());
         print_hint("Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')");
+        print_exit_code_hint();
         std::process::exit(exit_codes::INVALID_ARGS);
     }
 
@@ -3139,6 +3163,7 @@ fn main() -> io::Result<()> {
         if let Err(e) = validate_time_filter(t, "start-after") {
             print_error(e.to_string());
             print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3146,6 +3171,7 @@ fn main() -> io::Result<()> {
         if let Err(e) = validate_time_filter(t, "start-before") {
             print_error(e.to_string());
             print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3153,6 +3179,7 @@ fn main() -> io::Result<()> {
         if let Err(e) = validate_time_filter(t, "end-after") {
             print_error(e.to_string());
             print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3160,6 +3187,7 @@ fn main() -> io::Result<()> {
         if let Err(e) = validate_time_filter(t, "end-before") {
             print_error(e.to_string());
             print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3174,6 +3202,7 @@ fn main() -> io::Result<()> {
                     args.format
                 ));
                 print_hint("Remove --compact or use -f json/yaml");
+                print_exit_code_hint();
                 std::process::exit(exit_codes::INVALID_ARGS);
             }
         }
@@ -3184,6 +3213,7 @@ fn main() -> io::Result<()> {
         if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
             print_error(format!("invalid duration '{}' for --min-duration", s));
             print_hint("Valid formats: '30m', '1h', '2h30m', '1d' (e.g., --min-duration 1h)");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3191,6 +3221,7 @@ fn main() -> io::Result<()> {
         if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
             print_error(format!("invalid duration '{}' for --max-duration", s));
             print_hint("Valid formats: '30m', '1h', '2h30m', '1d' (e.g., --max-duration 4h)");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3200,6 +3231,7 @@ fn main() -> io::Result<()> {
         if s.trim().is_empty() {
             print_error("Empty value provided for --person");
             print_hint("Specify a person name: --person \"Alice\"");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3207,6 +3239,7 @@ fn main() -> io::Result<()> {
         if s.trim().is_empty() {
             print_error("Empty value provided for --project");
             print_hint("Specify a project name: --project \"Backend\"");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3214,6 +3247,7 @@ fn main() -> io::Result<()> {
         if s.trim().is_empty() {
             print_error("Empty value provided for --tag");
             print_hint("Specify a tag to filter: --tag \"urgent\"");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3221,6 +3255,7 @@ fn main() -> io::Result<()> {
         if s.trim().is_empty() {
             print_error("Empty value provided for --category");
             print_hint("Specify a category name: --category \"Work\"");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3263,12 +3298,14 @@ fn main() -> io::Result<()> {
             colored(color::DIM, "→"),
             colored(color::CYAN, "Validate args: proton-extractor --validate [args]")
         );
+        print_exit_code_hint();
         std::process::exit(exit_codes::FILE_NOT_FOUND);
     }
 
     if has_files && has_stdin {
         print_error("Cannot use both --stdin and file arguments simultaneously");
         print_hint("Use either --stdin OR file paths, not both");
+        print_exit_code_hint();
         std::process::exit(exit_codes::INVALID_ARGS);
     }
 
@@ -3388,6 +3425,7 @@ fn main() -> io::Result<()> {
                     if !hints.is_empty() {
                         print_hints(&hints.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                     }
+                    print_exit_code_hint();
                     std::process::exit(exit_code);
                 }
             };
