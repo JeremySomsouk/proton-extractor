@@ -96,16 +96,21 @@ fn print_success<S: AsRef<str>>(msg: S) {
 /// Styled success message for file output operations
 /// Used for both export and stats output to a file
 fn print_saved(count: usize, path: &Path) {
-    let event_label = if count == 1 { "event" } else { "events" };
-    println!(
-        "{} {} {} {} {} → {}",
-        colored(color::GREEN, "✓"),
-        colored(color::YELLOW, count.to_string()),
-        event_label,
-        colored(color::DIM, "saved"),
-        colored(color::DIM, "→"),
-        colored(color::CYAN, path.display().to_string())
-    );
+    if count == 1 {
+        println!(
+            "{} {} → {}",
+            colored(color::GREEN, "✓"),
+            colored(color::YELLOW, "1 event"),
+            colored(color::CYAN, path.display().to_string())
+        );
+    } else {
+        println!(
+            "{} {} → {}",
+            colored(color::GREEN, "✓"),
+            colored(color::YELLOW, format!("{} events", count)),
+            colored(color::CYAN, path.display().to_string())
+        );
+    }
 }
 
 /// Styled hint message output - helpful suggestions with user's specific values
@@ -3334,16 +3339,13 @@ fn main() -> io::Result<()> {
         }
 
         // Detect empty stdin early
-        if !found_content && !parse_warnings.is_empty() && !args.quiet && !args.silent {
-            print_notice("stdin appears to be empty or not valid ICS content");
-            print_hints(
-                &["Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin"][..],
-            );
-        } else if !found_content && !args.quiet && !args.silent && parse_warnings.is_empty() {
-            print_notice("stdin is empty");
-            print_hints(
-                &["Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin"][..],
-            );
+        if !found_content && !args.quiet && !args.silent {
+            if !parse_warnings.is_empty() {
+                print_notice("stdin: no valid events found");
+            } else {
+                print_notice("stdin: empty");
+            }
+            print_hint("Try: cat calendar.ics | proton-extractor --stdin");
         }
     } else {
         // Validate file extensions before processing
@@ -4290,20 +4292,25 @@ fn main() -> io::Result<()> {
 
         // Show compact stats if --stats-quiet is set
         if args.stats_quiet {
-            writeln!(
+            write!(
                 out_writer,
-                "{} events | {} total",
-                colored(color::YELLOW, total_events.to_string()),
+                "{} {}",
+                colored(color::YELLOW, format!("{} events", total_events)),
                 colored(color::GREEN, format_hours(total_mins))
             )?;
+            if let (Some(min_d), Some(max_d)) = (min_date, max_date) {
+                write!(out_writer, " | {} to {}", min_d, max_d)?;
+            }
             if let Some((person, _)) = top_person_entry {
                 let person_mins = *by_person.get(person).unwrap_or(&0);
-                writeln!(
+                write!(
                     out_writer,
-                    "  {}",
-                    colored(color::CYAN, format!("top: {} ({} hrs)", person, format_hours(person_mins)))
+                    " | {} {}",
+                    colored(color::CYAN, person),
+                    colored(color::DIM, format!("({})", format_hours(person_mins)))
                 )?;
             }
+            writeln!(out_writer)?;
             return Ok(());
         }
 
