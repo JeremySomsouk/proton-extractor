@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs::File;
 use std::io::{self, BufReader, Write};
 use std::path::{Path, PathBuf};
-use tracing::{debug, warn, Level};
+use tracing::{debug, Level};
 use tracing_subscriber::FmtSubscriber;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -55,10 +55,33 @@ mod color {
     pub const YELLOW: Color = Color(33);
     pub const MAGENTA: Color = Color(35);
     pub const BOLD: Color = Color(1);
+    pub const RED: Color = Color(31);
+    pub const DIM: Color = Color(2);
 }
 
 fn colored<S: AsRef<str>>(c: color::Color, text: S) -> String {
     format!("{}{}{}", c, text.as_ref(), c)
+}
+
+/// Styled error message output
+fn print_error(msg: &str) {
+    eprintln!("{} {}", colored(color::RED, "error:"), msg);
+}
+
+/// Styled warning message output
+fn print_warn(msg: &str) {
+    eprintln!("{} {}", colored(color::YELLOW, "warning:"), msg);
+}
+
+/// Styled success message output  
+#[allow(dead_code)]
+fn print_success(msg: &str) {
+    eprintln!("{}", colored(color::GREEN, msg));
+}
+
+/// Styled info message output
+fn print_info(msg: &str) {
+    println!("{}", msg);
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -1912,12 +1935,14 @@ fn main() -> io::Result<()> {
     let has_files = !args.files.is_empty();
 
     if !has_stdin && !has_files {
-        eprintln!("No .ics files provided. Use --stdin to pipe ICS content, or provide file paths.");
+        print_error("No .ics files provided");
+        eprintln!("  Use --stdin to pipe ICS content, or provide file paths.");
+        eprintln!("  Run 'proton-extractor --help' for usage information.");
         std::process::exit(1);
     }
 
     if has_files && has_stdin {
-        warn!("Cannot use both --stdin and file arguments simultaneously");
+        print_warn("Cannot use both --stdin and file arguments simultaneously");
         std::process::exit(1);
     }
 
@@ -1953,7 +1978,7 @@ fn main() -> io::Result<()> {
                 }
                 Err(_e) if args.quiet => {}
                 Err(e) => {
-                    warn!("Failed to parse stdin: {}", e);
+                    print_warn(&format!("Failed to parse stdin: {}", e));
                 }
             }
         }
@@ -1961,7 +1986,8 @@ fn main() -> io::Result<()> {
         // Validate file extensions before processing
         for path in &args.files {
             if let Err(e) = validate_ics_file(path) {
-                warn!("Invalid file: {}", e);
+                print_error(&format!("Invalid file '{}': {}", path.display(), e));
+                eprintln!("  File must have .ics extension.");
                 std::process::exit(1);
             }
         }
@@ -1987,7 +2013,7 @@ fn main() -> io::Result<()> {
                         // Suppress parse errors in quiet mode
                     }
                     Err(e) => {
-                        warn!("Failed to parse {}: {}", path.display(), e);
+                        print_warn(&format!("Failed to parse '{}': {}", path.display(), e));
                     }
                 }
             }
@@ -2208,14 +2234,14 @@ fn main() -> io::Result<()> {
     }
 
     if filtered.is_empty() {
-        println!("No events found for the selected period.");
+        print_info(&format!("No events found.{}", if args.verbose { "" } else { " (try --help to see filter options)" }));
         return Ok(());
     }
 
     let grouped: BTreeMap<(i32, u32), MonthSummary> = group_by_month(&filtered);
 
     if grouped.is_empty() {
-        eprintln!("No events found for the selected period.");
+        eprintln!("{}", colored(color::DIM, "No events found for the selected period."));
         return Ok(());
     }
 
@@ -2226,11 +2252,12 @@ fn main() -> io::Result<()> {
             let person = extract_person(&event.summary).unwrap_or("(unknown)");
             *by_person.entry(person).or_default() += 1;
         }
-        println!("Total events: {}", filtered.len());
+        println!("{}", colored(color::CYAN, "━━━ Dry Run Results ━━━"));
+        println!("Total events: {}", colored(color::YELLOW, filtered.len().to_string()));
         if !by_person.is_empty() {
-            println!("\nBy person:");
+            println!("\n{}", colored(color::CYAN, "By person:"));
             for (person, count) in &by_person {
-                println!("  {}: {}", person, count);
+                println!("  {}: {}", person, colored(color::YELLOW, count.to_string()));
             }
         }
         if let Some(first) = filtered.first() {

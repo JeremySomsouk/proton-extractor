@@ -299,7 +299,7 @@ fn test_cli_invalid_file_extension() {
     
     cmd.assert()
         .failure()
-        .stdout(predicate::str::contains("invalid extension"));
+        .stderr(predicate::str::contains("invalid extension"));
     
     fs::remove_file(wrong_file).ok();
 }
