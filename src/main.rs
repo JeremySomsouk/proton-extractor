@@ -110,9 +110,9 @@ fn print_list_summary(count: usize, label: &str) {
     let item = if count == 1 { label } else { &format!("{}s", label) };
     eprintln!(
         "{} {} {} found",
-        colored(color::DIM, "→"),
-        colored(color::CYAN, count.to_string()),
-        colored(color::CYAN, item)
+        colored(color::GREEN, "✓"),
+        colored(color::BOLD, count.to_string()),
+        item
     );
 }
 
@@ -159,17 +159,15 @@ impl Spinner {
     }
 
     fn tick(&mut self) {
-        // Use carriage return and clear to end of line for smooth animation
-        eprint!("\r{}{}\r{}", self.chars[self.current], self.message, " ".repeat(self.message.len().saturating_sub(1)));
-        eprint!("\r{}{}", self.chars[self.current], self.message);
+        // Carriage return + clear line + print new spinner + message
+        eprint!("\r\x1b[K{}{}", self.chars[self.current], self.message);
         io::stderr().flush().ok();
         self.current = (self.current + 1) % self.chars.len();
     }
 
     fn finish(&self) {
-        // Clear the current line and reset cursor
-        eprint!("\r{}\r", " ".repeat(80));
-        eprint!("\r");
+        // Clear the current line completely
+        eprint!("\r\x1b[K\r");
         io::stderr().flush().ok();
     }
 
@@ -323,7 +321,8 @@ Enable shell completion for faster CLI usage:
   proton-extractor calendar1.ics calendar2.ics -O ./output/     # Batch process
 
 TIP: Use --validate to check your arguments before running in CI/CD pipelines.
-TIP: Use --total-only for clean numeric output in scripts: $(proton-extractor -q -d today)")]
+TIP: Use --total-only for clean numeric output in scripts: $(proton-extractor -q -d today)
+TIP: Use -q (shorthand) instead of --quiet for faster typing")]
 #[command(version = VERSION)]
 struct Args {
     /// Paths to .ics files
@@ -342,7 +341,7 @@ struct Args {
     month: Option<u32>,
 
     /// Only show totals, hide individual events
-    #[arg(short, long)]
+    #[arg(short = 'q', long)]
     quiet: bool,
 
     /// Produce no output at all (useful for cron/CI with exit code only)
@@ -3479,11 +3478,11 @@ fn main() -> io::Result<()> {
         let total = person_count + project_count;
         if total > 0 {
             eprintln!(
-                "{} {} found ({} persons, {} projects)",
-                colored(color::DIM, "→"),
-                colored(color::CYAN, format!("{} tag{}", total, if total == 1 {""} else {"s"})),
-                colored(color::CYAN, person_count.to_string()),
-                colored(color::CYAN, project_count.to_string())
+                "{} {} {} found {}",
+                colored(color::GREEN, "✓"),
+                colored(color::BOLD, format!("{} tag{}", total, if total == 1 {""} else {"s"})),
+                colored(color::DIM, "found"),
+                colored(color::DIM, format!("({} persons, {} projects)", person_count, project_count))
             );
         }
         return Ok(());
