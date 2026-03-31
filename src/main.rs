@@ -618,41 +618,66 @@ fn validate_time_filter(time_str: &str, flag_name: &str) -> io::Result<()> {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!(
-                    "--{} must be HH:MM format (00:00-23:59), got '{}'",
-                    flag_name, time_str
+                    "invalid time '{}' for --{}: hours must be 0-23, minutes must be 0-59",
+                    time_str, flag_name
                 ),
             ));
         }
         Ok(())
     } else {
+        // Provide actionable hint for common mistakes
+        let hint: &str = if time_str.len() == 4 && time_str.chars().all(|c| c.is_ascii_digit()) {
+            "did you mean ':' separator? (e.g., '09:00')"
+        } else if time_str.contains('.') {
+            "use ':' as separator (e.g., '09:00' not '09.00')"
+        } else if time_str.len() < 4 {
+            "time format should be HH:MM (e.g., '09:00' or '17:30')"
+        } else {
+            "use HH:MM format (24-hour)"
+        };
+
         Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!(
-                "--{} must be in HH:MM format (e.g., '09:00' or '17:30'), got '{}'",
-                flag_name, time_str
+                "invalid time '{}' for --{}: {}\n    {} Valid format: HH:MM (e.g., '09:00', '17:30', '23:59')",
+                time_str, flag_name, hint, colored(color::DIM, "→")
             ),
         ))
     }
 }
 
-/// Validate week number format and warn about common mistakes
+/// Validate week number format with actionable suggestions
 fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
     if let Some(ref week) = week_str {
         if parse_week_filter(week).is_none() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
+            let hint = if week.chars().all(|c| c.is_ascii_digit()) && week.len() <= 2 {
+                format!("did you mean 'W{}'? (add 'W' prefix for ISO week)", week)
+            } else if week.starts_with("W") && week.len() <= 3 {
+                format!("did you mean '{}'? (include year, e.g., 2024-{})", week, week)
+            } else {
+                String::new()
+            };
+            
+            let msg = if hint.is_empty() {
                 format!(
                     "invalid week format '{}': expected W10, 10, or 2024-W10",
                     week
-                ),
-            ));
+                )
+            } else {
+                format!(
+                    "invalid week format '{}': expected W10, 10, or 2024-W10\n    {}",
+                    week, hint
+                )
+            };
+            
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, msg));
         }
     }
     Ok(())
 }
 
-/// Validate weekday abbreviations and suggest corrections for common mistakes
-fn validate_weekdays(weekdays: &Option<Vec<String>>, _flag_name: &str) -> io::Result<()> {
+/// Validate weekday abbreviations with actionable suggestions for common mistakes
+fn validate_weekdays(weekdays: &Option<Vec<String>>, flag_name: &str) -> io::Result<()> {
     if let Some(ref days) = weekdays {
         let valid_abbrevs = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
         let valid_full = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
@@ -663,28 +688,78 @@ fn validate_weekdays(weekdays: &Option<Vec<String>>, _flag_name: &str) -> io::Re
             if !valid_abbrevs.contains(&upper.as_str()) {
                 // Check if it's a full day name (common mistake)
                 if valid_full.contains(&upper.as_str()) {
+                    let suggested = valid_abbrevs[valid_full.iter().position(|&d| d == upper).unwrap()];
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!(
-                            "invalid weekday '{}': use abbreviation (e.g., '{}' not '{}')",
-                            day,
-                            valid_abbrevs[valid_full.iter().position(|&d| d == upper).unwrap()],
-                            day
+                            "invalid weekday '{}' for --{}: use abbreviation '{}' (not '{}')",
+                            day, flag_name, suggested, day
                         ),
                     ));
                 }
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
+                
+                // Check for common typos
+                let typo_suggestions: Vec<&str> = valid_abbrevs.iter()
+                    .filter(|&&abbr| {
+                        // Check Levenshtein distance of 1 or same starting letter
+                        abbr.chars().next() == upper.chars().next()
+                        || levenshtein_distance(&upper.to_lowercase(), &abbr.to_lowercase()) <= 2
+                    })
+                    .copied()
+                    .collect();
+                
+                let msg = if !typo_suggestions.is_empty() {
                     format!(
-                        "invalid weekday '{}': valid values are {}",
+                        "invalid weekday '{}' for --{}: valid values are {}{}",
                         day,
-                        valid_abbrevs.join(", ")
-                    ),
-                ));
+                        flag_name,
+                        valid_abbrevs.join(", "),
+                        if typo_suggestions.len() == 1 {
+                            format!(" (did you mean '{}'?)", typo_suggestions[0])
+                        } else {
+                            String::new()
+                        }
+                    )
+                } else {
+                    format!(
+                        "invalid weekday '{}' for --{}: valid values are {}",
+                        day, flag_name, valid_abbrevs.join(", ")
+                    )
+                };
+                
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, msg));
             }
         }
     }
     Ok(())
+}
+
+/// Calculate Levenshtein distance between two strings (simple implementation)
+fn levenshtein_distance(s1: &str, s2: &str) -> usize {
+    let s1_chars: Vec<char> = s1.chars().collect();
+    let s2_chars: Vec<char> = s2.chars().collect();
+    let len1 = s1_chars.len();
+    let len2 = s2_chars.len();
+    
+    if len1 == 0 { return len2; }
+    if len2 == 0 { return len1; }
+    
+    let mut matrix = vec![vec![0usize; len2 + 1]; len1 + 1];
+    
+    for i in 0..=len1 { matrix[i][0] = i; }
+    for j in 0..=len2 { matrix[0][j] = j; }
+    
+    for i in 1..=len1 {
+        for j in 1..=len2 {
+            let cost = if s1_chars[i-1] == s2_chars[j-1] { 0 } else { 1 };
+            matrix[i][j] = std::cmp::min(
+                std::cmp::min(matrix[i-1][j] + 1, matrix[i][j-1] + 1),
+                matrix[i-1][j-1] + cost
+            );
+        }
+    }
+    
+    matrix[len1][len2]
 }
 
 fn validate_ics_file(path: &Path) -> io::Result<()> {
@@ -2885,27 +2960,28 @@ fn main() -> io::Result<()> {
     }
 
     if filtered.is_empty() {
-        print_notice("No events found matching your criteria");
+        eprintln!();
+        eprintln!("  {} No events found matching your criteria", colored(color::YELLOW, "!"));
         eprintln!();
         
         // Show active date context if a date filter is active
         match &effective_date {
-            DateFilter::Today => eprintln!("  {} Showing events for today ({})", colored(color::DIM, "→"), now.format("%Y-%m-%d")),
-            DateFilter::Yesterday => eprintln!("  {} Showing events for yesterday ({})", colored(color::DIM, "→"), yesterday.format("%Y-%m-%d")),
-            DateFilter::Tomorrow => eprintln!("  {} Showing events for tomorrow ({})", colored(color::DIM, "→"), tomorrow.format("%Y-%m-%d")),
-            DateFilter::Week => eprintln!("  {} Showing events for ISO week {} ({} to {})", colored(color::DIM, "→"), now.format("%V"), now.date().year().to_string() + "-W" + &now.format("%V").to_string(), tomorrow.format("%Y-%m-%d")),
-            DateFilter::LastWeek => eprintln!("  {} Showing events for last week", colored(color::DIM, "→")),
-            DateFilter::Current => eprintln!("  {} Showing events for {} {}", colored(color::DIM, "→"), now.format("%B"), now.year()),
+            DateFilter::Today => eprintln!("  {}  Showing events for today ({})", colored(color::DIM, "→"), now.format("%Y-%m-%d")),
+            DateFilter::Yesterday => eprintln!("  {}  Showing events for yesterday ({})", colored(color::DIM, "→"), yesterday.format("%Y-%m-%d")),
+            DateFilter::Tomorrow => eprintln!("  {}  Showing events for tomorrow ({})", colored(color::DIM, "→"), tomorrow.format("%Y-%m-%d")),
+            DateFilter::Week => eprintln!("  {}  Showing events for ISO week {} ({} to {})", colored(color::DIM, "→"), now.format("%V"), now.date().year().to_string() + "-W" + &now.format("%V").to_string(), tomorrow.format("%Y-%m-%d")),
+            DateFilter::LastWeek => eprintln!("  {}  Showing events for last week", colored(color::DIM, "→")),
+            DateFilter::Current => eprintln!("  {}  Showing events for {} {}", colored(color::DIM, "→"), now.format("%B"), now.year()),
             DateFilter::Previous => {
                 let (y, m) = if now.month() == 1 { (now.year() - 1, 12) } else { (now.year(), now.month() - 1) };
-                eprintln!("  {} Showing events for {} {}", colored(color::DIM, "→"), chrono::Month::try_from(u8::try_from(m).unwrap_or(1)).unwrap_or(chrono::Month::January).name(), y);
+                eprintln!("  {}  Showing events for {} {}", colored(color::DIM, "→"), chrono::Month::try_from(u8::try_from(m).unwrap_or(1)).unwrap_or(chrono::Month::January).name(), y);
             },
             DateFilter::All => {}
         }
         
         // Show date range if --from/--to is set
         if let (Some(from), Some(to)) = (&args.from, &args.to) {
-            eprintln!("  {} Date range: {} to {}", colored(color::DIM, "→"), from, to);
+            eprintln!("  {}  Date range: {} to {}", colored(color::DIM, "→"), from, to);
         }
         
         eprintln!();
@@ -2925,7 +3001,7 @@ fn main() -> io::Result<()> {
             eprintln!("    {} {:<22} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
         }
         if args.only_untagged {
-            eprintln!("    {} {:<22} Include tagged events", colored(color::DIM, "•"), colored(color::CYAN, "--no-only-untagged"));
+            eprintln!("    {} {:<22} Include tagged events", colored(color::DIM, "•"), colored(color::CYAN, "--only-untagged=false"));
         }
         if args.from.is_none() && args.to.is_none() {
             eprintln!("    {} {:<22} Filter by date range", colored(color::DIM, "•"), colored(color::CYAN, "--from 2024-01-01 --to 2024-12-31"));
@@ -6472,19 +6548,19 @@ mod tests {
     fn test_validate_time_filter_invalid() {
         // Invalid format (non-parseable)
         let err = validate_time_filter("invalid", "start-after").unwrap_err();
-        assert!(err.to_string().contains("HH:MM format"));
+        assert!(err.to_string().contains("HH:MM"), "error: {}", err);
 
         // Invalid hours (> 23) - parse_time returns None, so format error
         let err = validate_time_filter("25:00", "start-after").unwrap_err();
-        assert!(err.to_string().contains("HH:MM format"));
+        assert!(err.to_string().contains("HH:MM"), "error: {}", err);
 
         // Invalid minutes (>= 60) - parse_time returns None, so format error
         let err = validate_time_filter("09:60", "start-before").unwrap_err();
-        assert!(err.to_string().contains("HH:MM format"));
+        assert!(err.to_string().contains("HH:MM"), "error: {}", err);
 
         // Missing parts
         let err = validate_time_filter("09", "end-after").unwrap_err();
-        assert!(err.to_string().contains("HH:MM format"));
+        assert!(err.to_string().contains("HH:MM"), "error: {}", err);
     }
 
     #[test]
