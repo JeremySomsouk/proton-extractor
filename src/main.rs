@@ -128,25 +128,27 @@ fn print_success(msg: &str) {
 
 /// Prompt user for confirmation in interactive mode.
 /// Returns false immediately in non-interactive (piped) mode to avoid hanging.
+/// Uses [Y/n] convention - uppercase Y means Yes is the default.
 fn confirm(prompt: &str) -> bool {
     // In non-interactive mode, fail safely instead of hanging
     if !atty::is(atty::Stream::Stdin) {
         eprintln!(
             "{} {} {}",
             colored(color::YELLOW, "warning:"),
-            "Cannot prompt for confirmation in non-interactive mode",
-            colored(color::CYAN, "(use --yes or --force to auto-confirm)")
+            "Cannot prompt in non-interactive mode",
+            colored(color::CYAN, "(use --yes or --force)")
         );
         return false;
     }
 
-    eprint!("  {} {} [{}/N] ", colored(color::CYAN, "→"), prompt, colored(color::GREEN, "y"));
+    eprint!("  {} {} [{}/n] ", colored(color::CYAN, "?"), prompt, colored(color::GREEN, "Y"));
     io::stderr().flush().ok();
     let mut response = String::new();
     if io::stdin().read_line(&mut response).is_err() {
         return false;
     }
     let response = response.trim().to_lowercase();
+    // Empty response or 'y'/'yes' confirms (Y is default)
     response.is_empty() || response.eq("y") || response.eq("yes")
 }
 
@@ -2636,14 +2638,14 @@ fn main() -> io::Result<()> {
         }
         
         // Success output
-        print_success("All arguments validated successfully");
-        eprintln!();
-        eprintln!("  {} Validated {} argument constraint(s)", colored(color::DIM, "→"), validated_count);
+        println!("{} All arguments validated successfully", colored(color::GREEN, "✓"));
+        println!();
+        println!("  {} {} argument constraint(s) checked", colored(color::DIM, "→"), validated_count);
         
         // Show effective filters in verbose mode
         if args.verbose {
-            eprintln!();
-            eprintln!("  {} Effective filters:", colored(color::CYAN, "→"));
+            println!();
+            println!("  {} Effective filters:", colored(color::CYAN, "→"));
             if args.quiet { eprintln!("    {:<22} quiet mode", colored(color::DIM, "-q,")); }
             if args.silent { eprintln!("    {:<22} silent mode", colored(color::DIM, "--silent")); }
             if args.today { eprintln!("    {:<22} today", colored(color::DIM, "-t,")); }
@@ -3025,14 +3027,11 @@ fn main() -> io::Result<()> {
                         );
                         if !confirm("Continue?") {
                             eprintln!();
-                            print_info("Operation cancelled");
-                            eprintln!("  {} Use {} or {} to skip this prompt",
+                            eprintln!("{} Operation cancelled", colored(color::YELLOW, "○"));
+                            eprintln!("  {} Use {} or {} to auto-confirm",
                                 colored(color::DIM, "→"),
                                 colored(color::CYAN, "--yes"),
                                 colored(color::CYAN, "--force"));
-                            eprintln!("  {} Use {} to preview without writing",
-                                colored(color::DIM, "→"),
-                                colored(color::CYAN, "--dry-run"));
                             std::process::exit(1);
                         }
                     }
@@ -3095,14 +3094,11 @@ fn main() -> io::Result<()> {
                 );
                 if !confirm("Overwrite?") {
                     eprintln!();
-                    print_info("Operation cancelled");
-                    eprintln!("  {} Use {} or {} to skip this prompt",
+                    eprintln!("{} Operation cancelled", colored(color::YELLOW, "○"));
+                    eprintln!("  {} Use {} or {} to auto-confirm",
                         colored(color::DIM, "→"),
                         colored(color::CYAN, "--yes"),
                         colored(color::CYAN, "--force"));
-                    eprintln!("  {} Use {} to preview without writing",
-                        colored(color::DIM, "→"),
-                        colored(color::CYAN, "--dry-run"));
                     std::process::exit(1);
                 }
             }
