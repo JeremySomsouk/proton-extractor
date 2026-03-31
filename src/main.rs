@@ -133,6 +133,14 @@ impl Spinner {
         eprint!("{}", " ".repeat(80));
         eprint!("\r");
     }
+
+    /// Finish with a success message
+    fn finish_with_success(&self, message: &str) {
+        eprint!("\r");
+        eprint!("{}", " ".repeat(80));
+        eprint!("\r");
+        println!("{} {}", colored(color::GREEN, "✓"), message);
+    }
 }
 
 
@@ -2702,9 +2710,13 @@ fn main() -> io::Result<()> {
             }
         }
         
-        // Clear the spinner after all files are processed
+        // Clear the spinner and show completion
         if let Some(ref s) = spinner {
-            s.finish();
+            if args.files.len() > 1 {
+                s.finish_with_success(&format!("Processed {} files", args.files.len()));
+            } else {
+                s.finish();
+            }
         }
     }
 
@@ -3046,9 +3058,7 @@ fn main() -> io::Result<()> {
 
     if filtered.is_empty() {
         eprintln!();
-        eprintln!();
-        eprintln!("  {} No events found matching your criteria", colored(color::YELLOW, "!"));
-        eprintln!();
+        print_notice("No events found matching your criteria");
         eprintln!("  {} Use {} to debug argument issues", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [your args]"));
         
         // Show active date context if a date filter is active
