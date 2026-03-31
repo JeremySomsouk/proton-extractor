@@ -292,6 +292,10 @@ struct Args {
     /// List all unique tags found in events (shows [person] and {project} separately)
     #[arg(long)]
     list_tags: bool,
+
+    /// List all unique years found in events
+    #[arg(long)]
+    list_years: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -1738,6 +1742,18 @@ fn main() -> io::Result<()> {
             for project in &sorted_projects {
                 writeln!(out_writer, "  {{{}}}", project)?;
             }
+        }
+        return Ok(());
+    }
+
+    // List all unique years if --list-years is requested
+    if args.list_years {
+        let mut years: BTreeSet<i32> = BTreeSet::new();
+        for event in &filtered {
+            years.insert(event.start.year());
+        }
+        for year in years {
+            writeln!(out_writer, "{}", year)?;
         }
         return Ok(());
     }
