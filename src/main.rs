@@ -69,13 +69,6 @@ fn print_error<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::RED, "error:"), msg.as_ref());
 }
 
-/// Convenience: print error with a hint/suggestion (kept for future use)
-#[allow(dead_code)]
-fn print_error_with_hint<S: AsRef<str>, H: AsRef<str>>(msg: S, hint: H) {
-    eprintln!("{} {}", colored(color::RED, "error:"), msg.as_ref());
-    eprintln!("  {} {}", colored(color::DIM, "→"), colored(color::CYAN, hint.as_ref()));
-}
-
 /// Styled warning message output - non-blocking feedback
 fn print_warn<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::YELLOW, "warning:"), msg.as_ref());
@@ -2965,6 +2958,9 @@ fn main() -> io::Result<()> {
                                 colored(color::DIM, "→"),
                                 colored(color::CYAN, "--yes"),
                                 colored(color::CYAN, "--force"));
+                            eprintln!("  {} Use {} to preview without writing",
+                                colored(color::DIM, "→"),
+                                colored(color::CYAN, "--dry-run"));
                             std::process::exit(1);
                         }
                     }
@@ -3032,6 +3028,9 @@ fn main() -> io::Result<()> {
                         colored(color::DIM, "→"),
                         colored(color::CYAN, "--yes"),
                         colored(color::CYAN, "--force"));
+                    eprintln!("  {} Use {} to preview without writing",
+                        colored(color::DIM, "→"),
+                        colored(color::CYAN, "--dry-run"));
                     std::process::exit(1);
                 }
             }
