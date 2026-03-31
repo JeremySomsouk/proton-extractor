@@ -2957,8 +2957,10 @@ fn main() -> io::Result<()> {
 
     if filtered.is_empty() {
         eprintln!();
+        eprintln!();
         eprintln!("  {} No events found matching your criteria", colored(color::YELLOW, "!"));
         eprintln!();
+        eprintln!("  {} Use {} to debug argument issues", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [your args]"));
         
         // Show active date context if a date filter is active
         match &effective_date {
@@ -2988,10 +2990,10 @@ fn main() -> io::Result<()> {
             eprintln!("    {} {:<22} Show all events (no date filter)", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
         }
         if args.person.is_some() || !args.persons.clone().unwrap_or_default().is_empty() {
-            eprintln!("    {} {:<22} Remove person filter", colored(color::DIM, "•"), colored(color::CYAN, "--person \"\""));
+            eprintln!("    {} {:<22} Remove person filter", colored(color::DIM, "•"), colored(color::CYAN, "--person ''"));
         }
         if args.project.is_some() {
-            eprintln!("    {} {:<22} Remove project filter", colored(color::DIM, "•"), colored(color::CYAN, "--project \"\""));
+            eprintln!("    {} {:<22} Remove project filter", colored(color::DIM, "•"), colored(color::CYAN, "--project ''"));
         }
         if args.exclude_recurring {
             eprintln!("    {} {:<22} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
@@ -3000,7 +3002,7 @@ fn main() -> io::Result<()> {
             eprintln!("    {} {:<22} Include tagged events", colored(color::DIM, "•"), colored(color::CYAN, "--only-untagged=false"));
         }
         if args.from.is_none() && args.to.is_none() {
-            eprintln!("    {} {:<22} Filter by date range", colored(color::DIM, "•"), colored(color::CYAN, "--from 2024-01-01 --to 2024-12-31"));
+            eprintln!("    {} {:<22} Filter by date range", colored(color::DIM, "•"), colored(color::CYAN, "--from YYYY-MM-DD --to YYYY-MM-DD"));
         }
         if args.verbose {
             eprintln!("    {} {:<22} Disable verbose mode", colored(color::DIM, "•"), colored(color::CYAN, "-v"));
