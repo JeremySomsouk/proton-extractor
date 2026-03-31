@@ -362,6 +362,8 @@ impl std::fmt::Display for EventStatus {
 
   Export & Output:
     -f json -o out.json    # JSON export
+    -f jsonl -o out.jsonl  # JSON Lines (stream)
+    -f pivot -o out.txt    # Pivot table
     -q                      # Quiet (totals only)
     -s                      # Statistics
 
@@ -385,6 +387,7 @@ Quick Reference:
   • Export to JSON: proton-extractor calendar.ics -f json -o report.json
   • Show stats: proton-extractor calendar.ics -s
   • Today's events: proton-extractor calendar.ics -t
+  • ISO week: proton-extractor calendar.ics --week-number W10
   • Pipe input: cat calendar.ics | proton-extractor --stdin
 
 Enable shell completion for faster CLI usage:
@@ -3340,10 +3343,10 @@ fn main() -> io::Result<()> {
 
         // Detect empty stdin early
         if !found_content && !args.quiet && !args.silent {
-            if !parse_warnings.is_empty() {
-                print_notice("stdin: no valid events found");
+            if parse_warnings.is_empty() {
+                print_notice("stdin: no content (expected ICS calendar data)");
             } else {
-                print_notice("stdin: empty");
+                print_notice("stdin: no valid events found in calendar");
             }
             print_hint("Try: cat calendar.ics | proton-extractor --stdin");
         }
