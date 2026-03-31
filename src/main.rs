@@ -307,6 +307,10 @@ struct Args {
     /// List all unique years found in events
     #[arg(long)]
     list_years: bool,
+
+    /// Remove duplicate events (same summary, start, and end time)
+    #[arg(long)]
+    dedupe: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -1589,6 +1593,21 @@ fn main() -> io::Result<()> {
     let all_events = expand_events(all_raw_events);
 
     debug!("Expanded events: {}", all_events.len());
+
+    // Remove duplicate events if --dedupe is set
+    let all_events: Vec<Event> = if args.dedupe {
+        let before = all_events.len();
+        let mut unique: BTreeSet<(String, NaiveDateTime, NaiveDateTime)> = BTreeSet::new();
+        let deduped: Vec<Event> = all_events
+            .into_iter()
+            .filter(|e| unique.insert((e.summary.clone(), e.start, e.end)))
+            .collect();
+        let after = deduped.len();
+        debug!("Deduplication: {} events -> {} events (removed {})", before, after, before - after);
+        deduped
+    } else {
+        all_events
+    };
 
     // Parse duration filters with validation
     let min_duration: Option<Duration> = if let Some(ref s) = args.min_duration {
@@ -3649,5 +3668,43 @@ mod tests {
         assert_eq!(grouped.get("Alpha").unwrap().len(), 2);
         assert_eq!(grouped.get("Beta").unwrap().len(), 1);
         assert_eq!(grouped.get("(none)").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_dedupe_functionality() {
+        use std::collections::BTreeSet;
+
+        // Simulate the dedupe logic
+        let events = vec![
+            Event::new(
+                "Meeting [Alice]".to_string(),
+                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            ),
+            Event::new(
+                "Duplicate Meeting [Alice]".to_string(), // Different summary
+                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            ),
+            Event::new(
+                "Meeting [Alice]".to_string(), // Exact duplicate
+                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            ),
+            Event::new(
+                "Meeting [Alice]".to_string(), // Duplicate with different time
+                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(11, 0, 0).unwrap(),
+            ),
+        ];
+
+        let mut unique: BTreeSet<(String, chrono::NaiveDateTime, chrono::NaiveDateTime)> = BTreeSet::new();
+        let deduped: Vec<_> = events
+            .into_iter()
+            .filter(|e| unique.insert((e.summary.clone(), e.start, e.end)))
+            .collect();
+
+        // Should have 3 unique events (4 originals - 1 exact duplicate)
+        assert_eq!(deduped.len(), 3);
     }
 }
