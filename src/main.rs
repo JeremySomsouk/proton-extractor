@@ -310,6 +310,10 @@ Enable shell completion for faster CLI usage:
   proton-extractor calendar.ics -f json -o report.json       # JSON export
   proton-extractor calendar.ics -f html -o report.html       # HTML report
   proton-extractor calendar.ics -f pivot -o pivot.txt        # Pivot table
+  proton-extractor calendar.ics -f yaml -o report.yaml       # YAML export
+  proton-extractor calendar.ics -f toml -o report.toml       # TOML export
+  proton-extractor calendar.ics -f markdown -o report.md     # Markdown table
+  proton-extractor calendar.ics -f ical -o events.ics        # iCalendar format
   # Formats: text, json, jsonl, csv, markdown, ical, html, yaml, toml, pivot
 
   # ── Convenience ──────────────────────────────────────────────────────────────
