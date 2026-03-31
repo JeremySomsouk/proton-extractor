@@ -14,8 +14,8 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Terminal colors - automatically disabled if not a TTY or when --no-color is set
 mod color {
-    use std::io::IsTerminal;
     use std::fmt;
+    use std::io::IsTerminal;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     static NO_COLOR: AtomicBool = AtomicBool::new(false);
@@ -63,25 +63,31 @@ fn colored<S: AsRef<str>>(c: color::Color, text: S) -> String {
     format!("{}{}{}", c, text.as_ref(), c)
 }
 
-/// Styled error message output
+/// Styled error message output - clear, actionable, and consistent
 fn print_error(msg: &str) {
     eprintln!("{} {}", colored(color::RED, "error:"), msg);
 }
 
-/// Styled warning message output
+/// Styled warning message output - non-blocking feedback
 fn print_warn(msg: &str) {
     eprintln!("{} {}", colored(color::YELLOW, "warning:"), msg);
 }
 
-/// Styled success message output  
+/// Styled success message output - confirms completed actions
 #[allow(dead_code)]
 fn print_success(msg: &str) {
-    eprintln!("{}", colored(color::GREEN, msg));
+    println!("{}", colored(color::GREEN, msg));
 }
 
-/// Styled info message output
+/// Styled info message output - neutral informational messages
 fn print_info(msg: &str) {
     println!("{}", msg);
+}
+
+/// Styled hint message output - helpful suggestions with user's specific values
+#[allow(dead_code)]
+fn print_hint(msg: &str) {
+    eprintln!("{} {}", colored(color::DIM, "hint:"), colored(color::CYAN, msg));
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -487,7 +493,10 @@ fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::
         if from_date > to_date {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("--from ({}) must be before or equal to --to ({})", from_date, to_date),
+                format!(
+                    "--from ({}) must be before or equal to --to ({})",
+                    from_date, to_date
+                ),
             ));
         }
     }
@@ -511,14 +520,20 @@ fn validate_time_filter(time_str: &str, flag_name: &str) -> io::Result<()> {
         if hours > 23 || minutes > 59 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("--{} must be HH:MM format (00:00-23:59), got '{}'", flag_name, time_str),
+                format!(
+                    "--{} must be HH:MM format (00:00-23:59), got '{}'",
+                    flag_name, time_str
+                ),
             ));
         }
         Ok(())
     } else {
         Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("--{} must be in HH:MM format (e.g., '09:00' or '17:30'), got '{}'", flag_name, time_str),
+            format!(
+                "--{} must be in HH:MM format (e.g., '09:00' or '17:30'), got '{}'",
+                flag_name, time_str
+            ),
         ))
     }
 }
@@ -528,16 +543,23 @@ fn validate_ics_file(path: &Path) -> io::Result<()> {
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase());
-    
+
     match extension.as_deref() {
         Some("ics") => Ok(()),
         Some(ext) => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("File '{}' has invalid extension '.{}'. Expected '.ics' file", path.display(), ext),
+            format!(
+                "File '{}' has invalid extension '.{}'. Expected '.ics' file",
+                path.display(),
+                ext
+            ),
         )),
         None => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("File '{}' has no file extension. Expected '.ics' file", path.display()),
+            format!(
+                "File '{}' has no file extension. Expected '.ics' file",
+                path.display()
+            ),
         )),
     }
 }
@@ -558,11 +580,38 @@ struct Event {
 impl Event {
     #[allow(dead_code)]
     fn new(summary: String, start: NaiveDateTime, end: NaiveDateTime) -> Self {
-        Self { summary, start, end, uid: None, location: None, categories: vec![], is_recurring: false, status: None, source_file: None }
+        Self {
+            summary,
+            start,
+            end,
+            uid: None,
+            location: None,
+            categories: vec![],
+            is_recurring: false,
+            status: None,
+            source_file: None,
+        }
     }
 
-    fn with_recurring(summary: String, start: NaiveDateTime, end: NaiveDateTime, location: Option<String>, categories: Vec<String>, is_recurring: bool) -> Self {
-        Self { summary, start, end, uid: None, location, categories, is_recurring, status: None, source_file: None }
+    fn with_recurring(
+        summary: String,
+        start: NaiveDateTime,
+        end: NaiveDateTime,
+        location: Option<String>,
+        categories: Vec<String>,
+        is_recurring: bool,
+    ) -> Self {
+        Self {
+            summary,
+            start,
+            end,
+            uid: None,
+            location,
+            categories,
+            is_recurring,
+            status: None,
+            source_file: None,
+        }
     }
 
     fn with_source(mut self, source: String) -> Self {
@@ -598,7 +647,7 @@ struct RawEvent {
 fn parse_ical_datetime(value: &str) -> Option<NaiveDateTime> {
     // Handle UTC suffix
     let value = value.trim_end_matches('Z');
-    
+
     // Handle UTC offset suffix (e.g., +0530, -0800, +00:00)
     let (clean, _offset_minutes) = if let Some(idx) = value.rfind(|c| ['+', '-'].contains(&c)) {
         if idx > 0 {
@@ -607,7 +656,11 @@ fn parse_ical_datetime(value: &str) -> Option<NaiveDateTime> {
             if offset_str.len() >= 4 {
                 let offset_clean = offset_str.replace(':', "");
                 if offset_clean.chars().all(|c| c.is_ascii_digit()) {
-                    let sign = if value.chars().nth(idx) == Some('-') { -1 } else { 1 };
+                    let sign = if value.chars().nth(idx) == Some('-') {
+                        -1
+                    } else {
+                        1
+                    };
                     let offset_hhmm = offset_clean[..4].parse::<i32>().ok()?;
                     let offset_mins = sign * ((offset_hhmm / 100) * 60 + (offset_hhmm % 100));
                     return NaiveDateTime::parse_from_str(&value[..idx], "%Y%m%dT%H%M%S")
@@ -620,11 +673,10 @@ fn parse_ical_datetime(value: &str) -> Option<NaiveDateTime> {
     } else {
         (value, 0)
     };
-    
+
     NaiveDateTime::parse_from_str(clean, "%Y%m%dT%H%M%S")
         .or_else(|_| {
-            NaiveDate::parse_from_str(clean, "%Y%m%d")
-                .map(|d| d.and_hms_opt(0, 0, 0).unwrap())
+            NaiveDate::parse_from_str(clean, "%Y%m%d").map(|d| d.and_hms_opt(0, 0, 0).unwrap())
         })
         .ok()
 }
@@ -635,24 +687,31 @@ fn parse_duration(duration: &str) -> Option<Duration> {
     if duration.is_empty() || !duration.starts_with('P') {
         return None;
     }
-    
+
     let mut days: i64 = 0;
     let mut weeks: i64 = 0;
     let mut hours: i64 = 0;
     let mut minutes: i64 = 0;
-    
+
     let mut num_str = String::new();
     let mut has_unit = false;
     let mut after_t = false;
-    
-    for ch in duration.chars().skip(1) { // Skip 'P'
+
+    for ch in duration.chars().skip(1) {
+        // Skip 'P'
         match ch {
             'D' => {
-                if let Ok(n) = num_str.parse() { days = n; has_unit = true; }
+                if let Ok(n) = num_str.parse() {
+                    days = n;
+                    has_unit = true;
+                }
                 num_str.clear();
             }
             'W' => {
-                if let Ok(n) = num_str.parse() { weeks = n; has_unit = true; }
+                if let Ok(n) = num_str.parse() {
+                    weeks = n;
+                    has_unit = true;
+                }
                 num_str.clear();
             }
             'T' => {
@@ -660,24 +719,35 @@ fn parse_duration(duration: &str) -> Option<Duration> {
                 continue;
             }
             'H' if after_t => {
-                if let Ok(n) = num_str.parse() { hours = n; has_unit = true; }
+                if let Ok(n) = num_str.parse() {
+                    hours = n;
+                    has_unit = true;
+                }
                 num_str.clear();
             }
             'M' if after_t => {
-                if let Ok(n) = num_str.parse() { minutes = n; has_unit = true; }
+                if let Ok(n) = num_str.parse() {
+                    minutes = n;
+                    has_unit = true;
+                }
                 num_str.clear();
             }
             '0'..='9' => num_str.push(ch),
             _ => {}
         }
     }
-    
+
     // Must have at least one unit
     if !has_unit {
         return None;
     }
-    
-    Some(Duration::days(days) + Duration::weeks(weeks) + Duration::hours(hours) + Duration::minutes(minutes))
+
+    Some(
+        Duration::days(days)
+            + Duration::weeks(weeks)
+            + Duration::hours(hours)
+            + Duration::minutes(minutes),
+    )
 }
 
 /// Parse a human-readable duration string like "30m", "1h", "2h30m", "1d"
@@ -717,7 +787,7 @@ fn parse_human_duration(s: &str) -> Option<Duration> {
                 }
                 current_num.clear();
             }
-            ' ' | '\t' => {} // ignore whitespace
+            ' ' | '\t' => {}  // ignore whitespace
             _ => return None, // invalid character
         }
     }
@@ -738,7 +808,14 @@ fn parse_human_duration(s: &str) -> Option<Duration> {
     }
 }
 
-type RRuleParseResult = (String, NaiveDateTime, Option<Vec<String>>, Option<i32>, Option<i32>, Option<Vec<i32>>);
+type RRuleParseResult = (
+    String,
+    NaiveDateTime,
+    Option<Vec<String>>,
+    Option<i32>,
+    Option<i32>,
+    Option<Vec<i32>>,
+);
 
 fn parse_rrule(rrule: &str) -> Option<RRuleParseResult> {
     let mut freq = None;
@@ -768,7 +845,14 @@ fn parse_rrule(rrule: &str) -> Option<RRuleParseResult> {
         .expect("Date 2099-12-31 should always be valid")
         .and_hms_opt(23, 59, 59)
         .expect("Time 23:59:59 should always be valid");
-    Some((freq?, until.unwrap_or(default_until), byday, interval, count, bymonthday))
+    Some((
+        freq?,
+        until.unwrap_or(default_until),
+        byday,
+        interval,
+        count,
+        bymonthday,
+    ))
 }
 
 const RECURRENCE_LIMIT_DAYS: i64 = 365 * 5; // 5 year limit for recurrence expansion
@@ -795,7 +879,19 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
     result.extend(override_events.into_iter().filter_map(|e| {
         let duration = e.end - e.start;
         if duration.num_minutes() > 0 {
-            Some(Event::with_recurring(e.summary, e.start, e.end, e.location, e.categories, e.rrule.is_some()).with_source(e.source_file.unwrap_or_default()).with_uid(e.uid.clone()).with_status(e.status))
+            Some(
+                Event::with_recurring(
+                    e.summary,
+                    e.start,
+                    e.end,
+                    e.location,
+                    e.categories,
+                    e.rrule.is_some(),
+                )
+                .with_source(e.source_file.unwrap_or_default())
+                .with_uid(e.uid.clone())
+                .with_status(e.status),
+            )
         } else {
             None
         }
@@ -810,15 +906,40 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
             None => {
                 let duration = event.end - event.start;
                 if duration.num_minutes() > 0 {
-                    result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), false).with_source(event.source_file.clone().unwrap_or_default()).with_uid(event_uid).with_status(event.status.clone()));
+                    result.push(
+                        Event::with_recurring(
+                            event.summary,
+                            event.start,
+                            event.end,
+                            event.location,
+                            event.categories.clone(),
+                            false,
+                        )
+                        .with_source(event.source_file.clone().unwrap_or_default())
+                        .with_uid(event_uid)
+                        .with_status(event.status.clone()),
+                    );
                 }
             }
             Some(rrule) => {
-                let Some((freq, until, byday, interval, count, bymonthday)) = parse_rrule(rrule) else {
+                let Some((freq, until, byday, interval, count, bymonthday)) = parse_rrule(rrule)
+                else {
                     // Can't parse RRULE, just add the single event
                     let duration = event.end - event.start;
                     if duration.num_minutes() > 0 {
-                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()).with_uid(event_uid.clone()).with_status(event.status.clone()));
+                        result.push(
+                            Event::with_recurring(
+                                event.summary,
+                                event.start,
+                                event.end,
+                                event.location,
+                                event.categories.clone(),
+                                true,
+                            )
+                            .with_source(event.source_file.clone().unwrap_or_default())
+                            .with_uid(event_uid.clone())
+                            .with_status(event.status.clone()),
+                        );
                     }
                     continue;
                 };
@@ -836,15 +957,36 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     "YEARLY" => Duration::days(0),  // Placeholder - handled separately
                     _ => {
                         // Unsupported frequency, add single event
-                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()).with_uid(event_uid.clone()).with_status(event.status.clone()));
+                        result.push(
+                            Event::with_recurring(
+                                event.summary,
+                                event.start,
+                                event.end,
+                                event.location,
+                                event.categories.clone(),
+                                true,
+                            )
+                            .with_source(event.source_file.clone().unwrap_or_default())
+                            .with_uid(event_uid.clone())
+                            .with_status(event.status.clone()),
+                        );
                         continue;
                     }
                 };
 
                 // Clamp until to avoid unbounded expansion
                 let start_date = event.start.date();
-                let limit_date = start_date.and_hms_opt(23, 59, 59).unwrap().and_utc().naive_local() + Duration::days(RECURRENCE_LIMIT_DAYS);
-                let until = if until > limit_date { limit_date } else { until };
+                let limit_date = start_date
+                    .and_hms_opt(23, 59, 59)
+                    .unwrap()
+                    .and_utc()
+                    .naive_local()
+                    + Duration::days(RECURRENCE_LIMIT_DAYS);
+                let until = if until > limit_date {
+                    limit_date
+                } else {
+                    until
+                };
 
                 // For MONTHLY recurrence, track original day to maintain consistency
                 let original_day = event.start.day();
@@ -856,7 +998,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                         break;
                     }
                     let date = current.date();
-                    
+
                     // BYDAY filter: only include if no BYDAY specified or date matches one of the days
                     let include_byday = byday.as_ref().is_none_or(|days| {
                         days.iter().any(|d| {
@@ -865,12 +1007,24 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                                 .unwrap_or(false)
                         })
                     });
-                    
+
                     if include_byday
                         && !exdate_set.contains(&date)
                         && !overrides.contains(&(event.uid.clone(), date))
                     {
-                        result.push(Event::with_recurring(event.summary.clone(), current, current + duration, event.location.clone(), event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()).with_uid(event_uid.clone()).with_status(event.status.clone()));
+                        result.push(
+                            Event::with_recurring(
+                                event.summary.clone(),
+                                current,
+                                current + duration,
+                                event.location.clone(),
+                                event.categories.clone(),
+                                true,
+                            )
+                            .with_source(event.source_file.clone().unwrap_or_default())
+                            .with_uid(event_uid.clone())
+                            .with_status(event.status.clone()),
+                        );
                     }
 
                     // Increment to next occurrence
@@ -879,35 +1033,50 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                         if let Some(ref bmd_list) = bymonthday {
                             let current_year = current.year();
                             let current_month = current.month();
-                            
+
                             // Helper to get valid days for any month
                             let get_valid_days = |year: i32, month: u32| -> Vec<i32> {
                                 let days_in_month = NaiveDate::from_ymd_opt(year, month, 1)
                                     .map(|d| d.num_days_in_month() as i32)
                                     .unwrap_or(28);
-                                let mut days: Vec<i32> = bmd_list.iter().filter_map(|&day| {
-                                    if day > 0 {
-                                        if day <= days_in_month { Some(day) } else { None }
-                                    } else {
-                                        // Negative: -1 = last day, -2 = second-to-last, etc.
-                                        let actual_day = days_in_month + day + 1;
-                                        if actual_day > 0 { Some(actual_day) } else { None }
-                                    }
-                                }).collect();
+                                let mut days: Vec<i32> = bmd_list
+                                    .iter()
+                                    .filter_map(|&day| {
+                                        if day > 0 {
+                                            if day <= days_in_month {
+                                                Some(day)
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            // Negative: -1 = last day, -2 = second-to-last, etc.
+                                            let actual_day = days_in_month + day + 1;
+                                            if actual_day > 0 {
+                                                Some(actual_day)
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                    })
+                                    .collect();
                                 days.sort();
                                 days
                             };
-                            
+
                             let valid_days = get_valid_days(current_year, current_month);
-                            
+
                             // Find next valid day in current month
                             let current_day = current.day() as i32;
                             if let Some(&next_day) = valid_days.iter().find(|&&d| d > current_day) {
                                 // Use next valid day in current month
-                                current = NaiveDate::from_ymd_opt(current_year, current_month, next_day as u32)
-                                    .unwrap()
-                                    .and_hms_opt(current.hour(), current.minute(), current.second())
-                                    .unwrap_or(current);
+                                current = NaiveDate::from_ymd_opt(
+                                    current_year,
+                                    current_month,
+                                    next_day as u32,
+                                )
+                                .unwrap()
+                                .and_hms_opt(current.hour(), current.minute(), current.second())
+                                .unwrap_or(current);
                             } else {
                                 // Move to first valid day of next month (recalculate for target month)
                                 let (next_year, next_month) = if current_month == 12 {
@@ -917,10 +1086,14 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                                 };
                                 let next_valid_days = get_valid_days(next_year, next_month);
                                 let first_valid = *next_valid_days.first().unwrap_or(&1);
-                                current = NaiveDate::from_ymd_opt(next_year, next_month, first_valid as u32)
-                                    .unwrap()
-                                    .and_hms_opt(current.hour(), current.minute(), current.second())
-                                    .unwrap_or(current);
+                                current = NaiveDate::from_ymd_opt(
+                                    next_year,
+                                    next_month,
+                                    first_valid as u32,
+                                )
+                                .unwrap()
+                                .and_hms_opt(current.hour(), current.minute(), current.second())
+                                .unwrap_or(current);
                             }
                         } else {
                             // Default: increment by one month, keeping same day/time
@@ -931,11 +1104,18 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                                 (year, month + 1)
                             };
                             // Days in each month (use chrono Datelike trait)
-                            let days_in_month_target = NaiveDate::from_ymd_opt(new_year, new_month, 1).unwrap().num_days_in_month() as u32;
+                            let days_in_month_target =
+                                NaiveDate::from_ymd_opt(new_year, new_month, 1)
+                                    .unwrap()
+                                    .num_days_in_month() as u32;
                             // Use original day (clamped to max days in target month)
                             let new_day = original_day.min(days_in_month_target);
-                            if let Some(new_date) = NaiveDate::from_ymd_opt(new_year, new_month, new_day) {
-                                current = new_date.and_hms_opt(current.hour(), current.minute(), current.second()).unwrap_or(current);
+                            if let Some(new_date) =
+                                NaiveDate::from_ymd_opt(new_year, new_month, new_day)
+                            {
+                                current = new_date
+                                    .and_hms_opt(current.hour(), current.minute(), current.second())
+                                    .unwrap_or(current);
                             } else {
                                 // Fallback: shouldn't happen with our day calculation
                                 current += Duration::days(30);
@@ -945,11 +1125,18 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                         // Increment by one year
                         let new_year = current.year() + 1;
                         // Clamp original day to valid days in target month
-                        let days_in_target_month = NaiveDate::from_ymd_opt(new_year, current.month(), 1).unwrap().num_days_in_month() as u32;
+                        let days_in_target_month =
+                            NaiveDate::from_ymd_opt(new_year, current.month(), 1)
+                                .unwrap()
+                                .num_days_in_month() as u32;
                         // Clamp original day to valid days in target month
                         let new_day = original_day.min(days_in_target_month);
-                        if let Some(new_date) = NaiveDate::from_ymd_opt(new_year, current.month(), new_day) {
-                            current = new_date.and_hms_opt(current.hour(), current.minute(), current.second()).unwrap_or(current);
+                        if let Some(new_date) =
+                            NaiveDate::from_ymd_opt(new_year, current.month(), new_day)
+                        {
+                            current = new_date
+                                .and_hms_opt(current.hour(), current.minute(), current.second())
+                                .unwrap_or(current);
                         } else {
                             // Fallback: shouldn't happen with proper day calculation
                             current += Duration::days(365);
@@ -1004,7 +1191,11 @@ fn extract_raw_events(ical_events: Vec<IcalEvent>, source_file: Option<String>) 
                     "LOCATION" => location = Some(val.to_string()),
                     "CATEGORIES" => {
                         // CATEGORIES can be comma-separated
-                        categories = val.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                        categories = val
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect();
                     }
                     "STATUS" => status = Some(val.to_string()),
                     _ => {}
@@ -1012,7 +1203,7 @@ fn extract_raw_events(ical_events: Vec<IcalEvent>, source_file: Option<String>) 
             }
 
             let start = start?;
-            
+
             // If DTEND is missing but DURATION is present, compute end time
             let end = match end {
                 Some(e) => e,
@@ -1070,7 +1261,13 @@ impl MonthSummary {
         map
     }
 
-    fn write_html(&self, out: &mut dyn Write, quiet: bool, sum_only: bool, grand_total: i64) -> io::Result<()> {
+    fn write_html(
+        &self,
+        out: &mut dyn Write,
+        quiet: bool,
+        sum_only: bool,
+        grand_total: i64,
+    ) -> io::Result<()> {
         let month_total = self.total_minutes();
         writeln!(out, "  <div class=\"month-section\">")?;
         writeln!(out, "    <h2>📅 {}</h2>", self.month_name)?;
@@ -1079,8 +1276,16 @@ impl MonthSummary {
             for event in &self.events {
                 if let Some(mins) = event_duration_minutes(event) {
                     writeln!(out, "      <li class=\"event-item\">")?;
-                    writeln!(out, "        <span class=\"summary\">{}</span>", html_escape(&event.summary))?;
-                    writeln!(out, "        <span class=\"duration\">{}</span>", format_hours(mins))?;
+                    writeln!(
+                        out,
+                        "        <span class=\"summary\">{}</span>",
+                        html_escape(&event.summary)
+                    )?;
+                    writeln!(
+                        out,
+                        "        <span class=\"duration\">{}</span>",
+                        format_hours(mins)
+                    )?;
                     writeln!(out, "      </li>")?;
                 }
             }
@@ -1092,12 +1297,22 @@ impl MonthSummary {
             let pct = format_percentage(mins, month_total);
             writeln!(out, "      <div class=\"person-summary\">")?;
             writeln!(out, "        <span>{}</span>", html_escape(&person))?;
-            writeln!(out, "        <span><strong>{}</strong> <span class=\"percentage\">({})</span></span>", format_hours(mins), pct)?;
+            writeln!(
+                out,
+                "        <span><strong>{}</strong> <span class=\"percentage\">({})</span></span>",
+                format_hours(mins),
+                pct
+            )?;
             writeln!(out, "      </div>")?;
         }
         writeln!(out, "    </div>")?;
         writeln!(out, "    <div class=\"total\">")?;
-        writeln!(out, "      📊 Total: {} ({:.1}%)", format_hours(month_total), (month_total as f64 / grand_total as f64) * 100.0)?;
+        writeln!(
+            out,
+            "      📊 Total: {} ({:.1}%)",
+            format_hours(month_total),
+            (month_total as f64 / grand_total as f64) * 100.0
+        )?;
         writeln!(out, "    </div>")?;
         writeln!(out, "  </div>")?;
         Ok(())
@@ -1111,7 +1326,8 @@ fn group_by_month(events: &[&Event]) -> BTreeMap<(i32, u32), MonthSummary> {
         let key = (event.start.year(), event.start.month());
         by_month.entry(key).or_default().push((*event).clone());
     }
-    by_month.into_iter()
+    by_month
+        .into_iter()
         .map(|((year, month), evs)| ((year, month), MonthSummary::new(year, month, evs)))
         .collect()
 }
@@ -1120,7 +1336,9 @@ fn group_by_month(events: &[&Event]) -> BTreeMap<(i32, u32), MonthSummary> {
 fn group_by_person<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>> {
     let mut by_person: BTreeMap<String, Vec<&'a Event>> = BTreeMap::new();
     for event in events {
-        let person = extract_person(&event.summary).unwrap_or("(unknown)").to_string();
+        let person = extract_person(&event.summary)
+            .unwrap_or("(unknown)")
+            .to_string();
         by_person.entry(person).or_default().push(*event);
     }
     by_person
@@ -1130,7 +1348,9 @@ fn group_by_person<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>>
 fn group_by_project<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>> {
     let mut by_project: BTreeMap<String, Vec<&'a Event>> = BTreeMap::new();
     for event in events {
-        let project = extract_project(&event.summary).unwrap_or("(none)").to_string();
+        let project = extract_project(&event.summary)
+            .unwrap_or("(none)")
+            .to_string();
         by_project.entry(project).or_default().push(*event);
     }
     by_project
@@ -1138,7 +1358,15 @@ fn group_by_project<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>
 
 /// Groups events by day of week, sorted from Monday to Sunday
 fn group_by_weekday<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>> {
-    let weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    let weekday_names = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ];
     let mut by_weekday: BTreeMap<String, Vec<&'a Event>> = BTreeMap::new();
     for event in events {
         let wd = event.start.weekday().num_days_from_monday() as usize;
@@ -1152,7 +1380,10 @@ fn group_by_weekday<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>
 fn group_by_location<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>> {
     let mut by_location: BTreeMap<String, Vec<&'a Event>> = BTreeMap::new();
     for event in events {
-        let location = event.location.clone().unwrap_or_else(|| "(none)".to_string());
+        let location = event
+            .location
+            .clone()
+            .unwrap_or_else(|| "(none)".to_string());
         by_location.entry(location).or_default().push(*event);
     }
     by_location
@@ -1181,14 +1412,21 @@ fn group_by_year<'a>(events: &'a [&Event]) -> BTreeMap<i32, Vec<&'a Event>> {
     by_year
 }
 
-fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yesterday: &NaiveDateTime, tomorrow: &NaiveDateTime) -> bool {
+fn matches_filter(
+    event: &Event,
+    filter: &DateFilter,
+    now: &NaiveDateTime,
+    yesterday: &NaiveDateTime,
+    tomorrow: &NaiveDateTime,
+) -> bool {
     let (ev_year, ev_month, ev_day) = (event.start.year(), event.start.month(), event.start.day());
-    
+
     // Compute last week dates internally
     let days_since_monday = now.weekday().num_days_from_monday();
-    let last_week_monday = now.date() - Duration::weeks(1) - Duration::days(days_since_monday as i64);
+    let last_week_monday =
+        now.date() - Duration::weeks(1) - Duration::days(days_since_monday as i64);
     let last_week_sunday = last_week_monday + Duration::days(6);
-    
+
     match filter {
         DateFilter::All => true, // Show all events regardless of date
         DateFilter::Current => ev_year == now.year() && ev_month == now.month(),
@@ -1204,7 +1442,9 @@ fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yeste
             ev_year == now.year() && ev_month == now.month() && ev_day == now.day()
         }
         DateFilter::Yesterday => {
-            ev_year == yesterday.year() && ev_month == yesterday.month() && ev_day == yesterday.day()
+            ev_year == yesterday.year()
+                && ev_month == yesterday.month()
+                && ev_day == yesterday.day()
         }
         DateFilter::Tomorrow => {
             ev_year == tomorrow.year() && ev_month == tomorrow.month() && ev_day == tomorrow.day()
@@ -1255,7 +1495,9 @@ fn matches_persons_filter(event: &Event, persons: &[String]) -> bool {
         return false;
     };
     let event_person_lower = event_person.to_lowercase();
-    persons.iter().any(|p| event_person_lower.contains(&p.to_lowercase()))
+    persons
+        .iter()
+        .any(|p| event_person_lower.contains(&p.to_lowercase()))
 }
 
 /// Returns true if event matches the project filter (case-insensitive).
@@ -1296,7 +1538,9 @@ fn matches_exclude_project_filter(event: &Event, exclude_filters: &[String]) -> 
         return true;
     };
     let project_lower = project.to_lowercase();
-    !exclude_filters.iter().any(|f| project_lower.contains(&f.to_lowercase()))
+    !exclude_filters
+        .iter()
+        .any(|f| project_lower.contains(&f.to_lowercase()))
 }
 
 /// Returns true if event should NOT be excluded based on person exclude filters.
@@ -1306,7 +1550,9 @@ fn matches_exclude_filter(event: &Event, exclude_filters: &[String]) -> bool {
         return true;
     };
     let person_lower = person.to_lowercase();
-    !exclude_filters.iter().any(|f| person_lower.contains(&f.to_lowercase()))
+    !exclude_filters
+        .iter()
+        .any(|f| person_lower.contains(&f.to_lowercase()))
 }
 
 fn matches_date_range(event: &Event, from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> bool {
@@ -1345,7 +1591,7 @@ fn matches_month_filter(event: &Event, month: &Option<u32>) -> bool {
 /// iso_year = 0 means no year specified (use current year at match time)
 fn parse_week_filter(week_str: &str) -> Option<(i32, u32)> {
     let cleaned = week_str.trim();
-    
+
     // Try "2024-W10" format
     if cleaned.contains('-') {
         let parts: Vec<&str> = cleaned.split('-').collect();
@@ -1358,7 +1604,7 @@ fn parse_week_filter(week_str: &str) -> Option<(i32, u32)> {
             }
         }
     }
-    
+
     // Try "W10" format (current year as sentinel = 0, meaning "any year")
     if let Some(after_w) = cleaned.strip_prefix('W').or(cleaned.strip_prefix('w')) {
         if let Ok(week) = after_w.parse::<u32>() {
@@ -1367,14 +1613,14 @@ fn parse_week_filter(week_str: &str) -> Option<(i32, u32)> {
             }
         }
     }
-    
+
     // Try bare number "10" (current year as sentinel = 0, meaning "any year")
     if let Ok(week) = cleaned.parse::<u32>() {
         if (1..=53).contains(&week) {
             return Some((0, week)); // 0 = match any year
         }
     }
-    
+
     None
 }
 
@@ -1427,7 +1673,9 @@ fn matches_weekday_filter(event: &Event, weekdays: &[String]) -> bool {
     }
     let event_weekday = event.start.weekday().num_days_from_monday() + 1;
     weekdays.iter().any(|day| {
-        weekday_abbrev_to_num(day).map(|wd| wd == event_weekday).unwrap_or(false)
+        weekday_abbrev_to_num(day)
+            .map(|wd| wd == event_weekday)
+            .unwrap_or(false)
     })
 }
 
@@ -1445,7 +1693,9 @@ fn matches_exclude_summary_filter(event: &Event, exclude_filters: &[String]) -> 
         return true;
     }
     let summary_lower = event.summary.to_lowercase();
-    !exclude_filters.iter().any(|f| summary_lower.contains(&f.to_lowercase()))
+    !exclude_filters
+        .iter()
+        .any(|f| summary_lower.contains(&f.to_lowercase()))
 }
 
 /// Returns true if event matches the category filter (case-insensitive).
@@ -1454,7 +1704,10 @@ fn matches_category_filter(event: &Event, category_filter: &Option<String>) -> b
     let Some(filter) = category_filter else {
         return true;
     };
-    event.categories.iter().any(|c| c.to_lowercase().contains(&filter.to_lowercase()))
+    event
+        .categories
+        .iter()
+        .any(|c| c.to_lowercase().contains(&filter.to_lowercase()))
 }
 
 /// Returns true if event does NOT match any exclude_category filter (case-insensitive).
@@ -1476,7 +1729,11 @@ fn matches_location_filter(event: &Event, location_filter: &Option<String>) -> b
     let Some(filter) = location_filter else {
         return true;
     };
-    event.location.as_ref().map(|l| l.to_lowercase().contains(&filter.to_lowercase())).unwrap_or(false)
+    event
+        .location
+        .as_ref()
+        .map(|l| l.to_lowercase().contains(&filter.to_lowercase()))
+        .unwrap_or(false)
 }
 
 /// Returns true if event does NOT match any exclude_location filter (case-insensitive).
@@ -1487,7 +1744,9 @@ fn matches_exclude_location_filter(event: &Event, exclude_filters: &[String]) ->
     }
     if let Some(ref loc) = event.location {
         let loc_lower = loc.to_lowercase();
-        return !exclude_filters.iter().any(|f| loc_lower.contains(&f.to_lowercase()));
+        return !exclude_filters
+            .iter()
+            .any(|f| loc_lower.contains(&f.to_lowercase()));
     }
     true // No location = can't match exclude filter
 }
@@ -1498,7 +1757,11 @@ fn matches_status_filter(event: &Event, status_filter: &Option<EventStatus>) -> 
     let Some(filter) = status_filter else {
         return true;
     };
-    event.status.as_ref().map(|s| s.to_lowercase() == filter.to_string().to_lowercase()).unwrap_or(false)
+    event
+        .status
+        .as_ref()
+        .map(|s| s.to_lowercase() == filter.to_string().to_lowercase())
+        .unwrap_or(false)
 }
 
 /// Returns true if event does NOT match any exclude_status filter.
@@ -1509,7 +1772,9 @@ fn matches_exclude_status_filter(event: &Event, exclude_filters: &[EventStatus])
     }
     if let Some(ref status) = event.status {
         let status_lower = status.to_lowercase();
-        return !exclude_filters.iter().any(|f| status_lower == f.to_string().to_lowercase());
+        return !exclude_filters
+            .iter()
+            .any(|f| status_lower == f.to_string().to_lowercase());
     }
     true // No status = can't match exclude filter
 }
@@ -1521,7 +1786,9 @@ fn matches_search_filter(event: &Event, search_terms: &[String]) -> bool {
         return true;
     }
     let summary_lower = event.summary.to_lowercase();
-    search_terms.iter().all(|term| summary_lower.contains(&term.to_lowercase()))
+    search_terms
+        .iter()
+        .all(|term| summary_lower.contains(&term.to_lowercase()))
 }
 
 /// Returns true if event matches ANY include_summary term (case-insensitive, OR logic).
@@ -1531,7 +1798,9 @@ fn matches_include_summary_filter(event: &Event, include_terms: &[String]) -> bo
         return true;
     }
     let summary_lower = event.summary.to_lowercase();
-    include_terms.iter().any(|term| summary_lower.contains(&term.to_lowercase()))
+    include_terms
+        .iter()
+        .any(|term| summary_lower.contains(&term.to_lowercase()))
 }
 
 /// Returns true if event has no [person] tag AND no {project} tag.
@@ -1772,7 +2041,11 @@ fn format_hours(total_minutes: i64) -> String {
 /// Returns duration in minutes, filtering out non-positive durations
 fn event_duration_minutes(event: &Event) -> Option<i64> {
     let mins = (event.end - event.start).num_minutes();
-    if mins > 0 { Some(mins) } else { None }
+    if mins > 0 {
+        Some(mins)
+    } else {
+        None
+    }
 }
 
 /// Escapes a string for CSV output (handles quotes and commas)
@@ -1827,7 +2100,10 @@ fn format_percentage(part: i64, total: i64) -> String {
 }
 
 /// Helper to build JsonOutput from grouped events
-fn build_json_output(grouped: &BTreeMap<(i32, u32), MonthSummary>, grand_total_minutes: i64) -> JsonOutput {
+fn build_json_output(
+    grouped: &BTreeMap<(i32, u32), MonthSummary>,
+    grand_total_minutes: i64,
+) -> JsonOutput {
     let mut months_json: Vec<JsonMonthSummary> = Vec::new();
     for ((year, month), summary) in grouped {
         let mut month_minutes: i64 = 0;
@@ -1899,7 +2175,11 @@ fn main() -> io::Result<()> {
     }
 
     // Initialize tracing/logging
-    let log_level = if args.verbose { Level::DEBUG } else { Level::INFO };
+    let log_level = if args.verbose {
+        Level::DEBUG
+    } else {
+        Level::INFO
+    };
     FmtSubscriber::builder()
         .with_max_level(log_level)
         .with_target(false)
@@ -1968,22 +2248,27 @@ fn main() -> io::Result<()> {
 
     if !has_stdin && !has_files {
         print_error("No .ics files provided");
-        eprintln!("  Use --stdin to pipe ICS content, or provide file paths.");
-        eprintln!("  Run 'proton-extractor --help' for usage information.");
+        eprintln!("  {} Use {} to pipe ICS content, or provide file paths as arguments", 
+            colored(color::DIM, "→"), colored(color::CYAN, "--stdin"));
+        eprintln!("  {} Run {} for usage information", 
+            colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --help"));
         std::process::exit(1);
     }
 
     if has_files && has_stdin {
         print_warn("Cannot use both --stdin and file arguments simultaneously");
+        eprintln!("  {} Use either --stdin OR file paths, not both", colored(color::DIM, "→"));
         std::process::exit(1);
     }
 
     if let Err(e) = validate_date_range(&args.from, &args.to) {
         print_error(&e.to_string());
+        eprintln!("  {} Ensure --from date is before or equal to --to date", colored(color::DIM, "→"));
         std::process::exit(1);
     }
     if let Err(e) = validate_month(args.month) {
         print_error(&e.to_string());
+        eprintln!("  {} Month must be between 1 (January) and 12 (December)", colored(color::DIM, "→"));
         std::process::exit(1);
     }
 
@@ -1991,24 +2276,28 @@ fn main() -> io::Result<()> {
     if let Some(ref t) = args.start_after {
         if let Err(e) = validate_time_filter(t, "start-after") {
             print_error(&e.to_string());
+            eprintln!("  {} Use format: HH:MM (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.start_before {
         if let Err(e) = validate_time_filter(t, "start-before") {
             print_error(&e.to_string());
+            eprintln!("  {} Use format: HH:MM (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.end_after {
         if let Err(e) = validate_time_filter(t, "end-after") {
             print_error(&e.to_string());
+            eprintln!("  {} Use format: HH:MM (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.end_before {
         if let Err(e) = validate_time_filter(t, "end-before") {
             print_error(&e.to_string());
+            eprintln!("  {} Use format: HH:MM (e.g., '09:00' or '17:30')", colored(color::DIM, "→"));
             std::process::exit(1);
         }
     }
@@ -2037,15 +2326,19 @@ fn main() -> io::Result<()> {
         for path in &args.files {
             if let Err(e) = validate_ics_file(path) {
                 print_error(&format!("Invalid file '{}': {}", path.display(), e));
-                eprintln!("  File must have .ics extension.");
+                eprintln!("  {} Expected file extension: .ics", colored(color::DIM, "→"));
                 std::process::exit(1);
             }
         }
 
         for path in &args.files {
             debug!("Reading: {}", path.display());
-            let file = File::open(path)
-                .map_err(|e| io::Error::new(io::ErrorKind::NotFound, format!("Failed to open {}: {}", path.display(), e)))?;
+            let file = File::open(path).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("Failed to open {}: {}", path.display(), e),
+                )
+            })?;
 
             let reader = BufReader::new(file);
             let parser = IcalParser::new(reader);
@@ -2095,9 +2388,17 @@ fn main() -> io::Result<()> {
                 .collect()
         };
         let after = deduped.len();
-        debug!("Deduplication (by {}): {} events -> {} events (removed {})",
-            if args.dedupe_by_summary { "summary" } else { "summary+time" },
-            before, after, before - after);
+        debug!(
+            "Deduplication (by {}): {} events -> {} events (removed {})",
+            if args.dedupe_by_summary {
+                "summary"
+            } else {
+                "summary+time"
+            },
+            before,
+            after,
+            before - after
+        );
         deduped
     } else {
         all_events
@@ -2108,7 +2409,8 @@ fn main() -> io::Result<()> {
         match parse_human_duration(s).or_else(|| parse_duration(s)) {
             Some(d) => Some(d),
             None => {
-                print_error(&format!("Invalid --min-duration format '{}'. Use formats like '30m', '1h', '2h30m', '1d'", s));
+                print_error(&format!("Invalid --min-duration format '{}'", s));
+                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
                 std::process::exit(1);
             }
         }
@@ -2120,7 +2422,8 @@ fn main() -> io::Result<()> {
         match parse_human_duration(s).or_else(|| parse_duration(s)) {
             Some(d) => Some(d),
             None => {
-                print_error(&format!("Invalid --max-duration format '{}'. Use formats like '30m', '1h', '2h30m', '1d'", s));
+                print_error(&format!("Invalid --max-duration format '{}'", s));
+                eprintln!("  {} Valid formats: '30m', '1h', '2h30m', '1d', '1w'", colored(color::DIM, "→"));
                 std::process::exit(1);
             }
         }
@@ -2131,11 +2434,10 @@ fn main() -> io::Result<()> {
     // Validate min < max if both are set
     if let (Some(min), Some(max)) = (&min_duration, &max_duration) {
         if min.num_minutes() > max.num_minutes() {
-            print_error(&format!(
-                "--min-duration ({}h {}m) must be less than or equal to --max-duration ({}h {}m)",
-                min.num_minutes() / 60, min.num_minutes() % 60,
-                max.num_minutes() / 60, max.num_minutes() % 60
-            ));
+            let min_str = format!("{}h {}m", min.num_minutes() / 60, min.num_minutes() % 60);
+            let max_str = format!("{}h {}m", max.num_minutes() / 60, max.num_minutes() % 60);
+            print_error(&format!("--min-duration ({}) must be ≤ --max-duration ({})", min_str, max_str));
+            eprintln!("  {} Ensure min-duration value is less than or equal to max-duration", colored(color::DIM, "→"));
             std::process::exit(1);
         }
     }
@@ -2149,10 +2451,13 @@ fn main() -> io::Result<()> {
 
     // Create output directory if --output-dir is specified
     if let Some(ref output_dir) = args.output_dir {
-        std::fs::create_dir_all(output_dir)
-            .map_err(|e| io::Error::other(
-                format!("Failed to create output directory '{}': {}", output_dir.display(), e)
-            ))?;
+        std::fs::create_dir_all(output_dir).map_err(|e| {
+            io::Error::other(format!(
+                "Failed to create output directory '{}': {}",
+                output_dir.display(),
+                e
+            ))
+        })?;
     }
 
     // Determine output path
@@ -2161,7 +2466,8 @@ fn main() -> io::Result<()> {
         (None, Some(dir)) => {
             // Use the first input file's stem as the output filename
             let filename = if let Some(first_input) = args.files.first() {
-                let stem = first_input.file_stem()
+                let stem = first_input
+                    .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("output");
                 format!("{}.{}", stem, get_output_extension(&args.format))
@@ -2176,7 +2482,16 @@ fn main() -> io::Result<()> {
     // Setup output: file or stdout
     let out_writer: Box<dyn Write> = match &output_path {
         Some(path) => {
-            let file = File::create(path)?;
+            let file = File::create(path).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Failed to create output file '{}': {}", path.display(), e),
+                )
+            })?;
+            // Success message for file output (but not in quiet mode)
+            if !args.quiet {
+                print_success(&format!("Writing to '{}'", path.display()));
+            }
             Box::new(file)
         }
         None => Box::new(std::io::stdout()),
@@ -2185,7 +2500,7 @@ fn main() -> io::Result<()> {
 
     let weekdays_filter = args.weekdays.unwrap_or_default();
     let exclude_weekdays_filter = args.exclude_weekdays.unwrap_or_default();
-    
+
     // Determine effective date filter: explicit flags override --date
     let effective_date = if args.today {
         DateFilter::Today
@@ -2200,12 +2515,12 @@ fn main() -> io::Result<()> {
     } else {
         args.date.clone()
     };
-    
+
     // Compute current date once for date filters (avoid calling Local::now() per event)
     let now = Local::now().naive_local();
     let yesterday = now - Duration::days(1);
     let tomorrow = now + Duration::days(1);
-    
+
     let filtered: Vec<&Event> = all_events
         .iter()
         .filter(|e| matches_filter(e, &effective_date, &now, &yesterday, &tomorrow))
@@ -2250,13 +2565,21 @@ fn main() -> io::Result<()> {
         SortBy::Date | SortBy::Start => {
             filtered.sort_by(|a, b| {
                 let cmp = a.start.cmp(&b.start);
-                if args.sort_reverse { cmp.reverse() } else { cmp }
+                if args.sort_reverse {
+                    cmp.reverse()
+                } else {
+                    cmp
+                }
             });
         }
         SortBy::End => {
             filtered.sort_by(|a, b| {
                 let cmp = a.end.cmp(&b.end);
-                if args.sort_reverse { cmp.reverse() } else { cmp }
+                if args.sort_reverse {
+                    cmp.reverse()
+                } else {
+                    cmp
+                }
             });
         }
         SortBy::Duration => {
@@ -2264,7 +2587,11 @@ fn main() -> io::Result<()> {
                 let dur_a = event_duration_minutes(a).unwrap_or(0);
                 let dur_b = event_duration_minutes(b).unwrap_or(0);
                 let cmp = dur_a.cmp(&dur_b);
-                if args.sort_reverse { cmp.reverse() } else { cmp }
+                if args.sort_reverse {
+                    cmp.reverse()
+                } else {
+                    cmp
+                }
             });
         }
         SortBy::Person => {
@@ -2272,7 +2599,11 @@ fn main() -> io::Result<()> {
                 let pers_a = extract_person(&a.summary).unwrap_or("(unknown)");
                 let pers_b = extract_person(&b.summary).unwrap_or("(unknown)");
                 let cmp = pers_a.to_lowercase().cmp(&pers_b.to_lowercase());
-                if args.sort_reverse { cmp.reverse() } else { cmp }
+                if args.sort_reverse {
+                    cmp.reverse()
+                } else {
+                    cmp
+                }
             });
         }
         SortBy::Project => {
@@ -2280,20 +2611,32 @@ fn main() -> io::Result<()> {
                 let proj_a = extract_project(&a.summary).unwrap_or("(none)");
                 let proj_b = extract_project(&b.summary).unwrap_or("(none)");
                 let cmp = proj_a.to_lowercase().cmp(&proj_b.to_lowercase());
-                if args.sort_reverse { cmp.reverse() } else { cmp }
+                if args.sort_reverse {
+                    cmp.reverse()
+                } else {
+                    cmp
+                }
             });
         }
     }
 
     if filtered.is_empty() {
-        print_info(&format!("No events found.{}", if args.verbose { "" } else { " (try --help to see filter options)" }));
+        print_info("No events found");
+        eprintln!("  {} Use {} or {} to adjust filters", 
+            colored(color::DIM, "→"),
+            colored(color::CYAN, "--date"),
+            colored(color::DIM, "filter period"));
+        eprintln!("  {} Run {} for available filter options", 
+            colored(color::DIM, "→"),
+            colored(color::CYAN, "proton-extractor --help"));
         return Ok(());
     }
 
     let grouped: BTreeMap<(i32, u32), MonthSummary> = group_by_month(&filtered);
 
     if grouped.is_empty() {
-        eprintln!("{}", colored(color::DIM, "No events found for the selected period."));
+        println!("{}", 
+            colored(color::DIM, "No events found for the selected period."));
         return Ok(());
     }
 
@@ -2305,18 +2648,27 @@ fn main() -> io::Result<()> {
             *by_person.entry(person).or_default() += 1;
         }
         println!("{}", colored(color::CYAN, "━━━ Dry Run Results ━━━"));
-        println!("Total events: {}", colored(color::YELLOW, filtered.len().to_string()));
+        println!(
+            "Total events: {}",
+            colored(color::YELLOW, filtered.len().to_string())
+        );
         if !by_person.is_empty() {
             println!("\n{}", colored(color::CYAN, "By person:"));
             for (person, count) in &by_person {
-                println!("  {}: {}", person, colored(color::YELLOW, count.to_string()));
+                println!(
+                    "  {}: {}",
+                    person,
+                    colored(color::YELLOW, count.to_string())
+                );
             }
         }
         if let Some(first) = filtered.first() {
             if let Some(last) = filtered.last() {
-                println!("\nDate range: {} to {}", 
-                    first.start.format("%Y-%m-%d"), 
-                    last.start.format("%Y-%m-%d"));
+                println!(
+                    "\nDate range: {} to {}",
+                    first.start.format("%Y-%m-%d"),
+                    last.start.format("%Y-%m-%d")
+                );
             }
         }
         return Ok(());
@@ -2406,7 +2758,7 @@ fn main() -> io::Result<()> {
         let mut sorted_projects: Vec<_> = projects.into_iter().collect();
         sorted_persons.sort();
         sorted_projects.sort();
-        
+
         if !sorted_persons.is_empty() {
             writeln!(out_writer, "{}", colored(color::CYAN, "Persons:"))?;
             for person in &sorted_persons {
@@ -2453,12 +2805,19 @@ fn main() -> io::Result<()> {
     // List all unique events if --list-events is requested
     if args.list_events {
         for event in &filtered {
-            writeln!(out_writer, "{} | {} | {}", event.start.format("%Y-%m-%d %H:%M"), event.summary, format_hours(event_duration_minutes(event).unwrap_or(0)))?;
+            writeln!(
+                out_writer,
+                "{} | {} | {}",
+                event.start.format("%Y-%m-%d %H:%M"),
+                event.summary,
+                format_hours(event_duration_minutes(event).unwrap_or(0))
+            )?;
         }
         return Ok(());
     }
 
-    let grand_total_minutes: i64 = filtered.iter()
+    let grand_total_minutes: i64 = filtered
+        .iter()
         .filter_map(|e| event_duration_minutes(e))
         .sum();
 
@@ -2472,28 +2831,41 @@ fn main() -> io::Result<()> {
     if let Some(top_n) = args.top {
         let mut events_with_duration: Vec<_> = filtered
             .iter()
-            .filter_map(|e| {
-                event_duration_minutes(e).map(|mins| (mins, e))
-            })
+            .filter_map(|e| event_duration_minutes(e).map(|mins| (mins, e)))
             .collect();
-        
+
         events_with_duration.sort_by(|a, b| b.0.cmp(&a.0));
-        
+
         let top_count = top_n.min(events_with_duration.len());
-        let top_total: i64 = events_with_duration.iter().take(top_count).map(|(m, _)| m).sum();
-        
-        writeln!(out_writer, "{}", colored(color::CYAN, format!("Top {} events by duration:", top_count)))?;
+        let top_total: i64 = events_with_duration
+            .iter()
+            .take(top_count)
+            .map(|(m, _)| m)
+            .sum();
+
+        writeln!(
+            out_writer,
+            "{}",
+            colored(
+                color::CYAN,
+                format!("Top {} events by duration:", top_count)
+            )
+        )?;
         writeln!(out_writer, "{}", colored(color::CYAN, "=".repeat(40)))?;
         for (mins, event) in events_with_duration.iter().take(top_count) {
-            writeln!(out_writer, "  {}  {}  {}", 
+            writeln!(
+                out_writer,
+                "  {}  {}  {}",
                 colored(color::YELLOW, format_hours(*mins)),
                 event.start.format("%Y-%m-%d"),
                 event.summary
             )?;
         }
         writeln!(out_writer)?;
-        writeln!(out_writer, "  {}  {}", 
-            colored(color::GREEN, format_hours(top_total)), 
+        writeln!(
+            out_writer,
+            "  {}  {}",
+            colored(color::GREEN, format_hours(top_total)),
             colored(color::BOLD, "Top events total")
         )?;
         return Ok(());
@@ -2503,27 +2875,40 @@ fn main() -> io::Result<()> {
     if let Some(bottom_n) = args.bottom {
         let mut events_with_duration: Vec<_> = filtered
             .iter()
-            .filter_map(|e| {
-                event_duration_minutes(e).map(|mins| (mins, e))
-            })
+            .filter_map(|e| event_duration_minutes(e).map(|mins| (mins, e)))
             .collect();
 
         events_with_duration.sort_by(|a, b| a.0.cmp(&b.0));
 
         let bottom_count = bottom_n.min(events_with_duration.len());
-        let bottom_total: i64 = events_with_duration.iter().take(bottom_count).map(|(m, _)| m).sum();
+        let bottom_total: i64 = events_with_duration
+            .iter()
+            .take(bottom_count)
+            .map(|(m, _)| m)
+            .sum();
 
-        writeln!(out_writer, "{}", colored(color::CYAN, format!("Bottom {} events by duration:", bottom_count)))?;
+        writeln!(
+            out_writer,
+            "{}",
+            colored(
+                color::CYAN,
+                format!("Bottom {} events by duration:", bottom_count)
+            )
+        )?;
         writeln!(out_writer, "{}", colored(color::CYAN, "=".repeat(40)))?;
         for (mins, event) in events_with_duration.iter().take(bottom_count) {
-            writeln!(out_writer, "  {}  {}  {}",
+            writeln!(
+                out_writer,
+                "  {}  {}  {}",
                 colored(color::YELLOW, format_hours(*mins)),
                 event.start.format("%Y-%m-%d"),
                 event.summary
             )?;
         }
         writeln!(out_writer)?;
-        writeln!(out_writer, "  {}  {}",
+        writeln!(
+            out_writer,
+            "  {}  {}",
             colored(color::GREEN, format_hours(bottom_total)),
             colored(color::BOLD, "Bottom events total")
         )?;
@@ -2545,7 +2930,15 @@ fn main() -> io::Result<()> {
 
         // Events per day of week
         let mut by_weekday: BTreeMap<&str, i64> = BTreeMap::new();
-        let weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        let weekday_names = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+        ];
         for event in &filtered {
             let mins = event_duration_minutes(event).unwrap_or(0);
             let wd = event.start.weekday().num_days_from_monday() as usize;
@@ -2559,7 +2952,14 @@ fn main() -> io::Result<()> {
         let max_date = dates.iter().max();
         let (days_span, avg_per_day) = if let (Some(min_d), Some(max_d)) = (min_date, max_date) {
             let span = (*max_d - *min_d).num_days() + 1;
-            (span, if span > 0 { total_mins / span } else { total_mins })
+            (
+                span,
+                if span > 0 {
+                    total_mins / span
+                } else {
+                    total_mins
+                },
+            )
         } else {
             (0, 0)
         };
@@ -2572,11 +2972,27 @@ fn main() -> io::Result<()> {
                 writeln!(out_writer, "📊 Statistics")?;
                 writeln!(out_writer, "{}", colored(color::CYAN, "============"))?;
                 writeln!(out_writer)?;
-                writeln!(out_writer, "Total events:  {}", colored(color::YELLOW, total_events.to_string()))?;
-                writeln!(out_writer, "Total hours:    {}", colored(color::YELLOW, format_hours(total_mins)))?;
+                writeln!(
+                    out_writer,
+                    "Total events:  {}",
+                    colored(color::YELLOW, total_events.to_string())
+                )?;
+                writeln!(
+                    out_writer,
+                    "Total hours:    {}",
+                    colored(color::YELLOW, format_hours(total_mins))
+                )?;
                 if let (Some(min_d), Some(max_d)) = (min_date, max_date) {
-                    writeln!(out_writer, "Date range:     {} to {} ({} days)", min_d, max_d, days_span)?;
-                    writeln!(out_writer, "Avg per day:    {}", colored(color::YELLOW, format_hours(avg_per_day)))?;
+                    writeln!(
+                        out_writer,
+                        "Date range:     {} to {} ({} days)",
+                        min_d, max_d, days_span
+                    )?;
+                    writeln!(
+                        out_writer,
+                        "Avg per day:    {}",
+                        colored(color::YELLOW, format_hours(avg_per_day))
+                    )?;
                 }
 
                 writeln!(out_writer)?;
@@ -2584,9 +3000,20 @@ fn main() -> io::Result<()> {
                 writeln!(out_writer, "{}", colored(color::CYAN, "--------"))?;
                 if !by_person.is_empty() {
                     for (person, mins) in &by_person {
-                        let marker = if Some((person, mins)) == top_person_entry { " 🏆" } else { "" };
+                        let marker = if Some((person, mins)) == top_person_entry {
+                            " 🏆"
+                        } else {
+                            ""
+                        };
                         let pct = format_percentage(*mins, total_mins);
-                        writeln!(out_writer, "  {}  {:>6}  ({}){}", colored(color::YELLOW, format_hours(*mins)), colored(color::MAGENTA, pct), person, marker)?;
+                        writeln!(
+                            out_writer,
+                            "  {}  {:>6}  ({}){}",
+                            colored(color::YELLOW, format_hours(*mins)),
+                            colored(color::MAGENTA, pct),
+                            person,
+                            marker
+                        )?;
                     }
                 } else {
                     writeln!(out_writer, "  (no person data)")?;
@@ -2596,7 +3023,12 @@ fn main() -> io::Result<()> {
                 writeln!(out_writer, "{}", colored(color::CYAN, "By Weekday"))?;
                 writeln!(out_writer, "{}", colored(color::CYAN, "------------"))?;
                 for (day, mins) in &by_weekday {
-                    writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(*mins)), day)?;
+                    writeln!(
+                        out_writer,
+                        "  {}  {}",
+                        colored(color::YELLOW, format_hours(*mins)),
+                        day
+                    )?;
                 }
             }
             StatsFormat::Json | StatsFormat::Yaml => {
@@ -2636,8 +3068,8 @@ fn main() -> io::Result<()> {
                         writeln!(out_writer, "{}", json_str)?;
                     }
                     StatsFormat::Yaml => {
-                        let yaml_str = serde_yaml::to_string(&stats)
-                            .unwrap_or_else(|_| "{}".to_string());
+                        let yaml_str =
+                            serde_yaml::to_string(&stats).unwrap_or_else(|_| "{}".to_string());
                         writeln!(out_writer, "{}", yaml_str)?;
                     }
                     StatsFormat::Text => unreachable!(),
@@ -2651,7 +3083,7 @@ fn main() -> io::Result<()> {
     match args.format {
         OutputFormat::Csv => {
             let mut wtr = csv::Writer::from_writer(out_writer);
-            
+
             // In quiet/sum_only mode, output only totals per person
             if args.quiet || args.sum_only {
                 // Build per-person summary
@@ -2665,7 +3097,7 @@ fn main() -> io::Result<()> {
                         *acc.entry(person).or_default() += mins;
                         acc
                     });
-                
+
                 wtr.write_record(["person", "total_minutes", "total_formatted", "percentage"])
                     .ok();
                 for (person, mins) in &all_by_person {
@@ -2686,8 +3118,19 @@ fn main() -> io::Result<()> {
                 .ok();
             } else {
                 // Full output with individual events
-                wtr.write_record(["date", "start", "end", "duration_minutes", "weekday", "person", "project", "summary", "location", "categories"])
-                    .ok();
+                wtr.write_record([
+                    "date",
+                    "start",
+                    "end",
+                    "duration_minutes",
+                    "weekday",
+                    "person",
+                    "project",
+                    "summary",
+                    "location",
+                    "categories",
+                ])
+                .ok();
                 for event in &filtered {
                     let mins = match event_duration_minutes(event) {
                         Some(m) => m,
@@ -2768,13 +3211,24 @@ fn main() -> io::Result<()> {
             for event in &filtered {
                 writeln!(out_writer, "BEGIN:VEVENT")?;
                 // Use original UID if available, otherwise generate one
-                let uid = event.uid.clone().unwrap_or_else(|| format!("{}@proton-extractor", event.start.and_utc().timestamp()));
+                let uid = event.uid.clone().unwrap_or_else(|| {
+                    format!("{}@proton-extractor", event.start.and_utc().timestamp())
+                });
                 writeln!(out_writer, "UID:{}", uid)?;
-                writeln!(out_writer, "DTSTAMP:{}", event.start.format("%Y%m%dT%H%M%S"))?;
-                writeln!(out_writer, "DTSTART:{}", event.start.format("%Y%m%dT%H%M%S"))?;
+                writeln!(
+                    out_writer,
+                    "DTSTAMP:{}",
+                    event.start.format("%Y%m%dT%H%M%S")
+                )?;
+                writeln!(
+                    out_writer,
+                    "DTSTART:{}",
+                    event.start.format("%Y%m%dT%H%M%S")
+                )?;
                 writeln!(out_writer, "DTEND:{}", event.end.format("%Y%m%dT%H%M%S"))?;
                 // Escape summary for iCal format
-                let summary_escaped = event.summary
+                let summary_escaped = event
+                    .summary
                     .replace("\\", "\\\\")
                     .replace(";", "\\;")
                     .replace(",", "\\,")
@@ -2793,7 +3247,9 @@ fn main() -> io::Result<()> {
                 }
                 // Add categories if available
                 if !event.categories.is_empty() {
-                    let cats_escaped = event.categories.join(",")
+                    let cats_escaped = event
+                        .categories
+                        .join(",")
                         .replace("\\", "\\\\")
                         .replace(";", "\\;")
                         .replace(",", "\\,")
@@ -2812,15 +3268,18 @@ fn main() -> io::Result<()> {
         }
         OutputFormat::Yaml => {
             let json_output = build_json_output(&grouped, grand_total_minutes);
-            let yaml_output = serde_yaml::to_string(&json_output)
-                .unwrap_or_else(|_| "{}".to_string());
+            let yaml_output =
+                serde_yaml::to_string(&json_output).unwrap_or_else(|_| "{}".to_string());
             writeln!(out_writer, "{}", yaml_output)?;
         }
         OutputFormat::Toml => {
             // Build TOML-friendly structure with proper nested arrays of tables
             let mut toml_output = String::new();
             toml_output.push_str(&format!("grand_total_minutes = {}\n", grand_total_minutes));
-            toml_output.push_str(&format!("grand_total_formatted = \"{}\"\n\n", format_hours(grand_total_minutes)));
+            toml_output.push_str(&format!(
+                "grand_total_formatted = \"{}\"\n\n",
+                format_hours(grand_total_minutes)
+            ));
 
             for ((year, month), summary) in &grouped {
                 let month_total = summary.total_minutes();
@@ -2830,7 +3289,10 @@ fn main() -> io::Result<()> {
                 toml_output.push_str(&format!("month = {}\n", month));
                 toml_output.push_str(&format!("month_name = \"{}\"\n", summary.month_name));
                 toml_output.push_str(&format!("total_minutes = {}\n", month_total));
-                toml_output.push_str(&format!("total_formatted = \"{}\"\n", format_hours(month_total)));
+                toml_output.push_str(&format!(
+                    "total_formatted = \"{}\"\n",
+                    format_hours(month_total)
+                ));
 
                 // By person breakdown as nested array
                 for (person, mins) in summary.by_person() {
@@ -2845,11 +3307,23 @@ fn main() -> io::Result<()> {
                     for event in &summary.events {
                         if let Some(mins) = event_duration_minutes(event) {
                             toml_output.push_str("\n[[months.events]]\n");
-                            toml_output.push_str(&format!("summary = \"{}\"\n", toml_escape(&event.summary)));
-                            toml_output.push_str(&format!("start = \"{}\"\n", event.start.format("%Y-%m-%d %H:%M")));
-                            toml_output.push_str(&format!("end = \"{}\"\n", event.end.format("%Y-%m-%d %H:%M")));
+                            toml_output.push_str(&format!(
+                                "summary = \"{}\"\n",
+                                toml_escape(&event.summary)
+                            ));
+                            toml_output.push_str(&format!(
+                                "start = \"{}\"\n",
+                                event.start.format("%Y-%m-%d %H:%M")
+                            ));
+                            toml_output.push_str(&format!(
+                                "end = \"{}\"\n",
+                                event.end.format("%Y-%m-%d %H:%M")
+                            ));
                             toml_output.push_str(&format!("duration_minutes = {}\n", mins));
-                            toml_output.push_str(&format!("duration_formatted = \"{}\"\n", format_hours(mins)));
+                            toml_output.push_str(&format!(
+                                "duration_formatted = \"{}\"\n",
+                                format_hours(mins)
+                            ));
                         }
                     }
                 }
@@ -2861,10 +3335,12 @@ fn main() -> io::Result<()> {
             let weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
             let mut by_person_weekday: BTreeMap<String, [i64; 7]> = BTreeMap::new();
             let mut all_persons: BTreeSet<String> = BTreeSet::new();
-            
+
             for event in &filtered {
                 if let Some(mins) = event_duration_minutes(event) {
-                    let person = extract_person(&event.summary).unwrap_or("(unknown)").to_string();
+                    let person = extract_person(&event.summary)
+                        .unwrap_or("(unknown)")
+                        .to_string();
                     let wd = event.start.weekday().num_days_from_monday() as usize;
                     all_persons.insert(person.clone());
                     by_person_weekday.entry(person).or_default()[wd] += mins;
@@ -2877,7 +3353,7 @@ fn main() -> io::Result<()> {
                 write!(out_writer, " {:>10}", day).ok();
             }
             writeln!(out_writer, " {:>10}", "Total").ok();
-            
+
             // Separator
             write!(out_writer, "{:<20}", "---").ok();
             for _ in &weekday_names {
@@ -2908,12 +3384,22 @@ fn main() -> io::Result<()> {
             write!(out_writer, "{:<20}", colored(color::BOLD, "TOTAL")).ok();
             for day_total in &grand_totals {
                 if *day_total > 0 {
-                    write!(out_writer, " {:>10}", colored(color::YELLOW, format_hours(*day_total))).ok();
+                    write!(
+                        out_writer,
+                        " {:>10}",
+                        colored(color::YELLOW, format_hours(*day_total))
+                    )
+                    .ok();
                 } else {
                     write!(out_writer, " {:>10}", "-").ok();
                 }
             }
-            writeln!(out_writer, " {:>10}", colored(color::GREEN, format_hours(grand_total))).ok();
+            writeln!(
+                out_writer,
+                " {:>10}",
+                colored(color::GREEN, format_hours(grand_total))
+            )
+            .ok();
         }
         OutputFormat::Html => {
             // Build per-person summary
@@ -2923,32 +3409,56 @@ fn main() -> io::Result<()> {
                     let mins = event_duration_minutes(e)?;
                     Some((extract_person(&e.summary).unwrap_or("(unknown)"), mins))
                 })
-                .fold(BTreeMap::new(), |mut acc: BTreeMap<&str, i64>, (person, mins)| {
-                    *acc.entry(person).or_default() += mins;
-                    acc
-                });
+                .fold(
+                    BTreeMap::new(),
+                    |mut acc: BTreeMap<&str, i64>, (person, mins)| {
+                        *acc.entry(person).or_default() += mins;
+                        acc
+                    },
+                );
 
             writeln!(out_writer, "<!DOCTYPE html>")?;
             writeln!(out_writer, "<html lang=\"en\">")?;
             writeln!(out_writer, "<head>")?;
             writeln!(out_writer, "  <meta charset=\"UTF-8\">")?;
-            writeln!(out_writer, "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">")?;
-            writeln!(out_writer, "  <title>Time Report - proton-extractor</title>")?;
+            writeln!(
+                out_writer,
+                "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
+            )?;
+            writeln!(
+                out_writer,
+                "  <title>Time Report - proton-extractor</title>"
+            )?;
             writeln!(out_writer, "  <style>")?;
             writeln!(out_writer, "    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }}")?;
-            writeln!(out_writer, "    h1 {{ color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }}")?;
+            writeln!(
+                out_writer,
+                "    h1 {{ color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }}"
+            )?;
             writeln!(out_writer, "    h2 {{ color: #555; margin-top: 30px; }}")?;
             writeln!(out_writer, "    .month-section {{ background: white; border-radius: 8px; padding: 20px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}")?;
-            writeln!(out_writer, "    .event-list {{ list-style: none; padding: 0; }}")?;
+            writeln!(
+                out_writer,
+                "    .event-list {{ list-style: none; padding: 0; }}"
+            )?;
             writeln!(out_writer, "    .event-item {{ padding: 8px 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }}")?;
-            writeln!(out_writer, "    .event-item:last-child {{ border-bottom: none; }}")?;
-            writeln!(out_writer, "    .duration {{ font-weight: bold; color: #4CAF50; }}")?;
+            writeln!(
+                out_writer,
+                "    .event-item:last-child {{ border-bottom: none; }}"
+            )?;
+            writeln!(
+                out_writer,
+                "    .duration {{ font-weight: bold; color: #4CAF50; }}"
+            )?;
             writeln!(out_writer, "    .summary {{ color: #333; }}")?;
             writeln!(out_writer, "    .person-summary {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }}")?;
             writeln!(out_writer, "    .total {{ font-weight: bold; font-size: 1.2em; color: #333; padding: 15px 0; border-top: 2px solid #4CAF50; margin-top: 10px; }}")?;
             writeln!(out_writer, "    .grand-total {{ background: #4CAF50; color: white; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; font-size: 1.5em; }}")?;
             writeln!(out_writer, "    .person-breakdown {{ background: #f9f9f9; padding: 15px; border-radius: 4px; margin-top: 15px; }}")?;
-            writeln!(out_writer, "    .percentage {{ color: #888; font-size: 0.9em; }}")?;
+            writeln!(
+                out_writer,
+                "    .percentage {{ color: #888; font-size: 0.9em; }}"
+            )?;
             writeln!(out_writer, "  </style>")?;
             writeln!(out_writer, "</head>")?;
             writeln!(out_writer, "<body>")?;
@@ -2956,12 +3466,21 @@ fn main() -> io::Result<()> {
             writeln!(out_writer, "  <p>Generated by <a href=\"https://github.com/JeremySomsouk/proton-extractor\">proton-extractor</a></p>")?;
 
             for ((_year, _month), summary) in &grouped {
-                summary.write_html(&mut out_writer, args.quiet, args.sum_only, grand_total_minutes)?;
+                summary.write_html(
+                    &mut out_writer,
+                    args.quiet,
+                    args.sum_only,
+                    grand_total_minutes,
+                )?;
             }
 
             if grand_total_minutes > 0 && !all_by_person.is_empty() && !args.sum_only {
                 writeln!(out_writer, "  <div class=\"grand-total\">")?;
-                writeln!(out_writer, "    🎯 Grand Total: {}", format_hours(grand_total_minutes))?;
+                writeln!(
+                    out_writer,
+                    "    🎯 Grand Total: {}",
+                    format_hours(grand_total_minutes)
+                )?;
                 writeln!(out_writer, "  </div>")?;
                 writeln!(out_writer, "  <div class=\"month-section\">")?;
                 writeln!(out_writer, "    <h2>👥 All Persons Summary</h2>")?;
@@ -2988,177 +3507,366 @@ fn main() -> io::Result<()> {
                     let mins = event_duration_minutes(e)?;
                     Some((extract_person(&e.summary).unwrap_or("(unknown)"), mins))
                 })
-                .fold(BTreeMap::new(), |mut acc: BTreeMap<&str, i64>, (person, mins)| {
-                    *acc.entry(person).or_default() += mins;
-                    acc
-                });
+                .fold(
+                    BTreeMap::new(),
+                    |mut acc: BTreeMap<&str, i64>, (person, mins)| {
+                        *acc.entry(person).or_default() += mins;
+                        acc
+                    },
+                );
 
             // Group by person instead of month if --group-by-person is set
             if args.group_by_person {
                 let by_person = group_by_person(&filtered);
                 for (person, events) in &by_person {
-                    let person_total: i64 = events.iter().filter_map(|e| event_duration_minutes(e)).sum();
+                    let person_total: i64 = events
+                        .iter()
+                        .filter_map(|e| event_duration_minutes(e))
+                        .sum();
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {} ---", person)))?;
-                    
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(color::CYAN, format!("--- {} ---", person))
+                    )?;
+
                     if !args.quiet && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
-                                writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                                writeln!(
+                                    out_writer,
+                                    "  {}  {}",
+                                    colored(color::YELLOW, format_hours(mins)),
+                                    event.summary
+                                )?;
                             }
                         }
                     }
-                    writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(person_total)), colored(color::BOLD, "TOTAL"))?;
+                    writeln!(
+                        out_writer,
+                        "  {}  {}",
+                        colored(color::GREEN, format_hours(person_total)),
+                        colored(color::BOLD, "TOTAL")
+                    )?;
                 }
-                
+
                 if grand_total_minutes > 0 {
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(
+                            color::GREEN,
+                            format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))
+                        )
+                    )?;
                 }
             } else if args.group_by_project {
                 // Group by project instead of month if --group-by-project is set
                 let by_project = group_by_project(&filtered);
                 for (project, events) in &by_project {
-                    let project_total: i64 = events.iter().filter_map(|e| event_duration_minutes(e)).sum();
+                    let project_total: i64 = events
+                        .iter()
+                        .filter_map(|e| event_duration_minutes(e))
+                        .sum();
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {{{}}} ---", project)))?;
-                    
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(color::CYAN, format!("--- {{{}}} ---", project))
+                    )?;
+
                     if !args.quiet && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
-                                writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                                writeln!(
+                                    out_writer,
+                                    "  {}  {}",
+                                    colored(color::YELLOW, format_hours(mins)),
+                                    event.summary
+                                )?;
                             }
                         }
                     }
-                    writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(project_total)), colored(color::BOLD, "TOTAL"))?;
+                    writeln!(
+                        out_writer,
+                        "  {}  {}",
+                        colored(color::GREEN, format_hours(project_total)),
+                        colored(color::BOLD, "TOTAL")
+                    )?;
                 }
-                
+
                 if grand_total_minutes > 0 {
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(
+                            color::GREEN,
+                            format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))
+                        )
+                    )?;
                 }
             } else if args.group_by_weekday {
                 // Group by weekday instead of month if --group-by-weekday is set
                 let by_weekday = group_by_weekday(&filtered);
                 for (day_name, events) in &by_weekday {
-                    let day_total: i64 = events.iter().filter_map(|e| event_duration_minutes(e)).sum();
+                    let day_total: i64 = events
+                        .iter()
+                        .filter_map(|e| event_duration_minutes(e))
+                        .sum();
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {} ---", day_name)))?;
-                    
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(color::CYAN, format!("--- {} ---", day_name))
+                    )?;
+
                     if !args.quiet && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
-                                writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                                writeln!(
+                                    out_writer,
+                                    "  {}  {}",
+                                    colored(color::YELLOW, format_hours(mins)),
+                                    event.summary
+                                )?;
                             }
                         }
                     }
-                    writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(day_total)), colored(color::BOLD, "TOTAL"))?;
+                    writeln!(
+                        out_writer,
+                        "  {}  {}",
+                        colored(color::GREEN, format_hours(day_total)),
+                        colored(color::BOLD, "TOTAL")
+                    )?;
                 }
-                
+
                 if grand_total_minutes > 0 {
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(
+                            color::GREEN,
+                            format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))
+                        )
+                    )?;
                 }
             } else if args.group_by_location {
                 // Group by location instead of month if --group-by-location is set
                 let by_location = group_by_location(&filtered);
                 for (location, events) in &by_location {
-                    let location_total: i64 = events.iter().filter_map(|e| event_duration_minutes(e)).sum();
+                    let location_total: i64 = events
+                        .iter()
+                        .filter_map(|e| event_duration_minutes(e))
+                        .sum();
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {} ---", location)))?;
-                    
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(color::CYAN, format!("--- {} ---", location))
+                    )?;
+
                     if !args.quiet && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
-                                writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                                writeln!(
+                                    out_writer,
+                                    "  {}  {}",
+                                    colored(color::YELLOW, format_hours(mins)),
+                                    event.summary
+                                )?;
                             }
                         }
                     }
-                    writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(location_total)), colored(color::BOLD, "TOTAL"))?;
+                    writeln!(
+                        out_writer,
+                        "  {}  {}",
+                        colored(color::GREEN, format_hours(location_total)),
+                        colored(color::BOLD, "TOTAL")
+                    )?;
                 }
-                
+
                 if grand_total_minutes > 0 {
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(
+                            color::GREEN,
+                            format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))
+                        )
+                    )?;
                 }
             } else if args.group_by_category {
                 // Group by category instead of month if --group-by-category is set
                 let by_category = group_by_category(&filtered);
                 for (category, events) in &by_category {
-                    let category_total: i64 = events.iter().filter_map(|e| event_duration_minutes(e)).sum();
+                    let category_total: i64 = events
+                        .iter()
+                        .filter_map(|e| event_duration_minutes(e))
+                        .sum();
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {} ---", category)))?;
-                    
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(color::CYAN, format!("--- {} ---", category))
+                    )?;
+
                     if !args.quiet && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
-                                writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                                writeln!(
+                                    out_writer,
+                                    "  {}  {}",
+                                    colored(color::YELLOW, format_hours(mins)),
+                                    event.summary
+                                )?;
                             }
                         }
                     }
-                    writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(category_total)), colored(color::BOLD, "TOTAL"))?;
+                    writeln!(
+                        out_writer,
+                        "  {}  {}",
+                        colored(color::GREEN, format_hours(category_total)),
+                        colored(color::BOLD, "TOTAL")
+                    )?;
                 }
-                
+
                 if grand_total_minutes > 0 {
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(
+                            color::GREEN,
+                            format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))
+                        )
+                    )?;
                 }
             } else if args.group_by_year {
                 // Group by year instead of month if --group-by-year is set
                 let by_year = group_by_year(&filtered);
                 for (year, events) in &by_year {
-                    let year_total: i64 = events.iter().filter_map(|e| event_duration_minutes(e)).sum();
+                    let year_total: i64 = events
+                        .iter()
+                        .filter_map(|e| event_duration_minutes(e))
+                        .sum();
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {} ---", year)))?;
-                    
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(color::CYAN, format!("--- {} ---", year))
+                    )?;
+
                     if !args.quiet && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
-                                writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                                writeln!(
+                                    out_writer,
+                                    "  {}  {}",
+                                    colored(color::YELLOW, format_hours(mins)),
+                                    event.summary
+                                )?;
                             }
                         }
                     }
-                    writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(year_total)), colored(color::BOLD, "TOTAL"))?;
+                    writeln!(
+                        out_writer,
+                        "  {}  {}",
+                        colored(color::GREEN, format_hours(year_total)),
+                        colored(color::BOLD, "TOTAL")
+                    )?;
                 }
-                
+
                 if grand_total_minutes > 0 {
                     writeln!(out_writer)?;
-                    writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(
+                            color::GREEN,
+                            format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))
+                        )
+                    )?;
                 }
             } else {
-            for ((year, _month), summary) in &grouped {
-                writeln!(out_writer)?;
-                writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {} {} ---", summary.month_name, year)))?;
+                for ((year, _month), summary) in &grouped {
+                    writeln!(out_writer)?;
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(
+                            color::CYAN,
+                            format!("--- {} {} ---", summary.month_name, year)
+                        )
+                    )?;
 
-                let month_by_person = summary.by_person();
+                    let month_by_person = summary.by_person();
 
-                if !args.quiet && !args.sum_only {
-                    for event in &summary.events {
-                        if let Some(mins) = event_duration_minutes(event) {
-                            writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                    if !args.quiet && !args.sum_only {
+                        for event in &summary.events {
+                            if let Some(mins) = event_duration_minutes(event) {
+                                writeln!(
+                                    out_writer,
+                                    "  {}  {}",
+                                    colored(color::YELLOW, format_hours(mins)),
+                                    event.summary
+                                )?;
+                            }
                         }
                     }
+
+                    writeln!(out_writer, "  {}", colored(color::MAGENTA, "------"))?;
+                    for (person, mins) in &month_by_person {
+                        writeln!(
+                            out_writer,
+                            "  {}  {}",
+                            colored(color::YELLOW, format_hours(*mins)),
+                            person
+                        )?;
+                    }
+                    writeln!(
+                        out_writer,
+                        "  {}  {}",
+                        colored(color::GREEN, format_hours(summary.total_minutes())),
+                        colored(color::BOLD, "TOTAL")
+                    )?;
                 }
 
-                writeln!(out_writer, "  {}", colored(color::MAGENTA, "------"))?;
-                for (person, mins) in &month_by_person {
-                    writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(*mins)), person)?;
+                if grand_total_minutes > 0 && grouped.len() > 1 {
+                    writeln!(out_writer)?;
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(
+                            color::GREEN,
+                            format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))
+                        )
+                    )?;
                 }
-                writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(summary.total_minutes())), colored(color::BOLD, "TOTAL"))?;
-            }
 
-            if grand_total_minutes > 0 && grouped.len() > 1 {
-                writeln!(out_writer)?;
-                writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
-            }
-
-            if !all_by_person.is_empty() && !args.sum_only {
-                writeln!(out_writer)?;
-                writeln!(out_writer, "{}", colored(color::CYAN, "=== Hours per person ==="))?;
-                for (person, mins) in &all_by_person {
-                    writeln!(out_writer, "  {}  {:>6}  {}", colored(color::YELLOW, format_hours(*mins)), colored(color::MAGENTA, format_percentage(*mins, grand_total_minutes)), person)?;
+                if !all_by_person.is_empty() && !args.sum_only {
+                    writeln!(out_writer)?;
+                    writeln!(
+                        out_writer,
+                        "{}",
+                        colored(color::CYAN, "=== Hours per person ===")
+                    )?;
+                    for (person, mins) in &all_by_person {
+                        writeln!(
+                            out_writer,
+                            "  {}  {:>6}  {}",
+                            colored(color::YELLOW, format_hours(*mins)),
+                            colored(
+                                color::MAGENTA,
+                                format_percentage(*mins, grand_total_minutes)
+                            ),
+                            person
+                        )?;
+                    }
                 }
-            }
             }
         }
         OutputFormat::Markdown => {
@@ -3169,10 +3877,13 @@ fn main() -> io::Result<()> {
                     let mins = event_duration_minutes(e)?;
                     Some((extract_person(&e.summary).unwrap_or("(unknown)"), mins))
                 })
-                .fold(BTreeMap::new(), |mut acc: BTreeMap<&str, i64>, (person, mins)| {
-                    *acc.entry(person).or_default() += mins;
-                    acc
-                });
+                .fold(
+                    BTreeMap::new(),
+                    |mut acc: BTreeMap<&str, i64>, (person, mins)| {
+                        *acc.entry(person).or_default() += mins;
+                        acc
+                    },
+                );
 
             for ((year, _month), summary) in &grouped {
                 writeln!(out_writer)?;
@@ -3197,21 +3908,41 @@ fn main() -> io::Result<()> {
                 writeln!(out_writer, "| Person | Hours | % |")?;
                 writeln!(out_writer, "|--------|-------|---|")?;
                 for (person, mins) in &month_by_person {
-                    writeln!(out_writer, "| {} | {} | {} |", person, format_hours(*mins), format_percentage(*mins, summary.total_minutes()))?;
+                    writeln!(
+                        out_writer,
+                        "| {} | {} | {} |",
+                        person,
+                        format_hours(*mins),
+                        format_percentage(*mins, summary.total_minutes())
+                    )?;
                 }
-                writeln!(out_writer, "| **TOTAL** | **{}** | 100% |", format_hours(summary.total_minutes()))?;
+                writeln!(
+                    out_writer,
+                    "| **TOTAL** | **{}** | 100% |",
+                    format_hours(summary.total_minutes())
+                )?;
                 writeln!(out_writer)?;
             }
 
             if grand_total_minutes > 0 && !all_by_person.is_empty() {
-                writeln!(out_writer, "## 🎯 Grand Total: {}", format_hours(grand_total_minutes))?;
+                writeln!(
+                    out_writer,
+                    "## 🎯 Grand Total: {}",
+                    format_hours(grand_total_minutes)
+                )?;
                 writeln!(out_writer)?;
                 writeln!(out_writer, "### 👥 Hours per Person")?;
                 writeln!(out_writer)?;
                 writeln!(out_writer, "| Person | Hours | % |")?;
                 writeln!(out_writer, "|--------|-------|---|")?;
                 for (person, mins) in &all_by_person {
-                    writeln!(out_writer, "| {} | {} | {} |", person, format_hours(*mins), format_percentage(*mins, grand_total_minutes))?;
+                    writeln!(
+                        out_writer,
+                        "| {} | {} | {} |",
+                        person,
+                        format_hours(*mins),
+                        format_percentage(*mins, grand_total_minutes)
+                    )?;
                 }
             }
         }
@@ -3228,14 +3959,14 @@ mod tests {
     #[test]
     fn test_matches_recent_filter() {
         let today = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
-        
+
         // Event on today
         let today_event = Event::new(
             "Today meeting [Alice]".to_string(),
             today.and_hms_opt(9, 0, 0).unwrap(),
             today.and_hms_opt(10, 0, 0).unwrap(),
         );
-        
+
         // Event 2 days ago
         let two_days_ago = today - Duration::days(2);
         let two_days_ago_event = Event::new(
@@ -3243,7 +3974,7 @@ mod tests {
             two_days_ago.and_hms_opt(9, 0, 0).unwrap(),
             two_days_ago.and_hms_opt(10, 0, 0).unwrap(),
         );
-        
+
         // Event 5 days ago
         let five_days_ago = today - Duration::days(5);
         let five_days_ago_event = Event::new(
@@ -3251,7 +3982,7 @@ mod tests {
             five_days_ago.and_hms_opt(9, 0, 0).unwrap(),
             five_days_ago.and_hms_opt(10, 0, 0).unwrap(),
         );
-        
+
         // Event 10 days ago
         let ten_days_ago = today - Duration::days(10);
         let ten_days_ago_event = Event::new(
@@ -3264,25 +3995,53 @@ mod tests {
         assert!(matches_recent_filter(&today_event, &None, &today));
         assert!(matches_recent_filter(&two_days_ago_event, &None, &today));
         assert!(matches_recent_filter(&five_days_ago_event, &None, &today));
-        
+
         // --recent 3: today, yesterday, 2 days ago (3 days inclusive)
         let recent_3 = Some(3);
         assert!(matches_recent_filter(&today_event, &recent_3, &today));
-        assert!(matches_recent_filter(&two_days_ago_event, &recent_3, &today));
-        assert!(!matches_recent_filter(&five_days_ago_event, &recent_3, &today));
-        assert!(!matches_recent_filter(&ten_days_ago_event, &recent_3, &today));
-        
+        assert!(matches_recent_filter(
+            &two_days_ago_event,
+            &recent_3,
+            &today
+        ));
+        assert!(!matches_recent_filter(
+            &five_days_ago_event,
+            &recent_3,
+            &today
+        ));
+        assert!(!matches_recent_filter(
+            &ten_days_ago_event,
+            &recent_3,
+            &today
+        ));
+
         // --recent 7: last week inclusive
         let recent_7 = Some(7);
         assert!(matches_recent_filter(&today_event, &recent_7, &today));
-        assert!(matches_recent_filter(&two_days_ago_event, &recent_7, &today));
-        assert!(matches_recent_filter(&five_days_ago_event, &recent_7, &today));
-        assert!(!matches_recent_filter(&ten_days_ago_event, &recent_7, &today));
-        
+        assert!(matches_recent_filter(
+            &two_days_ago_event,
+            &recent_7,
+            &today
+        ));
+        assert!(matches_recent_filter(
+            &five_days_ago_event,
+            &recent_7,
+            &today
+        ));
+        assert!(!matches_recent_filter(
+            &ten_days_ago_event,
+            &recent_7,
+            &today
+        ));
+
         // --recent 1: today only
         let recent_1 = Some(1);
         assert!(matches_recent_filter(&today_event, &recent_1, &today));
-        assert!(!matches_recent_filter(&two_days_ago_event, &recent_1, &today));
+        assert!(!matches_recent_filter(
+            &two_days_ago_event,
+            &recent_1,
+            &today
+        ));
     }
 
     #[test]
@@ -3410,27 +4169,30 @@ mod tests {
         assert_eq!(interval, None);
         assert_eq!(count, None);
         assert!(bymonthday.is_none());
-        
+
         // BYDAY extraction
         let result = parse_rrule("FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20240315T090000Z");
         assert!(result.is_some());
         let (freq, _, byday, _, _, _) = result.unwrap();
         assert_eq!(freq, "WEEKLY");
-        assert_eq!(byday, Some(vec!["MO".to_string(), "WE".to_string(), "FR".to_string()]));
-        
+        assert_eq!(
+            byday,
+            Some(vec!["MO".to_string(), "WE".to_string(), "FR".to_string()])
+        );
+
         // Missing UNTIL gets a default
         let result = parse_rrule("FREQ=DAILY");
         assert!(result.is_some());
         let (_, until, _, _, _, _) = result.unwrap();
         assert_eq!(until.format("%Y").to_string(), "2099"); // Should have default date
-        
+
         // INTERVAL extraction
         let result = parse_rrule("FREQ=WEEKLY;INTERVAL=2;UNTIL=20240315T090000Z");
         assert!(result.is_some());
         let (freq, _, _, interval, _, _) = result.unwrap();
         assert_eq!(freq, "WEEKLY");
         assert_eq!(interval, Some(2));
-        
+
         // COUNT extraction
         let result = parse_rrule("FREQ=DAILY;COUNT=10");
         assert!(result.is_some());
@@ -3455,20 +4217,29 @@ mod tests {
         // Days
         assert_eq!(parse_duration("P1D"), Some(Duration::days(1)));
         assert_eq!(parse_duration("P7D"), Some(Duration::days(7)));
-        
+
         // Weeks
         assert_eq!(parse_duration("P1W"), Some(Duration::weeks(1)));
         assert_eq!(parse_duration("P2W"), Some(Duration::weeks(2)));
-        
+
         // Hours and minutes
         assert_eq!(parse_duration("PT1H"), Some(Duration::hours(1)));
         assert_eq!(parse_duration("PT30M"), Some(Duration::minutes(30)));
-        assert_eq!(parse_duration("PT1H30M"), Some(Duration::hours(1) + Duration::minutes(30)));
-        
+        assert_eq!(
+            parse_duration("PT1H30M"),
+            Some(Duration::hours(1) + Duration::minutes(30))
+        );
+
         // Combined
-        assert_eq!(parse_duration("P1DT1H"), Some(Duration::days(1) + Duration::hours(1)));
-        assert_eq!(parse_duration("P1DT1H30M"), Some(Duration::days(1) + Duration::hours(1) + Duration::minutes(30)));
-        
+        assert_eq!(
+            parse_duration("P1DT1H"),
+            Some(Duration::days(1) + Duration::hours(1))
+        );
+        assert_eq!(
+            parse_duration("P1DT1H30M"),
+            Some(Duration::days(1) + Duration::hours(1) + Duration::minutes(30))
+        );
+
         // Invalid
         assert_eq!(parse_duration(""), None);
         assert_eq!(parse_duration("INVALID"), None);
@@ -3480,10 +4251,16 @@ mod tests {
     fn test_matches_person_filter() {
         let event = Event::new(
             "Meeting with [John Doe]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
-        
+
         assert!(matches_person_filter(&event, &None));
         assert!(matches_person_filter(&event, &Some("John".to_string())));
         assert!(matches_person_filter(&event, &Some("john".to_string())));
@@ -3494,18 +4271,36 @@ mod tests {
     fn test_matches_persons_filter() {
         let alice_event = Event::new(
             "Meeting with [Alice]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
         let bob_event = Event::new(
             "Meeting with [Bob]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(11, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(11, 0, 0)
+                .unwrap(),
         );
         let carol_event = Event::new(
             "Meeting with [Carol]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(11, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(12, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(11, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(12, 0, 0)
+                .unwrap(),
         );
 
         // Empty list matches all
@@ -3518,21 +4313,42 @@ mod tests {
         assert!(!matches_persons_filter(&alice_event, &["Bob".to_string()]));
 
         // Multiple persons (OR logic)
-        assert!(matches_persons_filter(&alice_event, &["Alice".to_string(), "Bob".to_string()]));
-        assert!(matches_persons_filter(&bob_event, &["Alice".to_string(), "Bob".to_string()]));
-        assert!(!matches_persons_filter(&carol_event, &["Alice".to_string(), "Bob".to_string()]));
+        assert!(matches_persons_filter(
+            &alice_event,
+            &["Alice".to_string(), "Bob".to_string()]
+        ));
+        assert!(matches_persons_filter(
+            &bob_event,
+            &["Alice".to_string(), "Bob".to_string()]
+        ));
+        assert!(!matches_persons_filter(
+            &carol_event,
+            &["Alice".to_string(), "Bob".to_string()]
+        ));
 
         // Case insensitive
-        assert!(matches_persons_filter(&alice_event, &["ALICE".to_string(), "bob".to_string()]));
+        assert!(matches_persons_filter(
+            &alice_event,
+            &["ALICE".to_string(), "bob".to_string()]
+        ));
 
         // Partial match
-        assert!(matches_persons_filter(&alice_event, &["Ali".to_string(), "Carol".to_string()]));
+        assert!(matches_persons_filter(
+            &alice_event,
+            &["Ali".to_string(), "Carol".to_string()]
+        ));
 
         // Event without person doesn't match
         let no_person = Event::new(
             "Regular meeting".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
         assert!(!matches_persons_filter(&no_person, &["Alice".to_string()]));
     }
@@ -3541,23 +4357,38 @@ mod tests {
     fn test_matches_project_filter() {
         let event = Event::new(
             "Meeting {Project Alpha}".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
-        
+
         assert!(matches_project_filter(&event, &None));
         assert!(matches_project_filter(&event, &Some("Alpha".to_string())));
         assert!(matches_project_filter(&event, &Some("alpha".to_string())));
         assert!(matches_project_filter(&event, &Some("Project".to_string())));
         assert!(!matches_project_filter(&event, &Some("Beta".to_string())));
-        
+
         // Event without project
         let no_project = Event::new(
             "Regular meeting".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
-        assert!(!matches_project_filter(&no_project, &Some("anything".to_string())));
+        assert!(!matches_project_filter(
+            &no_project,
+            &Some("anything".to_string())
+        ));
     }
 
     #[test]
@@ -3565,77 +4396,145 @@ mod tests {
         // Event with person only
         let person_event = Event::new(
             "Meeting with [John Doe]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
-        
+
         // Event with project only
         let project_event = Event::new(
             "Meeting {Alpha}".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
-        
+
         // Event with both
         let both_event = Event::new(
             "Meeting [Alice] {Beta}".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
-        
+
         // Event with neither
         let neither_event = Event::new(
             "Regular meeting".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
-        
+
         // No filter = all match
         assert!(matches_tag_filter(&person_event, &None));
         assert!(matches_tag_filter(&project_event, &None));
         assert!(matches_tag_filter(&both_event, &None));
         assert!(matches_tag_filter(&neither_event, &None));
-        
+
         // Tag matches person
         assert!(matches_tag_filter(&person_event, &Some("John".to_string())));
         assert!(matches_tag_filter(&person_event, &Some("john".to_string()))); // case insensitive
-        assert!(!matches_tag_filter(&person_event, &Some("Alice".to_string())));
-        
+        assert!(!matches_tag_filter(
+            &person_event,
+            &Some("Alice".to_string())
+        ));
+
         // Tag matches project
-        assert!(matches_tag_filter(&project_event, &Some("Alpha".to_string())));
-        assert!(matches_tag_filter(&project_event, &Some("alpha".to_string()))); // case insensitive
-        assert!(!matches_tag_filter(&project_event, &Some("Beta".to_string())));
-        
+        assert!(matches_tag_filter(
+            &project_event,
+            &Some("Alpha".to_string())
+        ));
+        assert!(matches_tag_filter(
+            &project_event,
+            &Some("alpha".to_string())
+        )); // case insensitive
+        assert!(!matches_tag_filter(
+            &project_event,
+            &Some("Beta".to_string())
+        ));
+
         // Tag matches either person or project
         assert!(matches_tag_filter(&both_event, &Some("Alice".to_string())));
         assert!(matches_tag_filter(&both_event, &Some("Beta".to_string())));
-        assert!(!matches_tag_filter(&both_event, &Some("Charlie".to_string()))); // not in either
-        
+        assert!(!matches_tag_filter(
+            &both_event,
+            &Some("Charlie".to_string())
+        )); // not in either
+
         // No person or project = no match
-        assert!(!matches_tag_filter(&neither_event, &Some("anything".to_string())));
+        assert!(!matches_tag_filter(
+            &neither_event,
+            &Some("anything".to_string())
+        ));
     }
 
     #[test]
     fn test_matches_date_range() {
         let event = Event::new(
             "Test [Event]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
-        
+
         assert!(matches_date_range(&event, &None, &None));
-        assert!(matches_date_range(&event, &Some(NaiveDate::from_ymd_opt(2024, 3, 1).unwrap()), &None));
-        assert!(matches_date_range(&event, &None, &Some(NaiveDate::from_ymd_opt(2024, 3, 31).unwrap())));
-        assert!(!matches_date_range(&event, &Some(NaiveDate::from_ymd_opt(2024, 4, 1).unwrap()), &None));
-        assert!(!matches_date_range(&event, &None, &Some(NaiveDate::from_ymd_opt(2024, 3, 1).unwrap())));
+        assert!(matches_date_range(
+            &event,
+            &Some(NaiveDate::from_ymd_opt(2024, 3, 1).unwrap()),
+            &None
+        ));
+        assert!(matches_date_range(
+            &event,
+            &None,
+            &Some(NaiveDate::from_ymd_opt(2024, 3, 31).unwrap())
+        ));
+        assert!(!matches_date_range(
+            &event,
+            &Some(NaiveDate::from_ymd_opt(2024, 4, 1).unwrap()),
+            &None
+        ));
+        assert!(!matches_date_range(
+            &event,
+            &None,
+            &Some(NaiveDate::from_ymd_opt(2024, 3, 1).unwrap())
+        ));
     }
 
     #[test]
     fn test_matches_filter_today() {
         let today = Local::now().naive_local().date();
         let now = today.and_hms_opt(12, 0, 0).unwrap();
-        let yesterday_dt = (today - chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
-        let tomorrow_dt = (today + chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
+        let yesterday_dt = (today - chrono::Duration::days(1))
+            .and_hms_opt(12, 0, 0)
+            .unwrap();
+        let tomorrow_dt = (today + chrono::Duration::days(1))
+            .and_hms_opt(12, 0, 0)
+            .unwrap();
         let today_event = Event::new(
             "Today meeting [Alice]".to_string(),
             today.and_hms_opt(9, 0, 0).unwrap(),
@@ -3653,21 +4552,61 @@ mod tests {
             tomorrow.and_hms_opt(9, 0, 0).unwrap(),
             tomorrow.and_hms_opt(10, 0, 0).unwrap(),
         );
-        
-        assert!(matches_filter(&today_event, &DateFilter::Today, &now, &yesterday_dt, &tomorrow_dt));
-        assert!(!matches_filter(&yesterday_event, &DateFilter::Today, &now, &yesterday_dt, &tomorrow_dt));
-        assert!(!matches_filter(&tomorrow_event, &DateFilter::Today, &now, &yesterday_dt, &tomorrow_dt));
-        assert!(matches_filter(&today_event, &DateFilter::All, &now, &yesterday_dt, &tomorrow_dt));
-        assert!(matches_filter(&yesterday_event, &DateFilter::All, &now, &yesterday_dt, &tomorrow_dt));
-        assert!(matches_filter(&tomorrow_event, &DateFilter::All, &now, &yesterday_dt, &tomorrow_dt));
+
+        assert!(matches_filter(
+            &today_event,
+            &DateFilter::Today,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
+        assert!(!matches_filter(
+            &yesterday_event,
+            &DateFilter::Today,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
+        assert!(!matches_filter(
+            &tomorrow_event,
+            &DateFilter::Today,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
+        assert!(matches_filter(
+            &today_event,
+            &DateFilter::All,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
+        assert!(matches_filter(
+            &yesterday_event,
+            &DateFilter::All,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
+        assert!(matches_filter(
+            &tomorrow_event,
+            &DateFilter::All,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
     }
 
     #[test]
     fn test_matches_filter_yesterday() {
         let today = Local::now().naive_local().date();
         let now = today.and_hms_opt(12, 0, 0).unwrap();
-        let yesterday_dt = (today - chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
-        let tomorrow_dt = (today + chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
+        let yesterday_dt = (today - chrono::Duration::days(1))
+            .and_hms_opt(12, 0, 0)
+            .unwrap();
+        let tomorrow_dt = (today + chrono::Duration::days(1))
+            .and_hms_opt(12, 0, 0)
+            .unwrap();
         let today_event = Event::new(
             "Today meeting [Alice]".to_string(),
             today.and_hms_opt(9, 0, 0).unwrap(),
@@ -3685,18 +4624,40 @@ mod tests {
             two_days_ago.and_hms_opt(9, 0, 0).unwrap(),
             two_days_ago.and_hms_opt(10, 0, 0).unwrap(),
         );
-        
-        assert!(matches_filter(&yesterday_event, &DateFilter::Yesterday, &now, &yesterday_dt, &tomorrow_dt));
-        assert!(!matches_filter(&today_event, &DateFilter::Yesterday, &now, &yesterday_dt, &tomorrow_dt));
-        assert!(!matches_filter(&two_days_ago_event, &DateFilter::Yesterday, &now, &yesterday_dt, &tomorrow_dt));
+
+        assert!(matches_filter(
+            &yesterday_event,
+            &DateFilter::Yesterday,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
+        assert!(!matches_filter(
+            &today_event,
+            &DateFilter::Yesterday,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
+        assert!(!matches_filter(
+            &two_days_ago_event,
+            &DateFilter::Yesterday,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
     }
 
     #[test]
     fn test_matches_filter_tomorrow() {
         let today = Local::now().naive_local().date();
         let now = today.and_hms_opt(12, 0, 0).unwrap();
-        let yesterday_dt = (today - chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
-        let tomorrow_dt = (today + chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
+        let yesterday_dt = (today - chrono::Duration::days(1))
+            .and_hms_opt(12, 0, 0)
+            .unwrap();
+        let tomorrow_dt = (today + chrono::Duration::days(1))
+            .and_hms_opt(12, 0, 0)
+            .unwrap();
         let today_event = Event::new(
             "Today meeting [Alice]".to_string(),
             today.and_hms_opt(9, 0, 0).unwrap(),
@@ -3714,18 +4675,40 @@ mod tests {
             two_days_future.and_hms_opt(9, 0, 0).unwrap(),
             two_days_future.and_hms_opt(10, 0, 0).unwrap(),
         );
-        
-        assert!(matches_filter(&tomorrow_event, &DateFilter::Tomorrow, &now, &yesterday_dt, &tomorrow_dt));
-        assert!(!matches_filter(&today_event, &DateFilter::Tomorrow, &now, &yesterday_dt, &tomorrow_dt));
-        assert!(!matches_filter(&two_days_future_event, &DateFilter::Tomorrow, &now, &yesterday_dt, &tomorrow_dt));
+
+        assert!(matches_filter(
+            &tomorrow_event,
+            &DateFilter::Tomorrow,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
+        assert!(!matches_filter(
+            &today_event,
+            &DateFilter::Tomorrow,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
+        assert!(!matches_filter(
+            &two_days_future_event,
+            &DateFilter::Tomorrow,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
     }
 
     #[test]
     fn test_matches_filter_week() {
         let today = Local::now().naive_local().date();
         let now = today.and_hms_opt(12, 0, 0).unwrap();
-        let yesterday_dt = (today - chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
-        let tomorrow_dt = (today + chrono::Duration::days(1)).and_hms_opt(12, 0, 0).unwrap();
+        let yesterday_dt = (today - chrono::Duration::days(1))
+            .and_hms_opt(12, 0, 0)
+            .unwrap();
+        let tomorrow_dt = (today + chrono::Duration::days(1))
+            .and_hms_opt(12, 0, 0)
+            .unwrap();
         let today_event = Event::new(
             "Today meeting [Alice]".to_string(),
             today.and_hms_opt(9, 0, 0).unwrap(),
@@ -3737,9 +4720,21 @@ mod tests {
             last_week.and_hms_opt(9, 0, 0).unwrap(),
             last_week.and_hms_opt(10, 0, 0).unwrap(),
         );
-        
-        assert!(matches_filter(&today_event, &DateFilter::Week, &now, &yesterday_dt, &tomorrow_dt));
-        assert!(!matches_filter(&last_week_event, &DateFilter::Week, &now, &yesterday_dt, &tomorrow_dt));
+
+        assert!(matches_filter(
+            &today_event,
+            &DateFilter::Week,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
+        assert!(!matches_filter(
+            &last_week_event,
+            &DateFilter::Week,
+            &now,
+            &yesterday_dt,
+            &tomorrow_dt
+        ));
     }
 
     #[test]
@@ -3747,11 +4742,11 @@ mod tests {
         let from = NaiveDate::from_ymd_opt(2024, 3, 1).unwrap();
         let to = NaiveDate::from_ymd_opt(2024, 3, 31).unwrap();
         assert!(validate_date_range(&Some(from), &Some(to)).is_ok());
-        
+
         // Same date is valid
         let same = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         assert!(validate_date_range(&Some(same), &Some(same)).is_ok());
-        
+
         // None values are valid
         assert!(validate_date_range(&None, &None).is_ok());
         assert!(validate_date_range(&Some(from), &None).is_ok());
@@ -3796,7 +4791,10 @@ mod tests {
         assert_eq!(csv_escape("has,comma"), "\"has,comma\"");
         assert_eq!(csv_escape("has\"quote"), "\"has\"\"quote\"");
         assert_eq!(csv_escape("has\nnewline"), "\"has\nnewline\"");
-        assert_eq!(csv_escape("has,comma\"and\nnewline"), "\"has,comma\"\"and\nnewline\"");
+        assert_eq!(
+            csv_escape("has,comma\"and\nnewline"),
+            "\"has,comma\"\"and\nnewline\""
+        );
     }
 
     #[test]
@@ -3814,24 +4812,42 @@ mod tests {
     fn test_event_duration_minutes() {
         let event = Event::new(
             "Test".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
         assert_eq!(event_duration_minutes(&event), Some(60));
 
         // Zero duration
         let zero = Event::new(
             "Zero".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
         );
         assert_eq!(event_duration_minutes(&zero), None);
 
         // Negative duration
         let neg = Event::new(
             "Neg".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
         );
         assert_eq!(event_duration_minutes(&neg), None);
     }
@@ -3840,8 +4856,14 @@ mod tests {
     fn test_expand_events_simple() {
         let raw = RawEvent {
             summary: "Meeting [Alice]".to_string(),
-            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: None,
             exdates: vec![],
@@ -3849,7 +4871,8 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![raw]);
         assert_eq!(expanded.len(), 1);
         assert_eq!(expanded[0].summary, "Meeting [Alice]");
@@ -3859,8 +4882,14 @@ mod tests {
     fn test_expand_events_filters_zero_duration() {
         let zero_duration = RawEvent {
             summary: "Zero [Bob]".to_string(),
-            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: None,
             exdates: vec![],
@@ -3868,7 +4897,8 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![zero_duration]);
         assert!(expanded.is_empty());
     }
@@ -3877,8 +4907,14 @@ mod tests {
     fn test_expand_events_daily_recurrence() {
         let daily = RawEvent {
             summary: "Daily [Carol]".to_string(),
-            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: Some("FREQ=DAILY;UNTIL=20240305T235959".to_string()),
             exdates: vec![],
@@ -3886,20 +4922,33 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![daily]);
         // 5 days: March 1, 2, 3, 4, 5
         assert_eq!(expanded.len(), 5);
-        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
-        assert_eq!(expanded[4].start.date(), NaiveDate::from_ymd_opt(2024, 3, 5).unwrap());
+        assert_eq!(
+            expanded[0].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 1).unwrap()
+        );
+        assert_eq!(
+            expanded[4].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 5).unwrap()
+        );
     }
 
     #[test]
     fn test_expand_events_with_exdates() {
         let with_exdate = RawEvent {
             summary: "Weekly [Dave]".to_string(),
-            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: Some("FREQ=WEEKLY;UNTIL=20240315T235959".to_string()),
             exdates: vec![NaiveDate::from_ymd_opt(2024, 3, 8).unwrap()],
@@ -3907,7 +4956,8 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![with_exdate]);
         // 3 weeks, minus 1 exdate = 2 events (March 1, 15)
         assert_eq!(expanded.len(), 2);
@@ -3918,8 +4968,14 @@ mod tests {
         // Every 2 weeks: March 1, March 15, March 29
         let biweekly = RawEvent {
             summary: "Biweekly [Carol]".to_string(),
-            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: Some("FREQ=WEEKLY;INTERVAL=2;UNTIL=20240331T235959".to_string()),
             exdates: vec![],
@@ -3927,12 +4983,22 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![biweekly]);
         assert_eq!(expanded.len(), 3);
-        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
-        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2024, 3, 15).unwrap());
-        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2024, 3, 29).unwrap());
+        assert_eq!(
+            expanded[0].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 1).unwrap()
+        );
+        assert_eq!(
+            expanded[1].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap()
+        );
+        assert_eq!(
+            expanded[2].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 29).unwrap()
+        );
     }
 
     #[test]
@@ -3940,8 +5006,14 @@ mod tests {
         // Daily for 5 occurrences
         let daily_count = RawEvent {
             summary: "Daily 5 times [Eve]".to_string(),
-            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: Some("FREQ=DAILY;COUNT=5".to_string()),
             exdates: vec![],
@@ -3949,12 +5021,19 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![daily_count]);
         // Should only produce 5 events despite no UNTIL
         assert_eq!(expanded.len(), 5);
-        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
-        assert_eq!(expanded[4].start.date(), NaiveDate::from_ymd_opt(2024, 3, 5).unwrap());
+        assert_eq!(
+            expanded[0].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 1).unwrap()
+        );
+        assert_eq!(
+            expanded[4].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 5).unwrap()
+        );
     }
 
     #[test]
@@ -3962,8 +5041,14 @@ mod tests {
         // Every 3 days, 4 occurrences max
         let combined = RawEvent {
             summary: "Every 3 days [Frank]".to_string(),
-            start: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 3, 1)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: Some("FREQ=DAILY;INTERVAL=3;COUNT=4".to_string()),
             exdates: vec![],
@@ -3971,21 +5056,40 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![combined]);
         assert_eq!(expanded.len(), 4);
-        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
-        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2024, 3, 4).unwrap());
-        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2024, 3, 7).unwrap());
-        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2024, 3, 10).unwrap());
+        assert_eq!(
+            expanded[0].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 1).unwrap()
+        );
+        assert_eq!(
+            expanded[1].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 4).unwrap()
+        );
+        assert_eq!(
+            expanded[2].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 7).unwrap()
+        );
+        assert_eq!(
+            expanded[3].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 10).unwrap()
+        );
     }
 
     #[test]
     fn test_matches_exclude_filter() {
         let event = Event::new(
             "Meeting with [John Doe]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
 
         // Empty exclude list should include
@@ -3999,51 +5103,96 @@ mod tests {
         assert!(!matches_exclude_filter(&event, &["john".to_string()])); // case insensitive
 
         // Multiple exclude filters
-        assert!(!matches_exclude_filter(&event, &["Jane".to_string(), "John".to_string()]));
+        assert!(!matches_exclude_filter(
+            &event,
+            &["Jane".to_string(), "John".to_string()]
+        ));
 
         // No person in event should be included
         let event_no_person = Event::new(
             "Regular meeting".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
-        assert!(matches_exclude_filter(&event_no_person, &["anything".to_string()]));
+        assert!(matches_exclude_filter(
+            &event_no_person,
+            &["anything".to_string()]
+        ));
     }
 
     #[test]
     fn test_matches_exclude_project_filter() {
         let event = Event::new(
             "Meeting {Project Alpha}".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
 
         // Empty exclude list should include
         assert!(matches_exclude_project_filter(&event, &[]));
 
         // Excluding different project should include
-        assert!(matches_exclude_project_filter(&event, &["Beta".to_string()]));
+        assert!(matches_exclude_project_filter(
+            &event,
+            &["Beta".to_string()]
+        ));
 
         // Excluding matching project should exclude
-        assert!(!matches_exclude_project_filter(&event, &["Alpha".to_string()]));
-        assert!(!matches_exclude_project_filter(&event, &["alpha".to_string()])); // case insensitive
-        assert!(!matches_exclude_project_filter(&event, &["Project".to_string()])); // partial match
+        assert!(!matches_exclude_project_filter(
+            &event,
+            &["Alpha".to_string()]
+        ));
+        assert!(!matches_exclude_project_filter(
+            &event,
+            &["alpha".to_string()]
+        )); // case insensitive
+        assert!(!matches_exclude_project_filter(
+            &event,
+            &["Project".to_string()]
+        )); // partial match
 
         // No project in event should be included
         let event_no_project = Event::new(
             "Regular meeting".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
-        assert!(matches_exclude_project_filter(&event_no_project, &["anything".to_string()]));
+        assert!(matches_exclude_project_filter(
+            &event_no_project,
+            &["anything".to_string()]
+        ));
     }
 
     #[test]
     fn test_expand_events_monthly_recurrence() {
         let monthly = RawEvent {
             summary: "Monthly [Eve]".to_string(),
-            start: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2024, 1, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 1, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: Some("FREQ=MONTHLY;UNTIL=20240615T235959".to_string()),
             exdates: vec![],
@@ -4051,13 +5200,23 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![monthly]);
         // 6 months: Jan, Feb, Mar, Apr, May, Jun
         assert_eq!(expanded.len(), 6);
-        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 1, 15).unwrap());
-        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2024, 2, 15).unwrap());
-        assert_eq!(expanded[5].start.date(), NaiveDate::from_ymd_opt(2024, 6, 15).unwrap());
+        assert_eq!(
+            expanded[0].start.date(),
+            NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()
+        );
+        assert_eq!(
+            expanded[1].start.date(),
+            NaiveDate::from_ymd_opt(2024, 2, 15).unwrap()
+        );
+        assert_eq!(
+            expanded[5].start.date(),
+            NaiveDate::from_ymd_opt(2024, 6, 15).unwrap()
+        );
     }
 
     #[test]
@@ -4065,8 +5224,14 @@ mod tests {
         // Test day overflow handling: Jan 31 -> Feb 28 (non-leap year 2023)
         let monthly_31st = RawEvent {
             summary: "Monthly 31st [Frank]".to_string(),
-            start: NaiveDate::from_ymd_opt(2023, 1, 31).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2023, 1, 31).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2023, 1, 31)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2023, 1, 31)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: Some("FREQ=MONTHLY;UNTIL=20230430T235959".to_string()),
             exdates: vec![],
@@ -4074,14 +5239,27 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![monthly_31st]);
         // 4 months: Jan 31, Feb 28 (clamped), Mar 31, Apr 30 (clamped)
         assert_eq!(expanded.len(), 4);
-        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2023, 1, 31).unwrap());
-        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2023, 2, 28).unwrap()); // 31st -> 28th
-        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2023, 3, 31).unwrap());
-        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2023, 4, 30).unwrap()); // 31st -> 30th
+        assert_eq!(
+            expanded[0].start.date(),
+            NaiveDate::from_ymd_opt(2023, 1, 31).unwrap()
+        );
+        assert_eq!(
+            expanded[1].start.date(),
+            NaiveDate::from_ymd_opt(2023, 2, 28).unwrap()
+        ); // 31st -> 28th
+        assert_eq!(
+            expanded[2].start.date(),
+            NaiveDate::from_ymd_opt(2023, 3, 31).unwrap()
+        );
+        assert_eq!(
+            expanded[3].start.date(),
+            NaiveDate::from_ymd_opt(2023, 4, 30).unwrap()
+        ); // 31st -> 30th
     }
 
     #[test]
@@ -4089,8 +5267,14 @@ mod tests {
         // Test BYMONTHDAY: every 15th of the month
         let monthly_15th = RawEvent {
             summary: "Monthly 15th [Alice]".to_string(),
-            start: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2024, 1, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 1, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: Some("FREQ=MONTHLY;BYMONTHDAY=15;UNTIL=20240615T235959".to_string()),
             exdates: vec![],
@@ -4098,16 +5282,35 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![monthly_15th]);
         // 6 months: Jan 15, Feb 15, Mar 15, Apr 15, May 15, Jun 15
         assert_eq!(expanded.len(), 6);
-        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 1, 15).unwrap());
-        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2024, 2, 15).unwrap());
-        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2024, 3, 15).unwrap());
-        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2024, 4, 15).unwrap());
-        assert_eq!(expanded[4].start.date(), NaiveDate::from_ymd_opt(2024, 5, 15).unwrap());
-        assert_eq!(expanded[5].start.date(), NaiveDate::from_ymd_opt(2024, 6, 15).unwrap());
+        assert_eq!(
+            expanded[0].start.date(),
+            NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()
+        );
+        assert_eq!(
+            expanded[1].start.date(),
+            NaiveDate::from_ymd_opt(2024, 2, 15).unwrap()
+        );
+        assert_eq!(
+            expanded[2].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap()
+        );
+        assert_eq!(
+            expanded[3].start.date(),
+            NaiveDate::from_ymd_opt(2024, 4, 15).unwrap()
+        );
+        assert_eq!(
+            expanded[4].start.date(),
+            NaiveDate::from_ymd_opt(2024, 5, 15).unwrap()
+        );
+        assert_eq!(
+            expanded[5].start.date(),
+            NaiveDate::from_ymd_opt(2024, 6, 15).unwrap()
+        );
     }
 
     #[test]
@@ -4115,8 +5318,14 @@ mod tests {
         // Test BYMONTHDAY=-1 (last day of month)
         let monthly_last = RawEvent {
             summary: "Monthly last day [Bob]".to_string(),
-            start: NaiveDate::from_ymd_opt(2024, 1, 31).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2024, 1, 31).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2024, 1, 31)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2024, 1, 31)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: Some("FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20240630T235959".to_string()),
             exdates: vec![],
@@ -4124,16 +5333,35 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![monthly_last]);
         // Last days: Jan 31, Feb 29 (leap year 2024), Mar 31, Apr 30, May 31, Jun 30
         assert_eq!(expanded.len(), 6);
-        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2024, 1, 31).unwrap());
-        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()); // Feb 29 in leap year
-        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2024, 3, 31).unwrap());
-        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2024, 4, 30).unwrap());
-        assert_eq!(expanded[4].start.date(), NaiveDate::from_ymd_opt(2024, 5, 31).unwrap());
-        assert_eq!(expanded[5].start.date(), NaiveDate::from_ymd_opt(2024, 6, 30).unwrap());
+        assert_eq!(
+            expanded[0].start.date(),
+            NaiveDate::from_ymd_opt(2024, 1, 31).unwrap()
+        );
+        assert_eq!(
+            expanded[1].start.date(),
+            NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()
+        ); // Feb 29 in leap year
+        assert_eq!(
+            expanded[2].start.date(),
+            NaiveDate::from_ymd_opt(2024, 3, 31).unwrap()
+        );
+        assert_eq!(
+            expanded[3].start.date(),
+            NaiveDate::from_ymd_opt(2024, 4, 30).unwrap()
+        );
+        assert_eq!(
+            expanded[4].start.date(),
+            NaiveDate::from_ymd_opt(2024, 5, 31).unwrap()
+        );
+        assert_eq!(
+            expanded[5].start.date(),
+            NaiveDate::from_ymd_opt(2024, 6, 30).unwrap()
+        );
     }
 
     #[test]
@@ -4160,10 +5388,16 @@ mod tests {
     fn test_matches_month_filter() {
         let event = Event::new(
             "Test [Event]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
-        
+
         assert!(matches_month_filter(&event, &None));
         assert!(matches_month_filter(&event, &Some(3)));
         assert!(!matches_month_filter(&event, &Some(1)));
@@ -4208,40 +5442,61 @@ mod tests {
     fn test_matches_week_number_filter() {
         let event = Event::new(
             "Test [Event]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(), // ISO week 11
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(), // ISO week 11
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
 
         // No filter = all match
         assert!(matches_week_number_filter(&event, &None));
 
         // Wrong week
-        assert!(!matches_week_number_filter(&event, &Some("W10".to_string())));
-        assert!(!matches_week_number_filter(&event, &Some("W12".to_string())));
+        assert!(!matches_week_number_filter(
+            &event,
+            &Some("W10".to_string())
+        ));
+        assert!(!matches_week_number_filter(
+            &event,
+            &Some("W12".to_string())
+        ));
 
         // Correct week
         assert!(matches_week_number_filter(&event, &Some("W11".to_string())));
 
         // With year
-        assert!(matches_week_number_filter(&event, &Some("2024-W11".to_string())));
-        assert!(!matches_week_number_filter(&event, &Some("2023-W11".to_string())));
+        assert!(matches_week_number_filter(
+            &event,
+            &Some("2024-W11".to_string())
+        ));
+        assert!(!matches_week_number_filter(
+            &event,
+            &Some("2023-W11".to_string())
+        ));
 
         // Invalid filter string
-        assert!(!matches_week_number_filter(&event, &Some("invalid".to_string())));
+        assert!(!matches_week_number_filter(
+            &event,
+            &Some("invalid".to_string())
+        ));
     }
 
     #[test]
     fn test_week_number_iso() {
         // ISO week numbers - chrono handles these correctly
         let date = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
-        assert_eq!(date.iso_week().week(), 1);  // Jan 1, 2024 is week 1
-        
+        assert_eq!(date.iso_week().week(), 1); // Jan 1, 2024 is week 1
+
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         assert_eq!(date.iso_week().week(), 11); // March 15, 2024
-        
+
         let date = NaiveDate::from_ymd_opt(2024, 12, 30).unwrap();
-        assert_eq!(date.iso_week().week(), 1);  // Dec 30, 2024 is week 1 of 2025
-        
+        assert_eq!(date.iso_week().week(), 1); // Dec 30, 2024 is week 1 of 2025
+
         // Verify ISO year at year boundary
         let date = NaiveDate::from_ymd_opt(2024, 12, 30).unwrap();
         assert_eq!(date.iso_week().year(), 2025); // ISO year is 2025
@@ -4270,14 +5525,26 @@ mod tests {
         // Wednesday March 6, 2024
         let wednesday = Event::new(
             "Wednesday meeting [Alice]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 6).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 6).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 6)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 6)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
         // Friday March 8, 2024
         let friday = Event::new(
             "Friday meeting [Bob]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 8).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 8).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 8)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 8)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
 
         // Empty filter includes all
@@ -4289,14 +5556,23 @@ mod tests {
         assert!(!matches_weekday_filter(&friday, &["WE".to_string()]));
 
         // Multiple days filter (OR logic)
-        assert!(matches_weekday_filter(&wednesday, &["MO".to_string(), "WE".to_string(), "FR".to_string()]));
-        assert!(matches_weekday_filter(&friday, &["MO".to_string(), "WE".to_string(), "FR".to_string()]));
+        assert!(matches_weekday_filter(
+            &wednesday,
+            &["MO".to_string(), "WE".to_string(), "FR".to_string()]
+        ));
+        assert!(matches_weekday_filter(
+            &friday,
+            &["MO".to_string(), "WE".to_string(), "FR".to_string()]
+        ));
 
         // Case insensitive filter
         assert!(matches_weekday_filter(&wednesday, &["we".to_string()]));
 
         // Invalid weekday in filter is skipped (valid ones still work)
-        assert!(matches_weekday_filter(&wednesday, &["WE".to_string(), "XX".to_string()]));
+        assert!(matches_weekday_filter(
+            &wednesday,
+            &["WE".to_string(), "XX".to_string()]
+        ));
         // But XX alone doesn't match anyone
         assert!(!matches_weekday_filter(&wednesday, &["XX".to_string()]));
         assert!(!matches_weekday_filter(&friday, &["XX".to_string()]));
@@ -4307,14 +5583,26 @@ mod tests {
         // Wednesday March 6, 2024
         let wednesday = Event::new(
             "Wednesday meeting [Alice]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 6).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 6).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 6)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 6)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
         // Friday March 8, 2024
         let friday = Event::new(
             "Friday meeting [Bob]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 8).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 8).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 8)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 8)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
 
         // Empty exclude list includes all
@@ -4322,53 +5610,104 @@ mod tests {
         assert!(matches_exclude_weekday_filter(&friday, &[]));
 
         // Excluding a day the event is NOT on keeps it
-        assert!(matches_exclude_weekday_filter(&wednesday, &["FR".to_string()]));
+        assert!(matches_exclude_weekday_filter(
+            &wednesday,
+            &["FR".to_string()]
+        ));
 
         // Excluding a day the event IS on excludes it
-        assert!(!matches_exclude_weekday_filter(&wednesday, &["WE".to_string()]));
-        assert!(!matches_exclude_weekday_filter(&friday, &["FR".to_string()]));
+        assert!(!matches_exclude_weekday_filter(
+            &wednesday,
+            &["WE".to_string()]
+        ));
+        assert!(!matches_exclude_weekday_filter(
+            &friday,
+            &["FR".to_string()]
+        ));
 
         // Multiple exclude days (OR logic - excluded if matches ANY)
-        assert!(!matches_exclude_weekday_filter(&wednesday, &["MO".to_string(), "WE".to_string(), "FR".to_string()]));
+        assert!(!matches_exclude_weekday_filter(
+            &wednesday,
+            &["MO".to_string(), "WE".to_string(), "FR".to_string()]
+        ));
 
         // Case insensitive
-        assert!(!matches_exclude_weekday_filter(&wednesday, &["we".to_string()]));
+        assert!(!matches_exclude_weekday_filter(
+            &wednesday,
+            &["we".to_string()]
+        ));
 
         // Invalid weekday in exclude list is skipped
-        assert!(!matches_exclude_weekday_filter(&wednesday, &["WE".to_string(), "XX".to_string()]));
-        assert!(matches_exclude_weekday_filter(&wednesday, &["XX".to_string()])); // only invalid = include
+        assert!(!matches_exclude_weekday_filter(
+            &wednesday,
+            &["WE".to_string(), "XX".to_string()]
+        ));
+        assert!(matches_exclude_weekday_filter(
+            &wednesday,
+            &["XX".to_string()]
+        )); // only invalid = include
     }
 
     #[test]
     fn test_matches_exclude_summary_filter() {
         let event = Event::new(
             "Team standup meeting [Alice] {Project}".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
 
         // Empty exclude list should include
         assert!(matches_exclude_summary_filter(&event, &[]));
 
         // Excluding text that appears in summary should exclude
-        assert!(!matches_exclude_summary_filter(&event, &["standup".to_string()]));
-        assert!(!matches_exclude_summary_filter(&event, &["meeting".to_string()]));
-        assert!(!matches_exclude_summary_filter(&event, &["TEAM".to_string()])); // case insensitive
-        assert!(!matches_exclude_summary_filter(&event, &["Alice".to_string()])); // partial match
+        assert!(!matches_exclude_summary_filter(
+            &event,
+            &["standup".to_string()]
+        ));
+        assert!(!matches_exclude_summary_filter(
+            &event,
+            &["meeting".to_string()]
+        ));
+        assert!(!matches_exclude_summary_filter(
+            &event,
+            &["TEAM".to_string()]
+        )); // case insensitive
+        assert!(!matches_exclude_summary_filter(
+            &event,
+            &["Alice".to_string()]
+        )); // partial match
 
         // Multiple exclude filters (any match excludes)
-        assert!(!matches_exclude_summary_filter(&event, &["Alice".to_string(), "xyz".to_string()]));
+        assert!(!matches_exclude_summary_filter(
+            &event,
+            &["Alice".to_string(), "xyz".to_string()]
+        ));
 
         // Excluding text that doesn't appear should include
-        assert!(matches_exclude_summary_filter(&event, &["vacation".to_string()]));
+        assert!(matches_exclude_summary_filter(
+            &event,
+            &["vacation".to_string()]
+        ));
     }
 
     #[test]
     fn test_matches_search_filter() {
         let event = Event::new(
             "Team standup meeting [Alice] {Project}".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
 
         // Empty search list matches everything
@@ -4381,26 +5720,47 @@ mod tests {
         assert!(matches_search_filter(&event, &["Alice".to_string()])); // partial match
 
         // Multiple terms (AND logic - all must match)
-        assert!(matches_search_filter(&event, &["standup".to_string(), "Alice".to_string()]));
-        assert!(matches_search_filter(&event, &["team".to_string(), "meeting".to_string()]));
+        assert!(matches_search_filter(
+            &event,
+            &["standup".to_string(), "Alice".to_string()]
+        ));
+        assert!(matches_search_filter(
+            &event,
+            &["team".to_string(), "meeting".to_string()]
+        ));
 
         // Multiple terms but one doesn't match
-        assert!(!matches_search_filter(&event, &["standup".to_string(), "vacation".to_string()]));
+        assert!(!matches_search_filter(
+            &event,
+            &["standup".to_string(), "vacation".to_string()]
+        ));
 
         // Term that doesn't appear at all
         assert!(!matches_search_filter(&event, &["vacation".to_string()]));
 
         // Case insensitive matching
-        assert!(matches_search_filter(&event, &["standup meeting".to_string()]));
-        assert!(matches_search_filter(&event, &["TEAM".to_string(), "meeting".to_string()]));
+        assert!(matches_search_filter(
+            &event,
+            &["standup meeting".to_string()]
+        ));
+        assert!(matches_search_filter(
+            &event,
+            &["TEAM".to_string(), "meeting".to_string()]
+        ));
     }
 
     #[test]
     fn test_expand_events_yearly_recurrence() {
         let yearly = RawEvent {
             summary: "Yearly [Eve]".to_string(),
-            start: NaiveDate::from_ymd_opt(2022, 6, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2022, 6, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2022, 6, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2022, 6, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: Some("FREQ=YEARLY;UNTIL=20251231T235959".to_string()),
             exdates: vec![],
@@ -4408,14 +5768,27 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![yearly]);
         // 4 years: 2022, 2023, 2024, 2025
         assert_eq!(expanded.len(), 4);
-        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2022, 6, 15).unwrap());
-        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2023, 6, 15).unwrap());
-        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2024, 6, 15).unwrap());
-        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2025, 6, 15).unwrap());
+        assert_eq!(
+            expanded[0].start.date(),
+            NaiveDate::from_ymd_opt(2022, 6, 15).unwrap()
+        );
+        assert_eq!(
+            expanded[1].start.date(),
+            NaiveDate::from_ymd_opt(2023, 6, 15).unwrap()
+        );
+        assert_eq!(
+            expanded[2].start.date(),
+            NaiveDate::from_ymd_opt(2024, 6, 15).unwrap()
+        );
+        assert_eq!(
+            expanded[3].start.date(),
+            NaiveDate::from_ymd_opt(2025, 6, 15).unwrap()
+        );
     }
 
     #[test]
@@ -4423,8 +5796,14 @@ mod tests {
         // Feb 29 on leap years - clamped to Feb 28 on non-leap years
         let leap_day = RawEvent {
             summary: "Leap day meeting [Frank]".to_string(),
-            start: NaiveDate::from_ymd_opt(2020, 2, 29).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            end: NaiveDate::from_ymd_opt(2020, 2, 29).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            start: NaiveDate::from_ymd_opt(2020, 2, 29)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            end: NaiveDate::from_ymd_opt(2020, 2, 29)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             uid: "uid1".to_string(),
             rrule: Some("FREQ=YEARLY;UNTIL=20251231T235959".to_string()),
             exdates: vec![],
@@ -4432,16 +5811,32 @@ mod tests {
             location: None,
             categories: vec![],
             status: None,
-        source_file: None,};
+            source_file: None,
+        };
         let expanded = expand_events(vec![leap_day]);
         // Feb 29 gets clamped to Feb 28 in non-leap years
         // Limited by 5-year recurrence limit: 2020-2024 = 5 occurrences
         assert_eq!(expanded.len(), 5);
-        assert_eq!(expanded[0].start.date(), NaiveDate::from_ymd_opt(2020, 2, 29).unwrap());
-        assert_eq!(expanded[1].start.date(), NaiveDate::from_ymd_opt(2021, 2, 28).unwrap());
-        assert_eq!(expanded[2].start.date(), NaiveDate::from_ymd_opt(2022, 2, 28).unwrap());
-        assert_eq!(expanded[3].start.date(), NaiveDate::from_ymd_opt(2023, 2, 28).unwrap());
-        assert_eq!(expanded[4].start.date(), NaiveDate::from_ymd_opt(2024, 2, 29).unwrap());
+        assert_eq!(
+            expanded[0].start.date(),
+            NaiveDate::from_ymd_opt(2020, 2, 29).unwrap()
+        );
+        assert_eq!(
+            expanded[1].start.date(),
+            NaiveDate::from_ymd_opt(2021, 2, 28).unwrap()
+        );
+        assert_eq!(
+            expanded[2].start.date(),
+            NaiveDate::from_ymd_opt(2022, 2, 28).unwrap()
+        );
+        assert_eq!(
+            expanded[3].start.date(),
+            NaiveDate::from_ymd_opt(2023, 2, 28).unwrap()
+        );
+        assert_eq!(
+            expanded[4].start.date(),
+            NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()
+        );
     }
 
     #[test]
@@ -4459,8 +5854,14 @@ mod tests {
         assert_eq!(parse_human_duration("30M"), Some(Duration::minutes(30)));
 
         // Combined
-        assert_eq!(parse_human_duration("1h30m"), Some(Duration::hours(1) + Duration::minutes(30)));
-        assert_eq!(parse_human_duration("2h15m"), Some(Duration::hours(2) + Duration::minutes(15)));
+        assert_eq!(
+            parse_human_duration("1h30m"),
+            Some(Duration::hours(1) + Duration::minutes(30))
+        );
+        assert_eq!(
+            parse_human_duration("2h15m"),
+            Some(Duration::hours(2) + Duration::minutes(15))
+        );
 
         // Days
         assert_eq!(parse_human_duration("1d"), Some(Duration::days(1)));
@@ -4473,7 +5874,10 @@ mod tests {
         assert_eq!(parse_human_duration("45"), Some(Duration::minutes(45)));
 
         // With spaces
-        assert_eq!(parse_human_duration("1h 30m"), Some(Duration::hours(1) + Duration::minutes(30)));
+        assert_eq!(
+            parse_human_duration("1h 30m"),
+            Some(Duration::hours(1) + Duration::minutes(30))
+        );
 
         // Invalid
         assert_eq!(parse_human_duration(""), None);
@@ -4485,37 +5889,79 @@ mod tests {
     fn test_matches_duration_filter() {
         let short_event = Event::new(
             "Quick sync [Alice]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 15, 0).unwrap(), // 15 min
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 15, 0)
+                .unwrap(), // 15 min
         );
         let medium_event = Event::new(
             "Standard meeting [Bob]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(11, 0, 0).unwrap(), // 1 hour
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(11, 0, 0)
+                .unwrap(), // 1 hour
         );
         let long_event = Event::new(
             "Workshop [Charlie]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(13, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(17, 0, 0).unwrap(), // 4 hours
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(13, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(17, 0, 0)
+                .unwrap(), // 4 hours
         );
 
         let none_filter: Option<Duration> = None;
 
         // No filter = all pass
-        assert!(matches_duration_filter(&short_event, &none_filter, &none_filter));
-        assert!(matches_duration_filter(&medium_event, &none_filter, &none_filter));
-        assert!(matches_duration_filter(&long_event, &none_filter, &none_filter));
+        assert!(matches_duration_filter(
+            &short_event,
+            &none_filter,
+            &none_filter
+        ));
+        assert!(matches_duration_filter(
+            &medium_event,
+            &none_filter,
+            &none_filter
+        ));
+        assert!(matches_duration_filter(
+            &long_event,
+            &none_filter,
+            &none_filter
+        ));
 
         // Min duration filter
         let min_1h = Some(Duration::hours(1));
-        assert!(!matches_duration_filter(&short_event, &min_1h, &none_filter)); // 15min < 1h
-        assert!(matches_duration_filter(&medium_event, &min_1h, &none_filter)); // 1h >= 1h
+        assert!(!matches_duration_filter(
+            &short_event,
+            &min_1h,
+            &none_filter
+        )); // 15min < 1h
+        assert!(matches_duration_filter(
+            &medium_event,
+            &min_1h,
+            &none_filter
+        )); // 1h >= 1h
         assert!(matches_duration_filter(&long_event, &min_1h, &none_filter)); // 4h >= 1h
 
         // Max duration filter
         let max_2h = Some(Duration::hours(2));
         assert!(matches_duration_filter(&short_event, &none_filter, &max_2h)); // 15min <= 2h
-        assert!(matches_duration_filter(&medium_event, &none_filter, &max_2h)); // 1h <= 2h
+        assert!(matches_duration_filter(
+            &medium_event,
+            &none_filter,
+            &max_2h
+        )); // 1h <= 2h
         assert!(!matches_duration_filter(&long_event, &none_filter, &max_2h)); // 4h > 2h
 
         // Combined min and max
@@ -4533,23 +5979,47 @@ mod tests {
         let events = vec![
             Event::new(
                 "Meeting {Alpha}".to_string(),
-                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15)
+                    .unwrap()
+                    .and_hms_opt(9, 0, 0)
+                    .unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15)
+                    .unwrap()
+                    .and_hms_opt(10, 0, 0)
+                    .unwrap(),
             ),
             Event::new(
                 "Standup {Alpha}".to_string(),
-                NaiveDate::from_ymd_opt(2024, 3, 16).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-                NaiveDate::from_ymd_opt(2024, 3, 16).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 16)
+                    .unwrap()
+                    .and_hms_opt(9, 0, 0)
+                    .unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 16)
+                    .unwrap()
+                    .and_hms_opt(10, 0, 0)
+                    .unwrap(),
             ),
             Event::new(
                 "Workshop {Beta}".to_string(),
-                NaiveDate::from_ymd_opt(2024, 3, 17).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-                NaiveDate::from_ymd_opt(2024, 3, 17).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 17)
+                    .unwrap()
+                    .and_hms_opt(9, 0, 0)
+                    .unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 17)
+                    .unwrap()
+                    .and_hms_opt(10, 0, 0)
+                    .unwrap(),
             ),
             Event::new(
                 "No project meeting".to_string(),
-                NaiveDate::from_ymd_opt(2024, 3, 18).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-                NaiveDate::from_ymd_opt(2024, 3, 18).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 18)
+                    .unwrap()
+                    .and_hms_opt(9, 0, 0)
+                    .unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 18)
+                    .unwrap()
+                    .and_hms_opt(10, 0, 0)
+                    .unwrap(),
             ),
         ];
         let event_refs: Vec<_> = events.iter().collect();
@@ -4569,27 +6039,52 @@ mod tests {
         let events = vec![
             Event::new(
                 "Meeting [Alice]".to_string(),
-                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15)
+                    .unwrap()
+                    .and_hms_opt(9, 0, 0)
+                    .unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15)
+                    .unwrap()
+                    .and_hms_opt(10, 0, 0)
+                    .unwrap(),
             ),
             Event::new(
                 "Duplicate Meeting [Alice]".to_string(), // Different summary
-                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15)
+                    .unwrap()
+                    .and_hms_opt(9, 0, 0)
+                    .unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15)
+                    .unwrap()
+                    .and_hms_opt(10, 0, 0)
+                    .unwrap(),
             ),
             Event::new(
                 "Meeting [Alice]".to_string(), // Exact duplicate
-                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15)
+                    .unwrap()
+                    .and_hms_opt(9, 0, 0)
+                    .unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15)
+                    .unwrap()
+                    .and_hms_opt(10, 0, 0)
+                    .unwrap(),
             ),
             Event::new(
                 "Meeting [Alice]".to_string(), // Duplicate with different time
-                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
-                NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(11, 0, 0).unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15)
+                    .unwrap()
+                    .and_hms_opt(10, 0, 0)
+                    .unwrap(),
+                NaiveDate::from_ymd_opt(2024, 3, 15)
+                    .unwrap()
+                    .and_hms_opt(11, 0, 0)
+                    .unwrap(),
             ),
         ];
 
-        let mut unique: BTreeSet<(String, chrono::NaiveDateTime, chrono::NaiveDateTime)> = BTreeSet::new();
+        let mut unique: BTreeSet<(String, chrono::NaiveDateTime, chrono::NaiveDateTime)> =
+            BTreeSet::new();
         let deduped: Vec<_> = events
             .into_iter()
             .filter(|e| unique.insert((e.summary.clone(), e.start, e.end)))
@@ -4603,25 +6098,43 @@ mod tests {
     fn test_matches_include_recurring_filter() {
         let recurring_event = Event::with_recurring(
             "Weekly meeting [Alice]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
             None,
             vec![],
             true, // is_recurring = true
         );
         let non_recurring_event = Event::new(
             "One-time meeting [Bob]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(11, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(12, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(11, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(12, 0, 0)
+                .unwrap(),
         );
 
         // No filter = all pass
         assert!(matches_include_recurring_filter(&recurring_event, false));
-        assert!(matches_include_recurring_filter(&non_recurring_event, false));
+        assert!(matches_include_recurring_filter(
+            &non_recurring_event,
+            false
+        ));
 
         // Include recurring filter: only pass recurring events
         assert!(matches_include_recurring_filter(&recurring_event, true));
-        assert!(!matches_include_recurring_filter(&non_recurring_event, true));
+        assert!(!matches_include_recurring_filter(
+            &non_recurring_event,
+            true
+        ));
     }
 
     #[test]
@@ -4671,81 +6184,150 @@ mod tests {
     fn test_matches_include_summary_filter() {
         let event = Event::new(
             "Team standup meeting [Alice] {Project}".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
         );
 
         // Empty list matches everything
         assert!(matches_include_summary_filter(&event, &[]));
 
         // Single term matching
-        assert!(matches_include_summary_filter(&event, &["standup".to_string()]));
-        assert!(matches_include_summary_filter(&event, &["meeting".to_string()]));
-        assert!(matches_include_summary_filter(&event, &["TEAM".to_string()])); // case insensitive
+        assert!(matches_include_summary_filter(
+            &event,
+            &["standup".to_string()]
+        ));
+        assert!(matches_include_summary_filter(
+            &event,
+            &["meeting".to_string()]
+        ));
+        assert!(matches_include_summary_filter(
+            &event,
+            &["TEAM".to_string()]
+        )); // case insensitive
 
         // Multiple terms (OR logic - any match passes)
-        assert!(matches_include_summary_filter(&event, &["standup".to_string(), "vacation".to_string()]));
-        assert!(matches_include_summary_filter(&event, &["Alice".to_string(), "Bob".to_string()]));
+        assert!(matches_include_summary_filter(
+            &event,
+            &["standup".to_string(), "vacation".to_string()]
+        ));
+        assert!(matches_include_summary_filter(
+            &event,
+            &["Alice".to_string(), "Bob".to_string()]
+        ));
 
         // No match
-        assert!(!matches_include_summary_filter(&event, &["vacation".to_string()]));
-        assert!(!matches_include_summary_filter(&event, &["xyz".to_string()]));
+        assert!(!matches_include_summary_filter(
+            &event,
+            &["vacation".to_string()]
+        ));
+        assert!(!matches_include_summary_filter(
+            &event,
+            &["xyz".to_string()]
+        ));
     }
 
     #[test]
     fn test_matches_start_after_filter() {
         let event = Event::new(
             "Morning meeting [Alice]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 30, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 30, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 30, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 30, 0)
+                .unwrap(),
         );
 
         // No filter = all pass
         assert!(matches_start_after_filter(&event, &None));
 
         // Start after 09:00 - event at 09:30 passes
-        assert!(matches_start_after_filter(&event, &Some("09:00".to_string())));
+        assert!(matches_start_after_filter(
+            &event,
+            &Some("09:00".to_string())
+        ));
 
         // Start after 10:00 - event at 09:30 fails
-        assert!(!matches_start_after_filter(&event, &Some("10:00".to_string())));
+        assert!(!matches_start_after_filter(
+            &event,
+            &Some("10:00".to_string())
+        ));
 
         // Start after 09:30 exactly - passes (>=)
-        assert!(matches_start_after_filter(&event, &Some("09:30".to_string())));
+        assert!(matches_start_after_filter(
+            &event,
+            &Some("09:30".to_string())
+        ));
 
         // Start after 09:31 - fails
-        assert!(!matches_start_after_filter(&event, &Some("09:31".to_string())));
+        assert!(!matches_start_after_filter(
+            &event,
+            &Some("09:31".to_string())
+        ));
     }
 
     #[test]
     fn test_matches_start_before_filter() {
         let event = Event::new(
             "Morning meeting [Alice]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 30, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 30, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 30, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 30, 0)
+                .unwrap(),
         );
 
         // No filter = all pass
         assert!(matches_start_before_filter(&event, &None));
 
         // Start before 10:00 - event at 09:30 passes
-        assert!(matches_start_before_filter(&event, &Some("10:00".to_string())));
+        assert!(matches_start_before_filter(
+            &event,
+            &Some("10:00".to_string())
+        ));
 
         // Start before 09:00 - event at 09:30 fails
-        assert!(!matches_start_before_filter(&event, &Some("09:00".to_string())));
+        assert!(!matches_start_before_filter(
+            &event,
+            &Some("09:00".to_string())
+        ));
 
         // Start before 09:30 exactly - passes (<=)
-        assert!(matches_start_before_filter(&event, &Some("09:30".to_string())));
+        assert!(matches_start_before_filter(
+            &event,
+            &Some("09:30".to_string())
+        ));
 
         // Start before 09:29 - fails
-        assert!(!matches_start_before_filter(&event, &Some("09:29".to_string())));
+        assert!(!matches_start_before_filter(
+            &event,
+            &Some("09:29".to_string())
+        ));
     }
 
     #[test]
     fn test_matches_end_after_filter() {
         let event = Event::new(
             "Morning meeting [Alice]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 30, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 30, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 30, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 30, 0)
+                .unwrap(),
         );
 
         // No filter = all pass
@@ -4755,7 +6337,10 @@ mod tests {
         assert!(matches_end_after_filter(&event, &Some("10:00".to_string())));
 
         // End after 11:00 - event ends at 10:30 fails
-        assert!(!matches_end_after_filter(&event, &Some("11:00".to_string())));
+        assert!(!matches_end_after_filter(
+            &event,
+            &Some("11:00".to_string())
+        ));
 
         // End after 10:30 exactly - passes
         assert!(matches_end_after_filter(&event, &Some("10:30".to_string())));
@@ -4765,20 +6350,35 @@ mod tests {
     fn test_matches_end_before_filter() {
         let event = Event::new(
             "Morning meeting [Alice]".to_string(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 30, 0).unwrap(),
-            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 30, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(9, 30, 0)
+                .unwrap(),
+            NaiveDate::from_ymd_opt(2024, 3, 15)
+                .unwrap()
+                .and_hms_opt(10, 30, 0)
+                .unwrap(),
         );
 
         // No filter = all pass
         assert!(matches_end_before_filter(&event, &None));
 
         // End before 11:00 - event ends at 10:30 passes
-        assert!(matches_end_before_filter(&event, &Some("11:00".to_string())));
+        assert!(matches_end_before_filter(
+            &event,
+            &Some("11:00".to_string())
+        ));
 
         // End before 10:00 - event ends at 10:30 fails
-        assert!(!matches_end_before_filter(&event, &Some("10:00".to_string())));
+        assert!(!matches_end_before_filter(
+            &event,
+            &Some("10:00".to_string())
+        ));
 
         // End before 10:30 exactly - passes
-        assert!(matches_end_before_filter(&event, &Some("10:30".to_string())));
+        assert!(matches_end_before_filter(
+            &event,
+            &Some("10:30".to_string())
+        ));
     }
 }
