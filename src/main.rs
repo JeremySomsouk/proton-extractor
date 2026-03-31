@@ -278,11 +278,20 @@ proton-extractor parses .ics calendar files, extracts events with [person] tags 
 and computes total hours worked per person. Supports filtering, grouping, multiple output formats
 (text, JSON, CSV, HTML, YAML, TOML, iCal), and statistics.
 
+Quick Reference:
+  • Get totals only: proton-extractor calendar.ics -q
+  • Filter by person: proton-extractor calendar.ics --person \"Alice\"
+  • Export to JSON: proton-extractor calendar.ics -f json -o report.json
+  • Show stats: proton-extractor calendar.ics -s
+  • Today's events: proton-extractor calendar.ics -t
+  • Pipe input: cat calendar.ics | proton-extractor --stdin
+
 Enable shell completion for faster CLI usage:
   source <(proton-extractor --generate-completion bash)   # bash
   source <(proton-extractor --generate-completion zsh)    # zsh
-  proton-extractor --generate-completion fish | source   # fish")]
-#[command(after_help = "EXAMPLES:
+  proton-extractor --generate-completion fish | source   # fish
+
+EXAMPLES:
   # ── Quick Start ──────────────────────────────────────────────────────────────
   proton-extractor calendar.ics                              # Basic usage
   proton-extractor --stdin < calendar.ics                # Pipe ICS content
