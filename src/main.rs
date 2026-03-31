@@ -183,10 +183,10 @@ impl Spinner {
         println!("{} {}", colored(color::GREEN, "✓"), message);
     }
 
-    /// Finish with an error message
+    /// Finish with an error message (consistent with print_error style)
     fn finish_with_error(&self, message: &str) {
         self.finish();
-        eprintln!("{} {}", colored(color::RED, "✗"), message);
+        eprintln!("{} {}", colored(color::RED, "error:"), message);
     }
 
 }
