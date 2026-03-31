@@ -2763,29 +2763,6 @@ fn main() -> io::Result<()> {
         }
     }
 
-    // Validate empty string filters early (these won't match anything)
-    if let Some(ref s) = args.person {
-        if s.trim().is_empty() {
-            print_error("Empty value provided for --person");
-            print_hint("Specify a person name: --person \"Alice\"");
-            std::process::exit(exit_codes::INVALID_ARGS);
-        }
-    }
-    if let Some(ref s) = args.project {
-        if s.trim().is_empty() {
-            print_error("Empty value provided for --project");
-            print_hint("Specify a project name: --project \"Backend\"");
-            std::process::exit(exit_codes::INVALID_ARGS);
-        }
-    }
-    if let Some(ref s) = args.tag {
-        if s.trim().is_empty() {
-            print_error("Empty value provided for --tag");
-            print_hint("Specify a tag to filter: --tag \"urgent\"");
-            std::process::exit(exit_codes::INVALID_ARGS);
-        }
-    }
-
     // --validate is a pre-flight check that doesn't require files
     if args.validate {
         let mut has_errors = false;
@@ -3103,16 +3080,7 @@ fn main() -> io::Result<()> {
         }
     }
 
-    // Validate --from/--to are not the same date (common mistake)
-    if let (Some(from), Some(to)) = (&args.from, &args.to) {
-        if from > to {
-            print_error(format!("--from ({}) must be before or equal to --to ({})", from, to));
-            print_hint("Swap the dates or use a valid date range");
-            std::process::exit(exit_codes::INVALID_ARGS);
-        }
-    }
-
-    // Validate --from/--to date range (before file check so we get proper exit code)
+    // Validate --from/--to date range
     if let (Some(from), Some(to)) = (&args.from, &args.to) {
         if from > to {
             print_error(format!("--from ({}) must be before or equal to --to ({})", from, to));
