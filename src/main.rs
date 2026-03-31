@@ -336,8 +336,8 @@ Enable shell completion for faster CLI usage:
 TIP: Use --validate to check your arguments before running in CI/CD pipelines.
 TIP: Use --total-only for clean numeric output in scripts: $(proton-extractor -q -d today)
 TIP: Use -q (shorthand) instead of --quiet for faster typing
-TIP: Use --no-color for clean output in files/logs (or pipe to 'cat')")]
-#[command(version = VERSION)]
+TIP: Use --no-color for clean output in files/logs (or pipe to 'cat')
+TIP: Use --no-progress to suppress progress indicators in scripts/CI")]
 struct Args {
     /// Paths to .ics files
     files: Vec<PathBuf>,
@@ -564,7 +564,7 @@ struct Args {
     group_by_year: bool,
 
     /// Filter by ISO week number (1-53), optionally with year (e.g., "10" or "2024-W10")
-    #[arg(long, alias = "iso-week")]
+    #[arg(long = "week-number", alias = "iso-week", value_name = "WEEK")]
     week_number: Option<String>,
 
     /// Limit output to N events (useful for large datasets)
@@ -614,6 +614,10 @@ struct Args {
     /// Disable colored output
     #[arg(long)]
     no_color: bool,
+
+    /// Disable progress indicator for batch operations
+    #[arg(long)]
+    no_progress: bool,
 
     /// Read from stdin instead of files (useful for piping ICS content)
     #[arg(long)]
@@ -2821,7 +2825,8 @@ fn main() -> io::Result<()> {
         }
 
         let is_large_batch = args.files.len() > 1 || args.dry_run;
-        let mut spinner = if is_large_batch && !args.quiet && !args.silent {
+        let show_progress = !args.no_progress && !args.quiet && !args.silent;
+        let mut spinner = if is_large_batch && show_progress {
             Some(Spinner::new("Processing files..."))
         } else {
             None
