@@ -2362,10 +2362,23 @@ fn main() -> io::Result<()> {
             }
             
             let file = File::open(path).map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::NotFound,
-                    format!("Failed to open {}: {}", path.display(), e),
-                )
+                let path_str = path.display().to_string();
+                match e.kind() {
+                    std::io::ErrorKind::NotFound => {
+                        print_error(&format!("File not found: '{}'", path_str));
+                        eprintln!("  {} Verify the path is correct and the file exists", colored(color::DIM, "→"));
+                        std::process::exit(1);
+                    }
+                    std::io::ErrorKind::PermissionDenied => {
+                        print_error(&format!("Permission denied: '{}'", path_str));
+                        eprintln!("  {} Check file permissions with: ls -la", colored(color::DIM, "→"));
+                        std::process::exit(1);
+                    }
+                    _ => io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("Failed to open {}: {}", path.display(), e),
+                    ),
+                }
             })?;
 
             let reader = BufReader::new(file);
@@ -2520,15 +2533,16 @@ fn main() -> io::Result<()> {
                 eprintln!(
                     "{} {}",
                     colored(color::YELLOW, "⚠"),
-                    colored(color::BOLD, format!("File '{}' already exists", path.display()))
+                    colored(color::BOLD, format!("'{}' already exists", path.display()))
                 );
-                eprint!("  {} Overwrite? ", colored(color::CYAN, "→"));
+                eprint!("  {} Overwrite? [y/N] ", colored(color::CYAN, "→"));
                 io::stderr().flush().ok();
                 let mut response = String::new();
                 if io::stdin().read_line(&mut response).is_err() {
                     std::process::exit(1);
                 }
-                if !response.trim().eq_ignore_ascii_case("y") {
+                let response = response.trim().to_lowercase();
+                if !response.is_empty() && !response.eq("y") && !response.eq("yes") {
                     eprintln!();
                     print_info("Operation cancelled. Use --yes or --force to skip this prompt.");
                     std::process::exit(1);
@@ -2672,13 +2686,16 @@ fn main() -> io::Result<()> {
         print_info("No events found matching your criteria");
         eprintln!();
         eprintln!("  {} Try these options:", colored(color::CYAN, "→"));
-        
-        // Context-aware suggestions
+
+        // Context-aware suggestions based on active filters
         if args.today || args.yesterday || args.tomorrow || args.weekly || args.last_week {
             eprintln!("    {} {:<22} Show all events (no date filter)", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
         }
-        if !args.person.is_none() || !args.persons.clone().unwrap_or_default().is_empty() {
+        if args.person.is_some() || !args.persons.clone().unwrap_or_default().is_empty() {
             eprintln!("    {} {:<22} Remove person filter", colored(color::DIM, "•"), colored(color::CYAN, "--person \"\""));
+        }
+        if args.project.is_some() {
+            eprintln!("    {} {:<22} Remove project filter", colored(color::DIM, "•"), colored(color::CYAN, "--project \"\""));
         }
         if args.exclude_recurring {
             eprintln!("    {} {:<22} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
@@ -2686,7 +2703,15 @@ fn main() -> io::Result<()> {
         if args.only_untagged {
             eprintln!("    {} {:<22} Include tagged events", colored(color::DIM, "•"), colored(color::CYAN, "--no-only-untagged"));
         }
-        
+        if args.from.is_none() && args.to.is_none() {
+            eprintln!("    {} {:<22} Filter by date range", colored(color::DIM, "•"), colored(color::CYAN, "--from 2024-01-01 --to 2024-12-31"));
+        }
+        if args.verbose {
+            eprintln!("    {} {:<22} Disable verbose mode", colored(color::DIM, "•"), colored(color::CYAN, "-v"));
+        } else {
+            eprintln!("    {} {:<22} Show debug info", colored(color::DIM, "•"), colored(color::CYAN, "-v"));
+        }
+
         eprintln!();
         eprintln!("  {} Run {} for all filter options",
             colored(color::DIM, "→"),
@@ -4015,9 +4040,11 @@ fn main() -> io::Result<()> {
         if let Some(ref path) = output_file_path {
             let event_count = filtered.len();
             let duration_str = format_hours(grand_total_minutes);
+            // Consistent success format: "✓ <action> <details>"
             print_success(format!(
-                "Exported {} events ({} total) → {}",
+                "Exported {} {} ({}) → {}",
                 event_count,
+                if event_count == 1 { "event" } else { "events" },
                 duration_str,
                 path.display()
             ));
