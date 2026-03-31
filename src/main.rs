@@ -74,6 +74,12 @@ fn print_warn<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::YELLOW, "warning:"), msg.as_ref());
 }
 
+/// Styled success message output - for simple success cases
+/// Use for single-line success messages without counts
+fn print_success<S: AsRef<str>>(msg: S) {
+    println!("{} {}", colored(color::GREEN, "✓"), msg.as_ref());
+}
+
 /// Styled success with count - for export operations
 fn print_exported(count: usize, path: &Path) {
     let event_label = if count == 1 { "event" } else { "events" };
@@ -2631,7 +2637,7 @@ fn main() -> io::Result<()> {
         }
         
         // Success output
-        println!("{} All arguments validated successfully", colored(color::GREEN, "✓"));
+        print_success("All arguments validated successfully");
         println!();
         println!("  {} {} argument constraint(s) checked", colored(color::DIM, "→"), validated_count);
         
