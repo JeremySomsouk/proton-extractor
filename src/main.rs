@@ -246,6 +246,9 @@ impl std::fmt::Display for EventStatus {
   # Auto-confirm file overwrite
   proton-extractor calendar.ics -o report.csv --yes   # or --force
 
+  # Validate arguments without processing files (CI/CD pre-flight)
+  proton-extractor --validate --from 2024-01-01 --to 2024-03-31
+
   # Reverse chronological order (newest first)
   proton-extractor calendar.ics --reverse
 
@@ -571,6 +574,10 @@ struct Args {
     /// Reverse the sort order (use with --sort-by)
     #[arg(long)]
     sort_reverse: bool,
+
+    /// Validate arguments and exit (useful for CI/CD pre-flight checks)
+    #[arg(long)]
+    validate: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -621,6 +628,58 @@ fn validate_time_filter(time_str: &str, flag_name: &str) -> io::Result<()> {
             ),
         ))
     }
+}
+
+/// Validate week number format and warn about common mistakes
+fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
+    if let Some(ref week) = week_str {
+        if parse_week_filter(week).is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "invalid week format '{}': expected W10, 10, or 2024-W10",
+                    week
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Validate weekday abbreviations and suggest corrections for common mistakes
+fn validate_weekdays(weekdays: &Option<Vec<String>>, _flag_name: &str) -> io::Result<()> {
+    if let Some(ref days) = weekdays {
+        let valid_abbrevs = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+        let valid_full = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+        
+        for day in days {
+            let upper = day.to_uppercase();
+            // Check if it's a valid abbreviation
+            if !valid_abbrevs.contains(&upper.as_str()) {
+                // Check if it's a full day name (common mistake)
+                if valid_full.contains(&upper.as_str()) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "invalid weekday '{}': use abbreviation (e.g., '{}' not '{}')",
+                            day,
+                            valid_abbrevs[valid_full.iter().position(|&d| d == upper).unwrap()],
+                            day
+                        ),
+                    ));
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "invalid weekday '{}': valid values are {}",
+                        day,
+                        valid_abbrevs.join(", ")
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_ics_file(path: &Path) -> io::Result<()> {
@@ -2331,6 +2390,41 @@ fn main() -> io::Result<()> {
     let has_stdin = args.stdin;
     let has_files = !args.files.is_empty();
 
+    // --validate is a pre-flight check that doesn't require files
+    if args.validate {
+        // Validate all arguments without requiring files
+        if let Err(e) = validate_date_range(&args.from, &args.to) {
+            print_error(&e.to_string());
+            print_hint("Ensure --from date is before or equal to --to date");
+            std::process::exit(1);
+        }
+        if let Err(e) = validate_month(args.month) {
+            print_error(&e.to_string());
+            print_hint("Month must be between 1 (January) and 12 (December)");
+            std::process::exit(1);
+        }
+        if let Err(e) = validate_week_number(&args.week_number) {
+            print_error(&e.to_string());
+            print_hint("Use format: W10 (current year) or 2024-W10 (specific year)");
+            std::process::exit(1);
+        }
+        if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
+            print_error(&e.to_string());
+            std::process::exit(1);
+        }
+        if let Err(e) = validate_weekdays(&args.exclude_weekdays, "exclude-weekdays") {
+            print_error(&e.to_string());
+            std::process::exit(1);
+        }
+        let _ = validate_time_filter("09:00", "start-after");
+        
+        println!(
+            "{} All arguments validated successfully",
+            colored(color::GREEN, "✓")
+        );
+        return Ok(());
+    }
+
     if !has_stdin && !has_files {
         print_error("No .ics files provided");
         eprintln!("  {} Use {} to pipe ICS content, or provide file paths as arguments", 
@@ -2354,6 +2448,23 @@ fn main() -> io::Result<()> {
     if let Err(e) = validate_month(args.month) {
         print_error(&e.to_string());
         print_hint("Month must be between 1 (January) and 12 (December)");
+        std::process::exit(1);
+    }
+
+    // Validate week number format
+    if let Err(e) = validate_week_number(&args.week_number) {
+        print_error(&e.to_string());
+        print_hint("Use format: W10 (current year) or 2024-W10 (specific year)");
+        std::process::exit(1);
+    }
+
+    // Validate weekday abbreviations
+    if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
+        print_error(&e.to_string());
+        std::process::exit(1);
+    }
+    if let Err(e) = validate_weekdays(&args.exclude_weekdays, "exclude-weekdays") {
+        print_error(&e.to_string());
         std::process::exit(1);
     }
 
@@ -2421,13 +2532,14 @@ fn main() -> io::Result<()> {
             
             // Show progress for multiple files
             if args.files.len() > 1 && !args.quiet {
-                eprintln!(
-                    "{} [{}/{}] {}",
+                eprint!(
+                    "\r{} [{}/{}] {}",
                     colored(color::DIM, "→"),
                     i + 1,
                     args.files.len(),
                     colored(color::CYAN, path.display().to_string())
                 );
+                io::stderr().flush().ok();
             }
             
             let file = File::open(path).map_err(|e| {
@@ -2469,6 +2581,11 @@ fn main() -> io::Result<()> {
                         print_warn(&format!("Failed to parse '{}': {}", path.display(), e));
                     }
                 }
+            }
+            
+            // Clear progress line after processing each file
+            if args.files.len() > 1 && !args.quiet {
+                eprintln!("\r{}", " ".repeat(80));
             }
         }
     }
