@@ -189,16 +189,6 @@ impl Spinner {
         eprintln!("{} {}", colored(color::RED, "✗"), message);
     }
 
-    /// Finish with warning message
-    fn finish_with_warning(&self, message: &str) {
-        self.finish();
-        eprintln!("{} {}", colored(color::YELLOW, "⚠"), message);
-    }
-
-    /// Update spinner message
-    fn set_message(&mut self, message: &str) {
-        self.message = message.to_string();
-    }
 }
 
 
