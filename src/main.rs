@@ -157,59 +157,103 @@ impl std::fmt::Display for EventStatus {
 #[derive(Parser, Debug)]
 #[command(name = "proton-extractor", about = "Sum calendar event hours from ICS files", version = VERSION)]
 #[command(after_help = "EXAMPLES:
+  # ── Quick Start ──────────────────────────────────────────────────────────────
   # Basic usage - show all events from a file
   proton-extractor calendar.ics
 
-  # Filter by person and show totals
-  proton-extractor calendar.ics --person \"John Doe\"
+  # ── Filtering ──────────────────────────────────────────────────────────────
+  # Filter by person (case-insensitive)
+  proton-extractor calendar.ics --person \"Alice\"
+
+  # Filter by project
+  proton-extractor calendar.ics --project \"Backend\"
+
+  # Filter by tag (matches both [person] and {project})
+  proton-extractor calendar.ics --tag \"urgent\"
 
   # Show only this week's events
-  proton-extractor calendar.ics --weekly
+  proton-extractor calendar.ics -w          # or --weekly
 
-  # Show statistics with text output
-  proton-extractor calendar.ics --stats
+  # Show yesterday's events
+  proton-extractor calendar.ics --yesterday
 
-  # Show statistics with JSON output
-  proton-extractor calendar.ics --stats --stats-format json
+  # Date range filter
+  proton-extractor calendar.ics --from 2024-01-01 --to 2024-03-31
 
-  # Group by person with a date range
-  proton-extractor calendar.ics --from 2024-01-01 --to 2024-03-31 --group-by-person
-
-  # Find events longer than 2 hours
-  proton-extractor calendar.ics --min-duration 2h
-
-  # List all unique persons and projects
-  proton-extractor calendar.ics --list-persons --list-projects
-
-  # Export to CSV for spreadsheet analysis
-  proton-extractor calendar.ics --format csv --output report.csv
-
-  # Preview events without processing (dry run)
-  proton-extractor calendar.ics --dry-run
-
-  # Get just the total hours (great for scripting)
-  proton-extractor calendar.ics --total-only
-
-  # Filter by ISO week number
+  # Filter by ISO week
   proton-extractor calendar.ics --week-number W10
+  proton-extractor calendar.ics --week-number 2024-W10
 
-  # Filter by time range within a day
+  # Time-of-day filters
   proton-extractor calendar.ics --start-after 09:00 --end-before 17:00
 
-  # Auto-confirm file overwrite (no prompt)
-  proton-extractor calendar.ics --output report.csv --yes
+  # Filter by duration
+  proton-extractor calendar.ics --min-duration 30m   # events ≥ 30 minutes
+  proton-extractor calendar.ics --max-duration 2h    # events ≤ 2 hours
 
-  # Pipe ICS content from another command
+  # ── Output Control ──────────────────────────────────────────────────────────
+  # Quiet mode (totals only)
+  proton-extractor calendar.ics -q           # or --quiet
+
+  # Get just total hours (great for scripts)
+  proton-extractor calendar.ics --total-only
+
+  # Statistics summary
+  proton-extractor calendar.ics -s           # or --stats
+  proton-extractor calendar.ics -s --stats-format json
+
+  # Dry run (preview without output)
+  proton-extractor calendar.ics -n           # or --dry-run
+
+  # ── Listing & Discovery ──────────────────────────────────────────────────────
+  # List all unique persons
+  proton-extractor calendar.ics -P           # or --list-persons
+
+  # List all unique projects
+  proton-extractor calendar.ics -J          # or --list-projects
+
+  # List all events
+  proton-extractor calendar.ics -E           # or --list-events
+
+  # ── Grouping ─────────────────────────────────────────────────────────────────
+  # Group by person
+  proton-extractor calendar.ics --group-by-person
+
+  # Group by project
+  proton-extractor calendar.ics --group-by-project
+
+  # Group by day of week
+  proton-extractor calendar.ics --group-by-weekday
+
+  # ── Export ───────────────────────────────────────────────────────────────────
+  # Export to CSV
+  proton-extractor calendar.ics --format csv --output report.csv
+
+  # Export to JSON
+  proton-extractor calendar.ics -f json -o report.json
+
+  # Multiple output formats supported: text, json, jsonl, csv, markdown, ical, html, yaml, toml, pivot
+
+  # ── Convenience Flags ───────────────────────────────────────────────────────
+  # Auto-confirm file overwrite
+  proton-extractor calendar.ics -o report.csv --yes   # or --force
+
+  # Reverse chronological order (newest first)
+  proton-extractor calendar.ics --reverse
+
+  # Show top 5 longest events
+  proton-extractor calendar.ics --top 5
+
+  # ── Input Options ────────────────────────────────────────────────────────────
+  # Read from stdin (pipe ICS content)
   cat calendar.ics | proton-extractor --stdin
 
-  # Shell completion setup
-  source <(proton-extractor --generate-completion bash)
+  # Multiple files at once
+  proton-extractor calendar1.ics calendar2.ics calendar3.ics
 
-For shell completion, run:
-  proton-extractor --generate-completion bash
-  proton-extractor --generate-completion zsh
-  proton-extractor --generate-completion fish
-  proton-extractor --generate-completion powershell")]
+  # ── Shell Completion ─────────────────────────────────────────────────────────
+  source <(proton-extractor --generate-completion bash)
+  # Also supports: zsh, fish, powershell")]
 #[command(version = VERSION)]
 struct Args {
     /// Paths to .ics files
@@ -296,15 +340,15 @@ struct Args {
     output_dir: Option<PathBuf>,
 
     /// List all unique persons found in events
-    #[arg(long)]
+    #[arg(short = 'P', long)]
     list_persons: bool,
 
     /// List all unique projects found in events
-    #[arg(long)]
+    #[arg(short = 'J', long)]
     list_projects: bool,
 
     /// List all unique events found (one per line with date and summary)
-    #[arg(long)]
+    #[arg(short = 'E', long)]
     list_events: bool,
 
     /// List all unique locations found in events
@@ -352,7 +396,7 @@ struct Args {
     generate_completion: Option<clap_complete::Shell>,
 
     /// Preview mode: show event count without processing output
-    #[arg(long)]
+    #[arg(short = 'n', long)]
     dry_run: bool,
 
     /// Filter by day of week: MO,TU,WE,TH,FR,SA,SU (can be repeated, e.g., --weekdays MO --weekdays WE)
@@ -397,7 +441,7 @@ struct Args {
     compact: bool,
 
     /// Show statistics about events (count, avg/day, top person, busiest day)
-    #[arg(long)]
+    #[arg(short = 's', long)]
     stats: bool,
 
     /// Output format for statistics (only applies when --stats is used)
