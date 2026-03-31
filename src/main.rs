@@ -352,6 +352,10 @@ struct Args {
     #[arg(short, long)]
     quiet: bool,
 
+    /// Produce no output at all (useful for cron/CI with exit code only)
+    #[arg(long)]
+    silent: bool,
+
     /// Output format
     #[arg(short, long, value_enum, default_value = "text")]
     format: OutputFormat,
@@ -397,7 +401,7 @@ struct Args {
     sum_only: bool,
 
     /// Show only the grand total (single line output, useful for scripting)
-    #[arg(long, conflicts_with_all = ["quiet", "sum_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "stats", "top", "bottom", "group_by_person", "group_by_project", "group_by_weekday", "group_by_location", "group_by_category", "dry_run"])]
+    #[arg(long, conflicts_with_all = ["quiet", "sum_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "stats", "top", "bottom", "group_by_person", "group_by_project", "group_by_weekday", "group_by_location", "group_by_category", "dry_run", "silent"])]
     total_only: bool,
 
     /// Force overwrite of output file without confirmation
@@ -2726,7 +2730,7 @@ fn main() -> io::Result<()> {
                     debug!("Found {} events from stdin", cal.events.len());
                     all_raw_events.extend(extract_raw_events(cal.events, None));
                 }
-                Err(_e) if args.quiet => {}
+                Err(_e) if args.quiet || args.silent => {}
                 Err(e) => {
                     parse_warnings.push(e.to_string());
                 }
@@ -2734,10 +2738,10 @@ fn main() -> io::Result<()> {
         }
 
         // Detect empty stdin early
-        if !found_content && !parse_warnings.is_empty() && !args.quiet {
+        if !found_content && !parse_warnings.is_empty() && !args.quiet && !args.silent {
             print_warn("stdin appears to be empty or not valid ICS content");
             print_hints(&["Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin"][..]);
-        } else if !found_content && !args.quiet && parse_warnings.is_empty() {
+        } else if !found_content && !args.quiet && !args.silent && parse_warnings.is_empty() {
             print_warn("stdin is empty");
             print_hints(&["Provide ICS content via pipe: cat calendar.ics | proton-extractor --stdin"][..]);
         }
@@ -2752,7 +2756,7 @@ fn main() -> io::Result<()> {
         }
 
         let is_large_batch = args.files.len() > 1 || args.dry_run;
-        let mut spinner = if is_large_batch && !args.quiet {
+        let mut spinner = if is_large_batch && !args.quiet && !args.silent {
             Some(Spinner::new("Processing files..."))
         } else {
             None
@@ -3166,14 +3170,14 @@ fn main() -> io::Result<()> {
     }
 
     if filtered.is_empty() {
-        if !args.quiet {
+        if !args.quiet && !args.silent {
             eprintln!();
             print_notice("No events found matching your criteria");
             eprintln!("  {} Use {} to debug argument issues", colored(color::DIM, "→"), colored(color::CYAN, "proton-extractor --validate [your args]"));
         }
 
         // Show active date context if a date filter is active
-        if !args.quiet {
+        if !args.quiet && !args.silent {
             match &effective_date {
                 DateFilter::Today => eprintln!("  {}  Showing events for today ({})", colored(color::DIM, "→"), now.format("%Y-%m-%d")),
                 DateFilter::Yesterday => eprintln!("  {}  Showing events for yesterday ({})", colored(color::DIM, "→"), yesterday.format("%Y-%m-%d")),
@@ -3974,7 +3978,7 @@ fn main() -> io::Result<()> {
                 }
 
                 // Events (only if not quiet/sum_only)
-                if !args.quiet && !args.sum_only {
+                if !args.quiet && !args.silent && !args.sum_only {
                     for event in &summary.events {
                         if let Some(mins) = event_duration_minutes(event) {
                             toml_output.push_str("\n[[months.events]]\n");
@@ -4201,7 +4205,7 @@ fn main() -> io::Result<()> {
                         colored(color::CYAN, format!("--- {} ---", person))
                     )?;
 
-                    if !args.quiet && !args.sum_only {
+                    if !args.quiet && !args.silent && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
                                 writeln!(
@@ -4247,7 +4251,7 @@ fn main() -> io::Result<()> {
                         colored(color::CYAN, format!("--- {{{}}} ---", project))
                     )?;
 
-                    if !args.quiet && !args.sum_only {
+                    if !args.quiet && !args.silent && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
                                 writeln!(
@@ -4293,7 +4297,7 @@ fn main() -> io::Result<()> {
                         colored(color::CYAN, format!("--- {} ---", day_name))
                     )?;
 
-                    if !args.quiet && !args.sum_only {
+                    if !args.quiet && !args.silent && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
                                 writeln!(
@@ -4339,7 +4343,7 @@ fn main() -> io::Result<()> {
                         colored(color::CYAN, format!("--- {} ---", location))
                     )?;
 
-                    if !args.quiet && !args.sum_only {
+                    if !args.quiet && !args.silent && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
                                 writeln!(
@@ -4385,7 +4389,7 @@ fn main() -> io::Result<()> {
                         colored(color::CYAN, format!("--- {} ---", category))
                     )?;
 
-                    if !args.quiet && !args.sum_only {
+                    if !args.quiet && !args.silent && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
                                 writeln!(
@@ -4431,7 +4435,7 @@ fn main() -> io::Result<()> {
                         colored(color::CYAN, format!("--- {} ---", year))
                     )?;
 
-                    if !args.quiet && !args.sum_only {
+                    if !args.quiet && !args.silent && !args.sum_only {
                         for event in events {
                             if let Some(mins) = event_duration_minutes(event) {
                                 writeln!(
@@ -4476,7 +4480,7 @@ fn main() -> io::Result<()> {
 
                     let month_by_person = summary.by_person();
 
-                    if !args.quiet && !args.sum_only {
+                    if !args.quiet && !args.silent && !args.sum_only {
                         for event in &summary.events {
                             if let Some(mins) = event_duration_minutes(event) {
                                 writeln!(
@@ -4563,7 +4567,7 @@ fn main() -> io::Result<()> {
 
                 let month_by_person = summary.by_person();
 
-                if !args.quiet && !args.sum_only {
+                if !args.quiet && !args.silent && !args.sum_only {
                     writeln!(out_writer, "| Duration | Event |")?;
                     writeln!(out_writer, "|----------|-------|")?;
                     for event in &summary.events {
