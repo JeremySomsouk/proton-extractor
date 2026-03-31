@@ -984,7 +984,7 @@ fn parse_week_filter(week_str: &str) -> Option<(i32, u32)> {
             let year: i32 = parts[0].parse().ok()?;
             let week_str = parts[1].trim_start_matches('W').trim_start_matches('w');
             let week: u32 = week_str.parse().ok()?;
-            if week >= 1 && week <= 53 {
+            if (1..=53).contains(&week) {
                 return Some((year, week));
             }
         }
@@ -993,7 +993,7 @@ fn parse_week_filter(week_str: &str) -> Option<(i32, u32)> {
     // Try "W10" format (current year as sentinel = 0, meaning "any year")
     if let Some(after_w) = cleaned.strip_prefix('W').or(cleaned.strip_prefix('w')) {
         if let Ok(week) = after_w.parse::<u32>() {
-            if week >= 1 && week <= 53 {
+            if (1..=53).contains(&week) {
                 return Some((0, week)); // 0 = match any year
             }
         }
@@ -1001,7 +1001,7 @@ fn parse_week_filter(week_str: &str) -> Option<(i32, u32)> {
     
     // Try bare number "10" (current year as sentinel = 0, meaning "any year")
     if let Ok(week) = cleaned.parse::<u32>() {
-        if week >= 1 && week <= 53 {
+        if (1..=53).contains(&week) {
             return Some((0, week)); // 0 = match any year
         }
     }
