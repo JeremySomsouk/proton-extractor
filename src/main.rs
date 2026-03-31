@@ -971,6 +971,17 @@ fn validate_ics_file(path: &Path) -> io::Result<()> {
     }
 }
 
+/// Add a hint to validation errors from validate_ics_file
+fn print_ics_validation_error(e: &io::Error, path: &Path) {
+    print_error(e.to_string());
+    let path_str = path.display().to_string();
+    if path.extension().is_none() {
+        print_hint(format!("Rename file with .ics extension: mv {} file.ics", path_str));
+    } else {
+        print_hint("Provide an .ics calendar file");
+    }
+}
+
 #[derive(Clone)]
 struct Event {
     summary: String,
@@ -2729,10 +2740,74 @@ fn main() -> io::Result<()> {
     let has_stdin = args.stdin;
     let has_files = !args.files.is_empty();
 
+    // Validate empty string filters early (these won't match anything)
+    if let Some(ref s) = args.person {
+        if s.trim().is_empty() {
+            print_error("Empty value provided for --person");
+            print_hint("Specify a person name: --person \"Alice\"");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+    if let Some(ref s) = args.project {
+        if s.trim().is_empty() {
+            print_error("Empty value provided for --project");
+            print_hint("Specify a project name: --project \"Backend\"");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+    if let Some(ref s) = args.tag {
+        if s.trim().is_empty() {
+            print_error("Empty value provided for --tag");
+            print_hint("Specify a tag to filter: --tag \"urgent\"");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+
+    // Validate empty string filters early (these won't match anything)
+    if let Some(ref s) = args.person {
+        if s.trim().is_empty() {
+            print_error("Empty value provided for --person");
+            print_hint("Specify a person name: --person \"Alice\"");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+    if let Some(ref s) = args.project {
+        if s.trim().is_empty() {
+            print_error("Empty value provided for --project");
+            print_hint("Specify a project name: --project \"Backend\"");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+    if let Some(ref s) = args.tag {
+        if s.trim().is_empty() {
+            print_error("Empty value provided for --tag");
+            print_hint("Specify a tag to filter: --tag \"urgent\"");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+
     // --validate is a pre-flight check that doesn't require files
     if args.validate {
         let mut has_errors = false;
         let mut validated_count = 0;
+
+        // Validate empty strings
+        validated_count += 3;
+        if args.person.as_ref().map_or(false, |s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("Empty value provided for --person");
+            print_hint("Specify a person name: --person \"Alice\"");
+        }
+        if args.project.as_ref().map_or(false, |s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("Empty value provided for --project");
+            print_hint("Specify a project name: --project \"Backend\"");
+        }
+        if args.tag.as_ref().map_or(false, |s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("Empty value provided for --tag");
+            print_hint("Specify a tag to filter: --tag \"urgent\"");
+        }
 
         // Validate date range
         validated_count += 1;
@@ -3005,6 +3080,47 @@ fn main() -> io::Result<()> {
         }
     }
 
+    // Validate empty string filters - these won't match anything and are likely mistakes
+    if let Some(ref s) = args.person {
+        if s.trim().is_empty() {
+            print_error("Empty value provided for --person");
+            print_hint("Specify a person name: --person \"Alice\"");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+    if let Some(ref s) = args.project {
+        if s.trim().is_empty() {
+            print_error("Empty value provided for --project");
+            print_hint("Specify a project name: --project \"Backend\"");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+    if let Some(ref s) = args.tag {
+        if s.trim().is_empty() {
+            print_error("Empty value provided for --tag");
+            print_hint("Specify a tag to filter: --tag \"urgent\"");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+
+    // Validate --from/--to are not the same date (common mistake)
+    if let (Some(from), Some(to)) = (&args.from, &args.to) {
+        if from > to {
+            print_error(format!("--from ({}) must be before or equal to --to ({})", from, to));
+            print_hint("Swap the dates or use a valid date range");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+
+    // Validate --from/--to date range (before file check so we get proper exit code)
+    if let (Some(from), Some(to)) = (&args.from, &args.to) {
+        if from > to {
+            print_error(format!("--from ({}) must be before or equal to --to ({})", from, to));
+            print_hint("Swap the dates or use a valid date range");
+            std::process::exit(exit_codes::INVALID_ARGS);
+        }
+    }
+
     if !has_stdin && !has_files {
         print_error("No .ics files provided");
         eprintln!(
@@ -3015,19 +3131,19 @@ fn main() -> io::Result<()> {
         eprintln!(
             "  {} {}",
             colored(color::DIM, "→"),
-            colored(color::CYAN, "Or pipe ICS content: proton-extractor --stdin < calendar.ics")
-        );
-        eprintln!(
-            "  {} {}",
-            colored(color::DIM, "→"),
-            colored(color::CYAN, "Validate args (CI/CD): proton-extractor --validate [args]")
+            colored(color::CYAN, "Or pipe ICS content: cat calendar.ics | proton-extractor --stdin")
         );
         eprintln!(
             "  {} {}",
             colored(color::DIM, "→"),
             colored(color::CYAN, "Get help: proton-extractor --help")
         );
-        std::process::exit(1);
+        eprintln!(
+            "  {} {}",
+            colored(color::DIM, "→"),
+            colored(color::CYAN, "Validate args: proton-extractor --validate [args]")
+        );
+        std::process::exit(exit_codes::FILE_NOT_FOUND);
     }
 
     if has_files && has_stdin {
@@ -3075,9 +3191,8 @@ fn main() -> io::Result<()> {
         // Validate file extensions before processing
         for path in &args.files {
             if let Err(e) = validate_ics_file(path) {
-                print_error(format!("'{}': {}", path.display(), e));
-                print_hint("Expected: .ics file");
-                std::process::exit(1);
+                print_ics_validation_error(&e, path);
+                std::process::exit(exit_codes::INVALID_ARGS);
             }
         }
 
@@ -3279,7 +3394,7 @@ fn main() -> io::Result<()> {
                 min_str, max_str
             ));
             print_hint("Ensure --min-duration ≤ --max-duration");
-            std::process::exit(1);
+            std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
 
