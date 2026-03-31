@@ -248,6 +248,10 @@ struct Args {
     #[arg(long)]
     group_by_project: bool,
 
+    /// Group output by day of week instead of by month
+    #[arg(long)]
+    group_by_weekday: bool,
+
     /// Filter by ISO week number (1-53), optionally with year (e.g., "10" or "2024-W10")
     #[arg(long, alias = "iso-week")]
     week_number: Option<String>,
@@ -923,6 +927,18 @@ fn group_by_project<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>
         by_project.entry(project).or_default().push(*event);
     }
     by_project
+}
+
+/// Groups events by day of week, sorted from Monday to Sunday
+fn group_by_weekday<'a>(events: &'a [&Event]) -> BTreeMap<String, Vec<&'a Event>> {
+    let weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    let mut by_weekday: BTreeMap<String, Vec<&'a Event>> = BTreeMap::new();
+    for event in events {
+        let wd = event.start.weekday().num_days_from_monday() as usize;
+        let day_name = weekday_names.get(wd).unwrap_or(&"Unknown").to_string();
+        by_weekday.entry(day_name).or_default().push(*event);
+    }
+    by_weekday
 }
 
 fn matches_filter(event: &Event, filter: &DateFilter, now: &NaiveDateTime, yesterday: &NaiveDateTime, tomorrow: &NaiveDateTime) -> bool {
@@ -2360,6 +2376,28 @@ fn main() -> io::Result<()> {
                         }
                     }
                     writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(project_total)), colored(color::BOLD, "TOTAL"))?;
+                }
+                
+                if grand_total_minutes > 0 {
+                    writeln!(out_writer)?;
+                    writeln!(out_writer, "{}", colored(color::GREEN, format!("=== Grand Total: {} ===", format_hours(grand_total_minutes))))?;
+                }
+            } else if args.group_by_weekday {
+                // Group by weekday instead of month if --group-by-weekday is set
+                let by_weekday = group_by_weekday(&filtered);
+                for (day_name, events) in &by_weekday {
+                    let day_total: i64 = events.iter().filter_map(|e| event_duration_minutes(e)).sum();
+                    writeln!(out_writer)?;
+                    writeln!(out_writer, "{}", colored(color::CYAN, format!("--- {} ---", day_name)))?;
+                    
+                    if !args.quiet && !args.sum_only {
+                        for event in events {
+                            if let Some(mins) = event_duration_minutes(event) {
+                                writeln!(out_writer, "  {}  {}", colored(color::YELLOW, format_hours(mins)), event.summary)?;
+                            }
+                        }
+                    }
+                    writeln!(out_writer, "  {}  {}", colored(color::GREEN, format_hours(day_total)), colored(color::BOLD, "TOTAL"))?;
                 }
                 
                 if grand_total_minutes > 0 {
