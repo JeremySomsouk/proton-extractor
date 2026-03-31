@@ -107,6 +107,34 @@ fn print_success(msg: &str) {
     println!("{} {}", colored(color::GREEN, "✓"), msg);
 }
 
+/// Animated progress indicator for long-running operations
+struct Spinner {
+    message: String,
+    chars: Vec<char>,
+    current: usize,
+}
+
+impl Spinner {
+    fn new(message: &str) -> Self {
+        Spinner {
+            message: message.to_string(),
+            chars: vec!['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
+            current: 0,
+        }
+    }
+
+    fn tick(&mut self) {
+        eprint!("\r{}{}", self.chars[self.current], self.message);
+        self.current = (self.current + 1) % self.chars.len();
+    }
+
+    fn finish(&self) {
+        eprint!("\r");
+        eprint!("{}", " ".repeat(80));
+        eprint!("\r");
+    }
+}
+
 
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -2609,11 +2637,18 @@ fn main() -> io::Result<()> {
             }
         }
 
+        let mut spinner = if args.files.len() > 1 && !args.quiet {
+            Some(Spinner::new("Processing files..."))
+        } else {
+            None
+        };
+
         for (i, path) in args.files.iter().enumerate() {
             debug!("Reading: {}", path.display());
             
             // Show progress for multiple files
-            if args.files.len() > 1 && !args.quiet {
+            if let Some(ref mut s) = spinner {
+                s.tick();
                 eprint!(
                     "\r{} [{}/{}] {}",
                     colored(color::DIM, "→"),
@@ -2665,11 +2700,11 @@ fn main() -> io::Result<()> {
                     }
                 }
             }
-            
-            // Clear progress line after processing each file
-            if args.files.len() > 1 && !args.quiet {
-                eprintln!("\r{}", " ".repeat(80));
-            }
+        }
+        
+        // Clear the spinner after all files are processed
+        if let Some(ref s) = spinner {
+            s.finish();
         }
     }
 
