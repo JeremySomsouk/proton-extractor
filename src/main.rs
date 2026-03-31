@@ -258,6 +258,10 @@ struct Args {
     #[arg(long)]
     force: bool,
 
+    /// Auto-confirm all prompts (skip interactive confirmation)
+    #[arg(long)]
+    yes: bool,
+
     /// Output file path (default: stdout)
     #[arg(short = 'o', long)]
     output: Option<PathBuf>,
@@ -2486,8 +2490,8 @@ fn main() -> io::Result<()> {
     // Setup output: file or stdout
     let out_writer: Box<dyn Write> = match &output_path {
         Some(path) => {
-            // Check if file exists and prompt for confirmation unless --force is set
-            if path.exists() && !args.force {
+            // Check if file exists and prompt for confirmation unless --force or --yes is set
+            if path.exists() && !args.force && !args.yes {
                 eprintln!(
                     "{} File '{}' already exists.",
                     colored(color::YELLOW, "warning:"),
@@ -2640,13 +2644,16 @@ fn main() -> io::Result<()> {
 
     if filtered.is_empty() {
         print_info("No events found");
-        eprintln!("  {} Use {} or {} to adjust filters", 
+        eprintln!();
+        eprintln!("  {} Try adjusting your filters:", colored(color::CYAN, "→"));
+        eprintln!("    {} {:<20} Show all events", colored(color::DIM, "•"), colored(color::CYAN, "-d all"));
+        eprintln!("    {} {:<20} Current month only", colored(color::DIM, "•"), colored(color::CYAN, "-d current"));
+        eprintln!("    {} {:<20} Show events from date range", colored(color::DIM, "•"), colored(color::CYAN, "--from 2024-01-01 --to 2024-03-31"));
+        eprintln!("    {} {:<20} Include recurring events", colored(color::DIM, "•"), colored(color::CYAN, "--include-recurring"));
+        eprintln!();
+        eprintln!("  {} Run {} for all filter options", 
             colored(color::DIM, "→"),
-            colored(color::CYAN, "--date"),
-            colored(color::DIM, "filter period"));
-        eprintln!("  {} Run {} for available filter options", 
-            colored(color::DIM, "→"),
-            colored(color::CYAN, "proton-extractor --help"));
+            colored(color::CYAN, "proton-extractor --help | grep -E '^[[:space:]]+'"));
         return Ok(());
     }
 
