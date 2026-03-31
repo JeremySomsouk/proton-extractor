@@ -307,17 +307,33 @@ impl std::fmt::Display for EventStatus {
     name = "proton-extractor",
     about = "🦀 Extract and sum calendar event hours from ICS files",
     version,
-    after_help = "QUICK START:
-  proton-extractor calendar.ics                    # Basic usage
-  proton-extractor calendar.ics --person \"Alice\"     # By person
-  proton-extractor calendar.ics -f json -o out.json  # Export to JSON
-  proton-extractor calendar.ics --stats             # Show statistics
-  cat calendar.ics | proton-extractor --stdin       # Pipe input
+    before_help = "━━━ Examples
+  Getting Started:
+    proton-extractor calendar.ics                        # Basic usage
+    cat calendar.ics | proton-extractor --stdin          # Pipe input
 
-Run with --examples to see common usage patterns.
-Run with --validate to check your arguments before processing.
-Use --no-color for clean output in logs or CI/CD pipelines."
-)]
+  Quick Filters:
+    -d current             # Current month (default)
+    -t                      # Today's events
+    --recent 7             # Last 7 days
+
+  By Person / Project:
+    --person \"Alice\"        # Filter by person
+    --project \"Backend\"     # Filter by project
+
+  Export & Output:
+    -f json -o out.json    # JSON export
+    -q                      # Quiet (totals only)
+    -s                      # Statistics
+
+  Automation:
+    --validate             # Validate args (CI/CD)
+    --yes                   # Auto-confirm prompts
+    --no-color              # Disable colors
+
+  See --examples for full help.",
+    after_help = "TIP: Run with --examples to see all usage patterns.
+TIP: Use --validate to check your arguments before processing.")]
 #[command(long_about = "Sum calendar event hours from ICS files
 
 proton-extractor parses .ics calendar files, extracts events with [person] tags and {project} tags,
@@ -783,7 +799,7 @@ fn validate_month(month: Option<u32>) -> io::Result<()> {
     Ok(())
 }
 
-fn validate_time_filter(time_str: &str, flag_name: &str) -> io::Result<()> {
+fn validate_time_filter(time_str: &str, _flag_name: &str) -> io::Result<()> {
     if let Some((hours, minutes)) = parse_time(time_str) {
         if hours > 23 || minutes > 59 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
@@ -836,7 +852,7 @@ fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
     Ok(())
 }
 
-fn validate_weekdays(weekdays: &Option<Vec<String>>, flag_name: &str) -> io::Result<()> {
+fn validate_weekdays(weekdays: &Option<Vec<String>>, _flag_name: &str) -> io::Result<()> {
     if let Some(ref days) = weekdays {
         let valid_abbrevs = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
@@ -3165,6 +3181,14 @@ fn main() -> io::Result<()> {
                 .collect()
         };
         let after = deduped.len();
+        if before > after {
+            print_notice(format!(
+                "Deduplication: {} → {} events (removed {})",
+                before,
+                after,
+                before - after
+            ));
+        }
         debug!(
             "Deduplication (by {}): {} events -> {} events (removed {})",
             if args.dedupe_by_summary {
