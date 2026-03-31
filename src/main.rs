@@ -83,6 +83,7 @@ enum OutputFormat {
     Ical,
     Html,
     Yaml,
+    Toml,
     Pivot,
 }
 
@@ -1486,6 +1487,15 @@ fn csv_escape(s: &str) -> String {
     }
 }
 
+/// Escapes a string for TOML output (handles quotes and special characters)
+fn toml_escape(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
+
 /// Escapes a string for HTML output
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -2316,6 +2326,46 @@ fn main() -> io::Result<()> {
             let yaml_output = serde_yaml::to_string(&json_output)
                 .unwrap_or_else(|_| "{}".to_string());
             writeln!(out_writer, "{}", yaml_output)?;
+        }
+        OutputFormat::Toml => {
+            // Build TOML-friendly structure with proper nested arrays of tables
+            let mut toml_output = String::new();
+            toml_output.push_str(&format!("grand_total_minutes = {}\n", grand_total_minutes));
+            toml_output.push_str(&format!("grand_total_formatted = \"{}\"\n\n", format_hours(grand_total_minutes)));
+
+            for ((year, month), summary) in &grouped {
+                let month_total = summary.total_minutes();
+                toml_output.push_str(&format!("[[months]]\n"));
+                toml_output.push_str(&format!("[months.meta]\n"));
+                toml_output.push_str(&format!("year = {}\n", year));
+                toml_output.push_str(&format!("month = {}\n", month));
+                toml_output.push_str(&format!("month_name = \"{}\"\n", summary.month_name));
+                toml_output.push_str(&format!("total_minutes = {}\n", month_total));
+                toml_output.push_str(&format!("total_formatted = \"{}\"\n", format_hours(month_total)));
+
+                // By person breakdown as nested array
+                for (person, mins) in summary.by_person() {
+                    toml_output.push_str("\n[[months.by_person]]\n");
+                    toml_output.push_str(&format!("person = \"{}\"\n", person));
+                    toml_output.push_str(&format!("minutes = {}\n", mins));
+                    toml_output.push_str(&format!("formatted = \"{}\"\n", format_hours(mins)));
+                }
+
+                // Events (only if not quiet/sum_only)
+                if !args.quiet && !args.sum_only {
+                    for event in &summary.events {
+                        if let Some(mins) = event_duration_minutes(event) {
+                            toml_output.push_str("\n[[months.events]]\n");
+                            toml_output.push_str(&format!("summary = \"{}\"\n", toml_escape(&event.summary)));
+                            toml_output.push_str(&format!("start = \"{}\"\n", event.start.format("%Y-%m-%d %H:%M")));
+                            toml_output.push_str(&format!("end = \"{}\"\n", event.end.format("%Y-%m-%d %H:%M")));
+                            toml_output.push_str(&format!("duration_minutes = {}\n", mins));
+                            toml_output.push_str(&format!("duration_formatted = \"{}\"\n", format_hours(mins)));
+                        }
+                    }
+                }
+            }
+            writeln!(out_writer, "{}", toml_output)?;
         }
         OutputFormat::Pivot => {
             // Pivot table: person vs weekday - hours matrix
