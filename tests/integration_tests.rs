@@ -680,6 +680,19 @@ fn test_cli_list_years() {
 }
 
 #[test]
+fn test_cli_list_uids() {
+    let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
+    let ics_path = fixtures::sample_ics();
+    
+    cmd.arg(ics_path)
+        .arg("--list-uids");
+    
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("test-event-1@test"));
+}
+
+#[test]
 fn test_cli_exclude_category() {
     let mut cmd = Command::cargo_bin("proton-extractor").unwrap();
     let ics_path = fixtures::sample_ics();

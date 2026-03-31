@@ -172,7 +172,7 @@ struct Args {
     sum_only: bool,
 
     /// Show only the grand total (single line output, useful for scripting)
-    #[arg(long, conflicts_with_all = ["quiet", "sum_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "stats", "top", "bottom", "group_by_person", "group_by_project", "group_by_weekday", "group_by_location", "group_by_category", "dry_run"])]
+    #[arg(long, conflicts_with_all = ["quiet", "sum_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "stats", "top", "bottom", "group_by_person", "group_by_project", "group_by_weekday", "group_by_location", "group_by_category", "dry_run"])]
     total_only: bool,
 
     /// Output file path (default: stdout)
@@ -347,6 +347,10 @@ struct Args {
     #[arg(long)]
     list_years: bool,
 
+    /// List all unique UIDs found in events (useful for debugging/analysis)
+    #[arg(long)]
+    list_uids: bool,
+
     /// Remove duplicate events (same summary, start, and end time)
     #[arg(long)]
     dedupe: bool,
@@ -408,6 +412,7 @@ struct Event {
     summary: String,
     start: NaiveDateTime,
     end: NaiveDateTime,
+    uid: Option<String>,
     location: Option<String>,
     categories: Vec<String>,
     is_recurring: bool,
@@ -417,15 +422,20 @@ struct Event {
 impl Event {
     #[allow(dead_code)]
     fn new(summary: String, start: NaiveDateTime, end: NaiveDateTime) -> Self {
-        Self { summary, start, end, location: None, categories: vec![], is_recurring: false, source_file: None }
+        Self { summary, start, end, uid: None, location: None, categories: vec![], is_recurring: false, source_file: None }
     }
 
     fn with_recurring(summary: String, start: NaiveDateTime, end: NaiveDateTime, location: Option<String>, categories: Vec<String>, is_recurring: bool) -> Self {
-        Self { summary, start, end, location, categories, is_recurring, source_file: None }
+        Self { summary, start, end, uid: None, location, categories, is_recurring, source_file: None }
     }
 
     fn with_source(mut self, source: String) -> Self {
         self.source_file = Some(source);
+        self
+    }
+
+    fn with_uid(mut self, uid: String) -> Self {
+        self.uid = Some(uid);
         self
     }
 }
@@ -643,7 +653,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
     result.extend(override_events.into_iter().filter_map(|e| {
         let duration = e.end - e.start;
         if duration.num_minutes() > 0 {
-            Some(Event::with_recurring(e.summary, e.start, e.end, e.location, e.categories, e.rrule.is_some()).with_source(e.source_file.unwrap_or_default()))
+            Some(Event::with_recurring(e.summary, e.start, e.end, e.location, e.categories, e.rrule.is_some()).with_source(e.source_file.unwrap_or_default()).with_uid(e.uid.clone()))
         } else {
             None
         }
@@ -652,12 +662,13 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
     // Expand base events
     for event in base_events {
         let exdate_set: HashSet<NaiveDate> = event.exdates.into_iter().collect();
+        let event_uid = event.uid.clone();
 
         match &event.rrule {
             None => {
                 let duration = event.end - event.start;
                 if duration.num_minutes() > 0 {
-                    result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), false).with_source(event.source_file.clone().unwrap_or_default()));
+                    result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), false).with_source(event.source_file.clone().unwrap_or_default()).with_uid(event_uid));
                 }
             }
             Some(rrule) => {
@@ -665,7 +676,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     // Can't parse RRULE, just add the single event
                     let duration = event.end - event.start;
                     if duration.num_minutes() > 0 {
-                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()));
+                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()).with_uid(event_uid.clone()));
                     }
                     continue;
                 };
@@ -683,7 +694,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                     "YEARLY" => Duration::days(0),  // Placeholder - handled separately
                     _ => {
                         // Unsupported frequency, add single event
-                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()));
+                        result.push(Event::with_recurring(event.summary, event.start, event.end, event.location, event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()).with_uid(event_uid.clone()));
                         continue;
                     }
                 };
@@ -717,7 +728,7 @@ fn expand_events(raw_events: Vec<RawEvent>) -> Vec<Event> {
                         && !exdate_set.contains(&date)
                         && !overrides.contains(&(event.uid.clone(), date))
                     {
-                        result.push(Event::with_recurring(event.summary.clone(), current, current + duration, event.location.clone(), event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()));
+                        result.push(Event::with_recurring(event.summary.clone(), current, current + duration, event.location.clone(), event.categories.clone(), true).with_source(event.source_file.clone().unwrap_or_default()).with_uid(event_uid.clone()));
                     }
 
                     // Increment to next occurrence
@@ -1386,6 +1397,7 @@ fn matches_duration_filter(
 #[derive(Serialize)]
 struct JsonEvent {
     summary: String,
+    uid: Option<String>,
     person: Option<String>,
     project: Option<String>,
     start: String,
@@ -1548,6 +1560,7 @@ fn build_json_output(grouped: &BTreeMap<(i32, u32), MonthSummary>, grand_total_m
                 }
                 events_json.push(JsonEvent {
                     summary: event.summary.clone(),
+                    uid: event.uid.clone(),
                     person,
                     project: extract_project(&event.summary).map(|s| s.to_string()),
                     start: event.start.format("%Y-%m-%d %H:%M").to_string(),
@@ -2041,6 +2054,22 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    // List all unique UIDs if --list-uids is requested
+    if args.list_uids {
+        let mut uids: BTreeSet<String> = BTreeSet::new();
+        for event in &filtered {
+            if let Some(ref uid) = event.uid {
+                if !uid.is_empty() {
+                    uids.insert(uid.clone());
+                }
+            }
+        }
+        for uid in uids {
+            writeln!(out_writer, "{}", uid)?;
+        }
+        return Ok(());
+    }
+
     // List all unique events if --list-events is requested
     if args.list_events {
         for event in &filtered {
@@ -2334,6 +2363,7 @@ fn main() -> io::Result<()> {
                     let project = extract_project(&event.summary).map(|s| s.to_string());
                     let json_event = serde_json::json!({
                         "summary": event.summary,
+                        "uid": event.uid,
                         "person": person,
                         "project": project,
                         "start": event.start.format("%Y-%m-%d %H:%M").to_string(),
