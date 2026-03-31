@@ -597,6 +597,10 @@ struct Args {
     #[arg(long)]
     examples: bool,
 
+    /// Show exit codes reference and exit (useful for scripting/CI)
+    #[arg(long)]
+    exit_codes: bool,
+
     /// Preview mode: show event count without processing output
     #[arg(short = 'n', long)]
     dry_run: bool,
@@ -845,13 +849,28 @@ fn validate_time_filter(time_str: &str, _flag_name: &str) -> io::Result<()> {
 fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
     if let Some(ref week) = week_str {
         if parse_week_filter(week).is_none() {
+            // Generate actionable hint based on common mistakes
             let hint = if week.chars().all(|c| c.is_ascii_digit()) && week.len() <= 2 {
-                format!("did you mean 'W{}'? (add 'W' prefix for ISO week)", week)
-            } else if week.starts_with("W") && week.len() <= 3 {
+                // Bare number like "5" or "42" - likely meant to be an ISO week
                 format!(
-                    "did you mean '{}'? (include year, e.g., 2024-{})",
-                    week, week
+                    "did you mean 'W{}'? Use W prefix for ISO week",
+                    week
                 )
+            } else if week.chars().all(|c| c.is_ascii_digit()) && week.len() > 2 {
+                // Long number like "123" - might be a date or wrong format
+                format!(
+                    "ISO week must be 1-53. Did you mean 'W{}'?",
+                    &week[..1.min(week.len())]
+                )
+            } else if week.starts_with("W") && week.len() <= 3 {
+                // "W5" style without year - suggest adding year
+                format!(
+                    "did you mean '2024-{}'? Include year for specific week",
+                    week.to_uppercase()
+                )
+            } else if week.contains("-W") || week.contains("W-") {
+                // Reversed format like "2024-W10-2024" or similar
+                "try format '2024-W10' (year-Wweek)".to_string()
             } else {
                 String::new()
             };
@@ -2588,6 +2607,72 @@ fn build_json_output(
     }
 }
 
+/// Print exit codes reference - shown with --exit-codes flag
+fn print_exit_codes() {
+    println!();
+    println!(
+        "{} {}",
+        colored(color::CYAN, "━━━"),
+        colored(color::BOLD, "Exit Codes")
+    );
+    println!();
+    println!(
+        "  {} {}  {}",
+        colored(color::GREEN, "0"),
+        colored(color::BOLD, "SUCCESS"),
+        colored(color::DIM, "# Operation completed successfully")
+    );
+    println!(
+        "  {} {}  {}",
+        colored(color::RED, "1"),
+        colored(color::BOLD, "FILE_ERROR"),
+        colored(color::DIM, "# Generic file errors (corrupt, unreadable)")
+    );
+    println!(
+        "  {} {}  {}",
+        colored(color::YELLOW, "2"),
+        colored(color::BOLD, "FILE_NOT_FOUND"),
+        colored(color::DIM, "# Input file does not exist")
+    );
+    println!(
+        "  {} {}  {}",
+        colored(color::RED, "3"),
+        colored(color::BOLD, "INVALID_ARGS"),
+        colored(color::DIM, "# Invalid CLI arguments or empty filter values")
+    );
+    println!(
+        "  {} {}  {}",
+        colored(color::RED, "4"),
+        colored(color::BOLD, "VALIDATION_FAILED"),
+        colored(color::DIM, "# --validate found errors")
+    );
+    println!(
+        "  {} {}  {}",
+        colored(color::YELLOW, "5"),
+        colored(color::BOLD, "NO_EVENTS"),
+        colored(color::DIM, "# No events found matching filters")
+    );
+    println!(
+        "  {} {}  {}",
+        colored(color::RED, "6"),
+        colored(color::BOLD, "PERMISSION_DENIED"),
+        colored(color::DIM, "# File permission issues")
+    );
+    println!(
+        "  {} {}  {}",
+        colored(color::RED, "7"),
+        colored(color::BOLD, "OUTPUT_ERROR"),
+        colored(color::DIM, "# Could not write output")
+    );
+    println!();
+    println!(
+        "  {} Use in scripts: {}",
+        colored(color::DIM, "→"),
+        colored(color::CYAN, "proton-extractor [args]; case $? in 0) echo ok ;; 2) echo missing ;; 3) echo invalid ;; esac")
+    );
+    println!();
+}
+
 /// Print usage examples - shown with --examples flag
 fn print_examples() {
     println!();
@@ -2672,6 +2757,12 @@ fn main() -> io::Result<()> {
     // Show usage examples and exit if requested
     if args.examples {
         print_examples();
+        return Ok(());
+    }
+
+    // Show exit codes reference if requested
+    if args.exit_codes {
+        print_exit_codes();
         return Ok(());
     }
 
