@@ -129,9 +129,8 @@ fn confirm(prompt: &str) -> bool {
     // In non-interactive mode, fail safely instead of hanging
     if !atty::is(atty::Stream::Stdin) {
         eprintln!(
-            "{} {} {}",
+            "{} Cannot prompt in non-interactive mode: {}",
             colored(color::YELLOW, "warning:"),
-            "Cannot prompt in non-interactive mode",
             colored(color::CYAN, "(use --yes or --force)")
         );
         return false;
@@ -3125,10 +3124,7 @@ fn main() -> io::Result<()> {
                 }
             }
             let file = File::create(path).map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Failed to create output file '{}': {}", path.display(), e),
-                )
+                io::Error::other(format!("Failed to create output file '{}': {}", path.display(), e))
             })?;
             Box::new(file)
         }
