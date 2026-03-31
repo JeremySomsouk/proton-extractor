@@ -101,7 +101,7 @@ fn print_hint<S: AsRef<str>>(msg: S) {
 /// Multiple hints at once - accepts slice of &str
 fn print_hints(hints: &[&str]) {
     for hint in hints {
-        eprintln!("    {} {}", colored(color::DIM, "→"), colored(color::CYAN, *hint));
+        eprintln!("  {} {}", colored(color::DIM, "→"), colored(color::CYAN, *hint));
     }
 }
 
