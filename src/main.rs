@@ -1349,6 +1349,7 @@ struct JsonEvent {
     duration_formatted: String,
     location: Option<String>,
     categories: Vec<String>,
+    source_file: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1501,6 +1502,7 @@ fn build_json_output(grouped: &BTreeMap<(i32, u32), MonthSummary>, grand_total_m
                     duration_formatted: format_hours(mins),
                     location: event.location.clone(),
                     categories: event.categories.clone(),
+                    source_file: event.source_file.clone(),
                 });
             }
         }
@@ -2244,6 +2246,7 @@ fn main() -> io::Result<()> {
                         "duration_formatted": format_hours(mins),
                         "location": event.location,
                         "categories": event.categories,
+                        "source_file": event.source_file,
                     });
                     writeln!(out_writer, "{}", json_event)?;
                 }
