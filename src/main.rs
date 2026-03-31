@@ -2740,7 +2740,7 @@ fn main() -> io::Result<()> {
         if let Err(e) = validate_date_range(&args.from, &args.to) {
             has_errors = true;
             print_error(e.to_string());
-            print_hints(&["--from must be before or equal to --to"][..]);
+            print_hint("--from must be before or equal to --to");
         }
 
         // Validate month
@@ -2748,7 +2748,7 @@ fn main() -> io::Result<()> {
         if let Err(e) = validate_month(args.month) {
             has_errors = true;
             print_error(e.to_string());
-            print_hints(&["Month must be 1-12 (e.g., --month 3 for March)"][..]);
+            print_hint("Month must be 1-12 (e.g., --month 3 for March)");
         }
 
         // Validate week number
@@ -2756,7 +2756,7 @@ fn main() -> io::Result<()> {
         if let Err(e) = validate_week_number(&args.week_number) {
             has_errors = true;
             print_error(e.to_string());
-            print_hints(&["Format: W10 (current year) or 2024-W10 (specific year)"][..]);
+            print_hint("Format: W10 (current year) or 2024-W10 (specific year)");
         }
 
         // Validate weekdays
@@ -2764,12 +2764,12 @@ fn main() -> io::Result<()> {
         if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
             has_errors = true;
             print_error(e.to_string());
-            print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
+            print_hint("Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')");
         }
         if let Err(e) = validate_weekdays(&args.exclude_weekdays, "exclude-weekdays") {
             has_errors = true;
             print_error(e.to_string());
-            print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
+            print_hint("Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')");
         }
 
         // Validate time filters
@@ -2778,24 +2778,28 @@ fn main() -> io::Result<()> {
             if let Err(e) = validate_time_filter(t, "start-after") {
                 has_errors = true;
                 print_error(e.to_string());
+                print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
             }
         }
         if let Some(ref t) = args.start_before {
             if let Err(e) = validate_time_filter(t, "start-before") {
                 has_errors = true;
                 print_error(e.to_string());
+                print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
             }
         }
         if let Some(ref t) = args.end_after {
             if let Err(e) = validate_time_filter(t, "end-after") {
                 has_errors = true;
                 print_error(e.to_string());
+                print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
             }
         }
         if let Some(ref t) = args.end_before {
             if let Err(e) = validate_time_filter(t, "end-before") {
                 has_errors = true;
                 print_error(e.to_string());
+                print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
             }
         }
 
@@ -2805,20 +2809,14 @@ fn main() -> io::Result<()> {
             if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
                 has_errors = true;
                 print_error(format!("invalid '{}' for --min-duration", s));
-                print_hints(&[
-                    "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                    "Examples: --min-duration 30m  --min-duration 1h30m",
-                ]);
+                print_hint("Valid: '30m', '1h', '2h30m' (e.g., --min-duration 1h)");
             }
         }
         if let Some(ref s) = args.max_duration {
             if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
                 has_errors = true;
                 print_error(format!("invalid '{}' for --max-duration", s));
-                print_hints(&[
-                    "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                    "Examples: --max-duration 4h  --max-duration 8h",
-                ]);
+                print_hint("Valid: '30m', '1h', '2h30m' (e.g., --max-duration 4h)");
             }
         }
 
@@ -2834,7 +2832,7 @@ fn main() -> io::Result<()> {
                         "--min-duration ({}) must be ≤ --max-duration ({})",
                         min_s, max_s
                     ));
-                    print_hints(&["Ensure --min-duration value is less than or equal to --max-duration"][..]);
+                    print_hint("Ensure --min-duration ≤ --max-duration");
                 }
             }
         }
@@ -2850,7 +2848,7 @@ fn main() -> io::Result<()> {
                         "--compact only applies to JSON/YAML formats, not '{}'",
                         args.format
                     ));
-                    print_hints(&["Remove --compact or use -f json/yaml"][..]);
+                    print_hint("Remove --compact or use -f json/yaml");
                 }
             }
         }
@@ -2928,27 +2926,27 @@ fn main() -> io::Result<()> {
     // This provides better error messages for invalid filter values
     if let Err(e) = validate_date_range(&args.from, &args.to) {
         print_error(e.to_string());
-        print_hints(&["--from must be before or equal to --to"][..]);
+        print_hint("--from must be before or equal to --to");
         std::process::exit(1);
     }
     if let Err(e) = validate_month(args.month) {
         print_error(e.to_string());
-        print_hints(&["Month must be 1-12 (e.g., --month 3 for March)"][..]);
+        print_hint("Month must be 1-12 (e.g., --month 3 for March)");
         std::process::exit(1);
     }
     if let Err(e) = validate_week_number(&args.week_number) {
         print_error(e.to_string());
-        print_hints(&["Format: W10 (current year) or 2024-W10 (specific year)"][..]);
+        print_hint("Format: W10 (current year) or 2024-W10 (specific year)");
         std::process::exit(1);
     }
     if let Err(e) = validate_weekdays(&args.weekdays, "weekdays") {
         print_error(e.to_string());
-        print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
+        print_hint("Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')");
         std::process::exit(1);
     }
     if let Err(e) = validate_weekdays(&args.exclude_weekdays, "exclude-weekdays") {
         print_error(e.to_string());
-        print_hints(&["Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')"][..]);
+        print_hint("Use MO,TU,WE,TH,FR,SA,SU (not full names like 'MONDAY')");
         std::process::exit(1);
     }
 
@@ -2956,28 +2954,28 @@ fn main() -> io::Result<()> {
     if let Some(ref t) = args.start_after {
         if let Err(e) = validate_time_filter(t, "start-after") {
             print_error(e.to_string());
-            print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
+            print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.start_before {
         if let Err(e) = validate_time_filter(t, "start-before") {
             print_error(e.to_string());
-            print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
+            print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.end_after {
         if let Err(e) = validate_time_filter(t, "end-after") {
             print_error(e.to_string());
-            print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
+            print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
             std::process::exit(1);
         }
     }
     if let Some(ref t) = args.end_before {
         if let Err(e) = validate_time_filter(t, "end-before") {
             print_error(e.to_string());
-            print_hints(&["Use HH:MM format (e.g., '09:00' or '17:30')"][..]);
+            print_hint("Use HH:MM format (e.g., '09:00' or '17:30')");
             std::process::exit(1);
         }
     }
@@ -2991,7 +2989,7 @@ fn main() -> io::Result<()> {
                     "--compact has no effect with {} format (only affects JSON/YAML)",
                     args.format
                 ));
-                print_hints(&["Remove --compact or use -f json/yaml"][..]);
+                print_hint("Remove --compact or use -f json/yaml");
             }
         }
     }
@@ -3000,38 +2998,46 @@ fn main() -> io::Result<()> {
     if let Some(ref s) = args.min_duration {
         if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
             print_error(format!("invalid '{}' for --min-duration", s));
-            print_hints(&[
-                "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                "Examples: --min-duration 30m  --min-duration 1h30m",
-            ]);
+            print_hint("Valid: '30m', '1h', '2h30m' (e.g., --min-duration 1h)");
             std::process::exit(1);
         }
     }
     if let Some(ref s) = args.max_duration {
         if parse_human_duration(s).is_none() && parse_duration(s).is_none() {
             print_error(format!("invalid '{}' for --max-duration", s));
-            print_hints(&[
-                "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                "Examples: --max-duration 4h  --max-duration 8h",
-            ]);
+            print_hint("Valid: '30m', '1h', '2h30m' (e.g., --max-duration 4h)");
             std::process::exit(1);
         }
     }
 
     if !has_stdin && !has_files {
         print_error("No .ics files provided");
-        print_hints(&[
-            "Provide file paths: proton-extractor calendar.ics",
-            "Or pipe ICS content: proton-extractor --stdin < calendar.ics",
-            "Validate args (CI/CD): proton-extractor --validate [args]",
-            "Get help: proton-extractor --help",
-        ]);
+        eprintln!(
+            "  {} {}",
+            colored(color::DIM, "→"),
+            colored(color::CYAN, "Provide file paths: proton-extractor calendar.ics")
+        );
+        eprintln!(
+            "  {} {}",
+            colored(color::DIM, "→"),
+            colored(color::CYAN, "Or pipe ICS content: proton-extractor --stdin < calendar.ics")
+        );
+        eprintln!(
+            "  {} {}",
+            colored(color::DIM, "→"),
+            colored(color::CYAN, "Validate args (CI/CD): proton-extractor --validate [args]")
+        );
+        eprintln!(
+            "  {} {}",
+            colored(color::DIM, "→"),
+            colored(color::CYAN, "Get help: proton-extractor --help")
+        );
         std::process::exit(1);
     }
 
     if has_files && has_stdin {
         print_error("Cannot use both --stdin and file arguments simultaneously");
-        print_hints(&["Use either --stdin OR file paths, not both"][..]);
+        print_hint("Use either --stdin OR file paths, not both");
         std::process::exit(1);
     }
 
@@ -3075,7 +3081,7 @@ fn main() -> io::Result<()> {
         for path in &args.files {
             if let Err(e) = validate_ics_file(path) {
                 print_error(format!("'{}': {}", path.display(), e));
-                print_hints(&["Expected: .ics file"][..]);
+                print_hint("Expected: .ics file");
                 std::process::exit(1);
             }
         }
@@ -3239,10 +3245,7 @@ fn main() -> io::Result<()> {
             Some(d) => Some(d),
             None => {
                 print_error(format!("invalid '{}' for --min-duration", s));
-                print_hints(&[
-                    "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                    "Examples: --min-duration 30m  --min-duration 1h30m",
-                ]);
+                print_hint("Valid: '30m', '1h', '2h30m' (e.g., --min-duration 1h)");
                 std::process::exit(1);
             }
         }
@@ -3255,10 +3258,7 @@ fn main() -> io::Result<()> {
             Some(d) => Some(d),
             None => {
                 print_error(format!("invalid '{}' for --max-duration", s));
-                print_hints(&[
-                    "Valid formats: '30m', '1h', '2h30m', '1d', '1w'",
-                    "Examples: --max-duration 4h  --max-duration 8h",
-                ]);
+                print_hint("Valid: '30m', '1h', '2h30m' (e.g., --max-duration 4h)");
                 std::process::exit(1);
             }
         }
@@ -3275,9 +3275,7 @@ fn main() -> io::Result<()> {
                 "--min-duration ({}) must be ≤ --max-duration ({})",
                 min_str, max_str
             ));
-            print_hints(
-                &["Ensure --min-duration value is less than or equal to --max-duration"][..],
-            );
+            print_hint("Ensure --min-duration ≤ --max-duration");
             std::process::exit(1);
         }
     }
