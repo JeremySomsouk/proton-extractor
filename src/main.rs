@@ -225,6 +225,10 @@ struct Args {
     #[arg(long)]
     group_by_person: bool,
 
+    /// Filter by ISO week number (1-53), optionally with year (e.g., "10" or "2024-W10")
+    #[arg(long, alias = "iso-week")]
+    week_number: Option<String>,
+
     /// Limit output to N events (useful for large datasets)
     #[arg(long)]
     limit: Option<usize>,
@@ -967,6 +971,60 @@ fn matches_month_filter(event: &Event, month: &Option<u32>) -> bool {
     }
 }
 
+/// Parse week filter string like "10" or "2024-W10" or "W10-2024"
+/// Returns (iso_year, iso_week) if valid, None otherwise
+/// iso_year = 0 means no year specified (use current year at match time)
+fn parse_week_filter(week_str: &str) -> Option<(i32, u32)> {
+    let cleaned = week_str.trim();
+    
+    // Try "2024-W10" format
+    if cleaned.contains('-') {
+        let parts: Vec<&str> = cleaned.split('-').collect();
+        if parts.len() == 2 {
+            let year: i32 = parts[0].parse().ok()?;
+            let week_str = parts[1].trim_start_matches('W').trim_start_matches('w');
+            let week: u32 = week_str.parse().ok()?;
+            if week >= 1 && week <= 53 {
+                return Some((year, week));
+            }
+        }
+    }
+    
+    // Try "W10" format (current year as sentinel = 0, meaning "any year")
+    if let Some(after_w) = cleaned.strip_prefix('W').or(cleaned.strip_prefix('w')) {
+        if let Ok(week) = after_w.parse::<u32>() {
+            if week >= 1 && week <= 53 {
+                return Some((0, week)); // 0 = match any year
+            }
+        }
+    }
+    
+    // Try bare number "10" (current year as sentinel = 0, meaning "any year")
+    if let Ok(week) = cleaned.parse::<u32>() {
+        if week >= 1 && week <= 53 {
+            return Some((0, week)); // 0 = match any year
+        }
+    }
+    
+    None
+}
+
+fn matches_week_number_filter(event: &Event, week_filter: &Option<String>) -> bool {
+    if let Some(week_str) = week_filter {
+        if let Some((filter_year, filter_week)) = parse_week_filter(week_str) {
+            let ev_iso = event.start.iso_week();
+            // If filter_year is 0, match any year; otherwise match specific year
+            let year_matches = filter_year == 0 || ev_iso.year() == filter_year;
+            ev_iso.week() == filter_week && year_matches
+        } else {
+            // Invalid filter string - don't match anything
+            false
+        }
+    } else {
+        true
+    }
+}
+
 // Map day abbreviation to weekday number (Monday = 1)
 fn weekday_abbrev_to_num(day: &str) -> Option<u32> {
     match day.to_uppercase().as_str() {
@@ -1483,6 +1541,7 @@ fn main() -> io::Result<()> {
         .filter(|e| matches_date_range(e, &args.from, &args.to))
         .filter(|e| matches_year_filter(e, &args.year))
         .filter(|e| matches_month_filter(e, &args.month))
+        .filter(|e| matches_week_number_filter(e, &args.week_number))
         .filter(|e| matches_weekday_filter(e, &weekdays_filter))
         .filter(|e| matches_exclude_weekday_filter(e, &exclude_weekdays_filter))
         .filter(|e| matches_category_filter(e, &args.category))
@@ -2868,6 +2927,66 @@ mod tests {
         assert!(matches_month_filter(&event, &Some(3)));
         assert!(!matches_month_filter(&event, &Some(1)));
         assert!(!matches_month_filter(&event, &Some(12)));
+    }
+
+    #[test]
+    fn test_parse_week_filter() {
+        // Test "W10" format (current year)
+        let result = parse_week_filter("W10");
+        assert!(result.is_some());
+        let (_, week) = result.unwrap();
+        assert_eq!(week, 10);
+
+        // Test "w10" lowercase
+        let result = parse_week_filter("w10");
+        assert!(result.is_some());
+        let (_, week) = result.unwrap();
+        assert_eq!(week, 10);
+
+        // Test bare number
+        let result = parse_week_filter("25");
+        assert!(result.is_some());
+        let (_, week) = result.unwrap();
+        assert_eq!(week, 25);
+
+        // Test "2024-W10" format
+        let result = parse_week_filter("2024-W10");
+        assert!(result.is_some());
+        let (year, week) = result.unwrap();
+        assert_eq!(year, 2024);
+        assert_eq!(week, 10);
+
+        // Test invalid
+        assert!(parse_week_filter("invalid").is_none());
+        assert!(parse_week_filter("").is_none());
+        assert!(parse_week_filter("W0").is_none()); // Week 0 doesn't exist
+        assert!(parse_week_filter("W54").is_none()); // Week 54 doesn't exist
+    }
+
+    #[test]
+    fn test_matches_week_number_filter() {
+        let event = Event::new(
+            "Test [Event]".to_string(),
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(9, 0, 0).unwrap(), // ISO week 11
+            NaiveDate::from_ymd_opt(2024, 3, 15).unwrap().and_hms_opt(10, 0, 0).unwrap(),
+        );
+
+        // No filter = all match
+        assert!(matches_week_number_filter(&event, &None));
+
+        // Wrong week
+        assert!(!matches_week_number_filter(&event, &Some("W10".to_string())));
+        assert!(!matches_week_number_filter(&event, &Some("W12".to_string())));
+
+        // Correct week
+        assert!(matches_week_number_filter(&event, &Some("W11".to_string())));
+
+        // With year
+        assert!(matches_week_number_filter(&event, &Some("2024-W11".to_string())));
+        assert!(!matches_week_number_filter(&event, &Some("2023-W11".to_string())));
+
+        // Invalid filter string
+        assert!(!matches_week_number_filter(&event, &Some("invalid".to_string())));
     }
 
     #[test]
