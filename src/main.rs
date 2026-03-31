@@ -2732,6 +2732,7 @@ fn print_examples() {
     println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Automation"));
     println!("    --yes, --force           # Auto-confirm prompts");
     println!("    --validate               # Validate args (CI/CD)");
+    println!("    --exit-codes             # List exit codes");
     println!("    --no-color               # Disable colors");
     println!();
 
@@ -3036,6 +3037,11 @@ fn main() -> io::Result<()> {
         if has_errors {
             eprintln!();
             print_error("Validation failed");
+            eprintln!(
+                "  {} {} validation error(s) found",
+                colored(color::DIM, "→"),
+                colored(color::YELLOW, validated_count.to_string())
+            );
             std::process::exit(exit_codes::VALIDATION_FAILED);
         }
 
@@ -3310,8 +3316,15 @@ fn main() -> io::Result<()> {
 
         let is_large_batch = args.files.len() > 1 || args.dry_run;
         let show_progress = !args.no_progress && !args.quiet && !args.silent;
+        let spinner_message = if args.files.len() > 1 {
+            format!("Processing {} files...", args.files.len())
+        } else if args.files.len() == 1 {
+            format!("Reading '{}'...", args.files[0].file_name().map(|n| n.to_string_lossy()).unwrap_or_default())
+        } else {
+            "Processing...".to_string()
+        };
         let mut spinner = if is_large_batch && show_progress {
-            Some(Spinner::new("Processing files..."))
+            Some(Spinner::new(&spinner_message))
         } else {
             None
         };
