@@ -188,10 +188,11 @@ fn confirm(prompt: &str) -> bool {
     }
 
     eprint!(
-        "\n  {} {}\n  {} [Y/n] ",
+        "\n  {} {}\n  {} [{}/n] ",
         colored(color::YELLOW, "?"),
         prompt,
-        colored(color::DIM, "Enter")
+        colored(color::DIM, "Enter"),
+        colored(color::GREEN, "Y")
     );
     io::stderr().flush().ok();
     let mut response = String::new();
@@ -3538,7 +3539,7 @@ fn main() -> io::Result<()> {
                                 "Output directory '{}' is not empty (use --yes or --force to overwrite)",
                                 output_dir.display()
                             ));
-                            std::process::exit(1);
+                            std::process::exit(exit_codes::OUTPUT_ERROR);
                         }
                         eprintln!();
                         eprintln!(
@@ -3558,7 +3559,7 @@ fn main() -> io::Result<()> {
                                 colored(color::CYAN, "--yes"),
                                 colored(color::CYAN, "--force")
                             );
-                            std::process::exit(1);
+                            std::process::exit(exit_codes::OUTPUT_ERROR);
                         }
                     }
                 }
@@ -3610,7 +3611,7 @@ fn main() -> io::Result<()> {
                         "Output file '{}' already exists (use --yes or --force to overwrite)",
                         path.display()
                     ));
-                    std::process::exit(1);
+                    std::process::exit(exit_codes::OUTPUT_ERROR);
                 }
                 eprintln!();
                 eprintln!(
@@ -3627,7 +3628,7 @@ fn main() -> io::Result<()> {
                         colored(color::CYAN, "--yes"),
                         colored(color::CYAN, "--force")
                     );
-                    std::process::exit(1);
+                    std::process::exit(exit_codes::OUTPUT_ERROR);
                 }
             }
             let file = File::create(path).map_err(|e| {
