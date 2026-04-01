@@ -169,6 +169,13 @@ pub fn print_notice<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::YELLOW, "○"), msg.as_ref());
 }
 
+/// Styled success message output - general purpose success feedback
+/// Use for operations that complete successfully without file output
+/// Made public for library consumers.
+pub fn print_success<S: AsRef<str>>(msg: S) {
+    eprintln!("{} {}", colored(color::GREEN, "✓"), msg.as_ref());
+}
+
 /// Styled info message for successful list operations
 /// Made public for library consumers.
 pub fn print_list_summary(count: usize, label: &str) {
@@ -3566,7 +3573,7 @@ fn main() -> io::Result<()> {
                             "{} {}",
                             colored(color::YELLOW, "warning:"),
                             colored(
-                                color::BOLD,
+                                color::YELLOW,
                                 format!("'{}' is not empty", output_dir.display())
                             )
                         );
@@ -3637,7 +3644,7 @@ fn main() -> io::Result<()> {
                 eprintln!(
                     "{} {}",
                     colored(color::YELLOW, "warning:"),
-                    colored(color::BOLD, format!("'{}' already exists", path.display()))
+                    colored(color::YELLOW, format!("'{}' already exists", path.display()))
                 );
                 if !confirm("overwrite existing file?") {
                     eprintln!();
@@ -3809,7 +3816,9 @@ fn main() -> io::Result<()> {
                     eprintln!("  {} {} {}", colored(color::DIM, "→"),
                         chrono::Month::try_from(u8::try_from(m).unwrap_or(1)).unwrap_or(chrono::Month::January).name(), y);
                 }
-                DateFilter::All => {}
+                DateFilter::All => {
+                    eprintln!("  {} Use {} to see available filter options", colored(color::DIM, "→"), colored(color::CYAN, "-d all"));
+                }
             }
 
             // Grouped quick fixes (only show relevant ones)
