@@ -3509,6 +3509,9 @@ fn main() -> io::Result<()> {
         println!("     --help               # Full help with all options");
         println!("     --list-formats       # Show available formats");
         println!();
+        println!("  {}  {}", colored(color::CYAN, "→"), colored(color::BOLD, "Tip:"));
+        println!("     proton-extractor --examples   # See all usage patterns");
+        println!();
         print_exit_code_hint();
         std::process::exit(exit_codes::FILE_NOT_FOUND);
     }
