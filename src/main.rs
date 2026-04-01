@@ -777,15 +777,15 @@ struct Args {
     max_duration: Option<String>,
 
     /// Disable colored output
-    #[arg(long)]
+    #[arg(short = 'C', long)]
     no_color: bool,
 
     /// Disable progress indicator for batch operations
-    #[arg(long)]
+    #[arg(short = 'N', long)]
     no_progress: bool,
 
     /// Suppress hint messages (useful for cleaner output in scripts/CI)
-    #[arg(long)]
+    #[arg(short = 'H', long)]
     no_hints: bool,
 
     /// Read from stdin instead of files (useful for piping ICS content)
