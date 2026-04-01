@@ -4097,10 +4097,7 @@ fn main() -> io::Result<()> {
             }
             eprintln!("  {} --help for full options", colored(color::DIM, "→"));
         }
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("No events found matching filters (exit {})", exit_codes::NO_EVENTS),
-        ));
+        std::process::exit(exit_codes::NO_EVENTS);
     }
 
     let grouped: BTreeMap<(i32, u32), MonthSummary> = group_by_month(&filtered);
@@ -4146,10 +4143,7 @@ fn main() -> io::Result<()> {
             colored(color::DIM, "→"),
             colored(color::CYAN, "proton-extractor --help")
         );
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("No events found matching filters (exit {})", exit_codes::NO_EVENTS),
-        ));
+        std::process::exit(exit_codes::NO_EVENTS);
     }
 
     // Dry run mode: just show event count
