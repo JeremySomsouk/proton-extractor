@@ -80,6 +80,7 @@ mod color {
     pub const BOLD: Color = Color(1);
     pub const RED: Color = Color(31);
     pub const DIM: Color = Color(2);
+    pub const WHITE: Color = Color(37);
 }
 
 fn colored<S: AsRef<str>>(c: color::Color, text: S) -> String {
@@ -94,6 +95,23 @@ pub fn print_error<S: AsRef<str>>(msg: S) {
         "{} {}",
         colored(color::RED, "error:"),
         colored(color::BOLD, msg.as_ref())
+    );
+}
+
+/// Print error with context line (shows which file/arg caused the error)
+/// Shows as: error: message
+///           └── context: value
+pub fn print_error_with_context<S: AsRef<str>, C: AsRef<str>>(msg: S, context_label: C, context_value: &str) {
+    eprintln!(
+        "{} {}",
+        colored(color::RED, "error:"),
+        colored(color::BOLD, msg.as_ref())
+    );
+    eprintln!(
+        "  {} {} {}",
+        colored(color::DIM, "└"),
+        colored(color::CYAN, context_label.as_ref()),
+        colored(color::WHITE, context_value)
     );
 }
 
@@ -180,6 +198,12 @@ pub fn print_notice<S: AsRef<str>>(msg: S) {
 /// Made public for library consumers.
 pub fn print_success<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::GREEN, "✓"), msg.as_ref());
+}
+
+/// Styled notice message for empty input (distinct from errors)
+/// Uses a neutral marker since it's not an error condition
+fn print_empty_notice<S: AsRef<str>>(msg: S) {
+    eprintln!("{} {}", colored(color::DIM, "○"), msg.as_ref());
 }
 
 /// Styled info message for successful list operations
@@ -425,35 +449,23 @@ impl std::fmt::Display for EventStatus {
     name = "proton-extractor",
     about = "🦀 Extract and sum calendar event hours from ICS files",
     version,
-    before_help = "━━━ Examples
-  Getting Started:
-    proton-extractor calendar.ics                    # Basic usage
-    cat calendar.ics | proton-extractor --stdin      # Pipe input
+    before_help = "\
+🦀 proton-extractor — Extract & sum calendar hours from ICS files
 
-  Quick Filters:
-    -d current                # Current month (default)
-    -t                        # Today's events
-    --recent 7                # Last 7 days
+USAGE:
+    proton-extractor [FLAGS] [OPTIONS] <FILES>...
 
-  By Person / Project:
-    --person \"Alice\"          # Filter by person
-    --project \"Backend\"       # Filter by project
-
-  Export & Output:
-    -f json -o out.json       # JSON export
-    -f jsonl -o out.jsonl     # JSON Lines (stream)
-    -f pivot -o out.txt       # Pivot table
-    -q                        # Quiet (totals only)
-    -s                        # Statistics
-
-  Automation:
-    --validate                # Validate args (CI/CD)
-    -y, --yes, --force        # Auto-confirm prompts
-    --no-color                # Disable colors
-    --no-hints                # Suppress hints in scripts/CI
-
-  See --examples for full help.",
-    after_help = "TIP: Run with --examples to see all usage patterns.
+EXAMPLES:
+    proton-extractor calendar.ics                        # Basic usage
+    cat calendar.ics | proton-extractor --stdin          # Pipe input
+    -d current -t                                       # This month, today only
+    --person Alice --project Backend                    # Filter by person/project
+    -f json -o report.json                              # JSON export
+    -y -O ./output/                                     # Batch with auto-confirm
+    --validate                                          # Validate args (CI/CD)
+    --exit-codes                                        # List exit codes",
+    after_help = "\
+TIP: Run with --examples to see all usage patterns.
 TIP: Use --validate to check your arguments before processing.")]
 #[command(long_about = "Sum calendar event hours from ICS files
 
@@ -3398,9 +3410,9 @@ fn main() -> io::Result<()> {
         // Detect empty stdin early
         if !found_content && !args.quiet && !args.silent {
             if parse_warnings.is_empty() {
-                print_notice("stdin: no content received");
+                print_empty_notice("stdin: no content received");
             } else {
-                print_notice("stdin: no valid events found in calendar");
+                print_empty_notice("stdin: no valid events found in calendar");
             }
             print_hint("Pipe ICS data: cat calendar.ics | proton-extractor --stdin");
         }
