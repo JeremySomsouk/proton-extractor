@@ -98,6 +98,16 @@ pub fn print_error<S: AsRef<str>>(msg: S) {
     );
 }
 
+/// Print error with suggestion - formats suggestion on same line for cleaner output
+pub fn print_error_with_suggestion<S: AsRef<str>, H: AsRef<str>>(msg: S, hint: H) {
+    eprintln!(
+        "{} {} {}",
+        colored(color::RED, "error:"),
+        colored(color::BOLD, msg.as_ref()),
+        colored(color::DIM, format!("({})", hint.as_ref()))
+    );
+}
+
 /// Print error with context line (shows which file/arg caused the error)
 /// Shows as: error: message
 ///           └── context: value
@@ -1116,6 +1126,7 @@ fn validate_weekdays(weekdays: &Option<Vec<String>>, _flag_name: &str) -> io::Re
 }
 
 /// Calculate Levenshtein distance between two strings (simple implementation)
+#[allow(clippy::needless_range_loop)]
 fn levenshtein_distance(s1: &str, s2: &str) -> usize {
     let s1_chars: Vec<char> = s1.chars().collect();
     let s2_chars: Vec<char> = s2.chars().collect();
@@ -2795,6 +2806,7 @@ fn build_json_output(
 }
 
 /// Print exit codes reference - shown with --exit-codes flag
+#[allow(clippy::print_literal)]
 fn print_exit_codes() {
     println!();
     println!(
@@ -3171,17 +3183,17 @@ fn main() -> io::Result<()> {
 
         // Validate empty string filters
         validated_count += 3;
-        if args.person.as_ref().map_or(false, |s| s.trim().is_empty()) {
+        if args.person.as_ref().is_some_and(|s| s.trim().is_empty()) {
             has_errors = true;
             print_error("empty value: argument '--person' requires a value");
             print_hint("Example: --person \"Alice\"");
         }
-        if args.project.as_ref().map_or(false, |s| s.trim().is_empty()) {
+        if args.project.as_ref().is_some_and(|s| s.trim().is_empty()) {
             has_errors = true;
             print_error("empty value: argument '--project' requires a value");
             print_hint("Example: --project \"Backend\"");
         }
-        if args.tag.as_ref().map_or(false, |s| s.trim().is_empty()) {
+        if args.tag.as_ref().is_some_and(|s| s.trim().is_empty()) {
             has_errors = true;
             print_error("empty value: argument '--tag' requires a value");
             print_hint("Example: --tag \"urgent\"");
@@ -3189,12 +3201,12 @@ fn main() -> io::Result<()> {
 
         // Validate empty string filters for category and location
         validated_count += 2;
-        if args.category.as_ref().map_or(false, |s| s.trim().is_empty()) {
+        if args.category.as_ref().is_some_and(|s| s.trim().is_empty()) {
             has_errors = true;
             print_error("empty value for --category (whitespace-only)");
             print_hint("Example: --category \"Work\"");
         }
-        if args.location.as_ref().map_or(false, |s| s.trim().is_empty()) {
+        if args.location.as_ref().is_some_and(|s| s.trim().is_empty()) {
             has_errors = true;
             print_error("empty value for --location (whitespace-only)");
             print_hint("Example: --location \"Office\"");
@@ -3962,7 +3974,7 @@ fn main() -> io::Result<()> {
             eprintln!("  {} Quick fixes:", colored(color::CYAN, "→"));
             let mut hints: Vec<String> = Vec::new();
             if !matches!(args.date, DateFilter::All) || args.today || args.yesterday || args.weekly || args.last_week {
-                hints.push(format!("-d all  •  Show all events"));
+                hints.push("-d all  •  Show all events".to_string());
             }
             if args.person.is_some() || !args.persons.clone().unwrap_or_default().is_empty() {
                 hints.push("--person  •  Check filter".to_string());
@@ -4014,13 +4026,13 @@ fn main() -> io::Result<()> {
             eprintln!();
             eprintln!("  {} Suggestions:", colored(color::CYAN, "→"));
             let mut suggestions = Vec::new();
-            suggestions.push(format!("-d all  •  Show all events (remove date filter)"));
+            suggestions.push("-d all  •  Show all events (remove date filter)".to_string());
             if args.person.is_none() && args.project.is_none() && args.tag.is_none() {
-                suggestions.push(format!("-P  •  List available persons"));
+                suggestions.push("-P  •  List available persons".to_string());
             }
-            suggestions.push(format!("--recent 30  •  Last 30 days"));
+            suggestions.push("--recent 30  •  Last 30 days".to_string());
             if args.exclude_recurring {
-                suggestions.push(format!("--include-recurring  •  Include recurring events"));
+                suggestions.push("--include-recurring  •  Include recurring events".to_string());
             }
             for suggestion in suggestions {
                 eprintln!("    {} {}", colored(color::DIM, "•"), suggestion);
