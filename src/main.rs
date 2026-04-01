@@ -215,6 +215,7 @@ struct Spinner {
     chars: Vec<char>,
     current: usize,
     start_time: std::time::Instant,
+    shown: bool,
 }
 
 impl Spinner {
@@ -224,11 +225,20 @@ impl Spinner {
             chars: vec!['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
             current: 0,
             start_time: std::time::Instant::now(),
+            shown: false,
         }
     }
 
-    fn tick(&mut self) {
+    /// Returns true if spinner was just shown for the first time
+    fn tick(&mut self) -> bool {
         let elapsed = self.start_time.elapsed();
+        let millis = elapsed.as_millis() as u64;
+        
+        // Only show spinner after minimum delay (200ms) to avoid flash for fast operations
+        if millis < 200 {
+            return false;
+        }
+        
         let secs = elapsed.as_secs();
         let time_str = if secs >= 60 {
             format!("{}m {:02}s", secs / 60, secs % 60)
@@ -243,6 +253,12 @@ impl Spinner {
         );
         io::stderr().flush().ok();
         self.current = (self.current + 1) % self.chars.len();
+        
+        if !self.shown {
+            self.shown = true;
+            return true;
+        }
+        false
     }
 
     fn finish(&self) {
@@ -251,9 +267,11 @@ impl Spinner {
         io::stderr().flush().ok();
     }
 
-    /// Finish with a success message
+    /// Finish with a success message (only if spinner was shown)
     fn finish_with_success(&self, message: &str) {
-        self.finish();
+        if self.shown {
+            self.finish();
+        }
         let elapsed = self.start_time.elapsed();
         let secs = elapsed.as_secs();
         let time_str = if secs >= 60 {
@@ -268,7 +286,9 @@ impl Spinner {
 
     /// Finish with an error message (consistent with print_error style)
     fn finish_with_error(&self, message: &str) {
-        self.finish();
+        if self.shown {
+            self.finish();
+        }
         // Use same stream as print_error for consistency
         let _ = std::io::stderr().write_all(format!("{} {}\n", colored(color::RED, "error:"), message).as_bytes());
     }
@@ -3384,25 +3404,27 @@ fn main() -> io::Result<()> {
         for (i, path) in args.files.iter().enumerate() {
             debug!("Reading: {}", path.display());
 
-            // Show progress for multiple files or dry-run
+            // Show progress for multiple files or dry-run (only after delay)
             if let Some(ref mut s) = spinner {
-                s.tick();
-                if args.files.len() > 1 {
-                    eprint!(
-                        "\r{} [{}/{}] {}",
-                        colored(color::DIM, "→"),
-                        i + 1,
-                        args.files.len(),
-                        colored(color::CYAN, path.display().to_string())
-                    );
-                } else {
-                    eprint!(
-                        "\r{} {}",
-                        colored(color::DIM, "→"),
-                        colored(color::CYAN, path.display().to_string())
-                    );
+                let _first_show = s.tick();
+                if _first_show {
+                    if args.files.len() > 1 {
+                        eprint!(
+                            "{} [{}/{}] {}",
+                            colored(color::DIM, "→"),
+                            i + 1,
+                            args.files.len(),
+                            colored(color::CYAN, path.display().to_string())
+                        );
+                    } else {
+                        eprint!(
+                            "{} {}",
+                            colored(color::DIM, "→"),
+                            colored(color::CYAN, path.display().to_string())
+                        );
+                    }
+                    io::stderr().flush().ok();
                 }
-                io::stderr().flush().ok();
             }
 
             let file = match File::open(path) {
