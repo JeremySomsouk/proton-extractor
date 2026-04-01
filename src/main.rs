@@ -32,9 +32,18 @@ mod color {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     static NO_COLOR: AtomicBool = AtomicBool::new(false);
+    static NO_HINTS: AtomicBool = AtomicBool::new(false);
 
     pub fn set_no_color(val: bool) {
         NO_COLOR.store(val, Ordering::SeqCst);
+    }
+
+    pub fn set_no_hints(val: bool) {
+        NO_HINTS.store(val, Ordering::SeqCst);
+    }
+
+    pub fn is_hints_enabled() -> bool {
+        !NO_HINTS.load(Ordering::SeqCst)
     }
 
     pub fn is_color_enabled() -> bool {
@@ -107,26 +116,33 @@ fn print_saved(count: usize, path: &Path) {
 }
 
 /// Styled hint message output - helpful suggestions with user's specific values
-/// Use for actionable tips after errors
+/// Use for actionable tips after errors. Respects --no-hints flag.
 fn print_hint<S: AsRef<str>>(msg: S) {
-    eprintln!(
-        "  {} {}",
-        colored(color::DIM, "→"),
-        colored(color::CYAN, msg.as_ref())
-    );
+    if color::is_hints_enabled() {
+        eprintln!(
+            "  {} {}",
+            colored(color::DIM, "→"),
+            colored(color::CYAN, msg.as_ref())
+        );
+    }
 }
 
-/// Print hint about exit codes for errors
+/// Print hint about exit codes for errors. Respects --no-hints flag.
 fn print_exit_code_hint() {
-    eprintln!(
-        "  {} See {} for error code reference",
-        colored(color::DIM, "→"),
-        colored(color::CYAN, "--exit-codes")
-    );
+    if color::is_hints_enabled() {
+        eprintln!(
+            "  {} See {} for error code reference",
+            colored(color::DIM, "→"),
+            colored(color::CYAN, "--exit-codes")
+        );
+    }
 }
 
-/// Multiple hints at once - accepts slice of &str
+/// Multiple hints at once - accepts slice of &str. Respects --no-hints flag.
 fn print_hints(hints: &[&str]) {
+    if !color::is_hints_enabled() {
+        return;
+    }
     for hint in hints {
         eprintln!(
             "  {} {}",
@@ -366,6 +382,7 @@ impl std::fmt::Display for EventStatus {
     --validate             # Validate args (CI/CD)
     --yes                   # Auto-confirm prompts
     --no-color              # Disable colors
+    --no-hints              # Suppress hints in scripts/CI
 
   See --examples for full help.",
     after_help = "TIP: Run with --examples to see all usage patterns.
@@ -766,6 +783,10 @@ struct Args {
     /// Disable progress indicator for batch operations
     #[arg(long)]
     no_progress: bool,
+
+    /// Suppress hint messages (useful for cleaner output in scripts/CI)
+    #[arg(long)]
+    no_hints: bool,
 
     /// Read from stdin instead of files (useful for piping ICS content)
     #[arg(long)]
@@ -2753,6 +2774,7 @@ fn print_examples() {
     println!("    --validate               # Validate args (CI/CD)");
     println!("    --exit-codes             # List exit codes");
     println!("    --no-color               # Disable colors");
+    println!("    --no-hints               # Suppress hints in output");
     println!();
 
     println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Pipeline"));
@@ -2808,6 +2830,7 @@ fn main() -> io::Result<()> {
 
     // Apply --no-color flag before any output
     color::set_no_color(args.no_color);
+    color::set_no_hints(args.no_hints);
 
     debug!("proton-extractor v{} starting", VERSION);
     debug!("Processing {} file(s)", args.files.len());
