@@ -742,7 +742,7 @@ struct Args {
     generate_completion: Option<clap_complete::Shell>,
 
     /// Show usage examples and exit
-    #[arg(long)]
+    #[arg(short = 'e', long)]
     examples: bool,
 
     /// Show exit codes reference and exit (useful for scripting/CI)
@@ -2931,7 +2931,8 @@ fn print_examples() {
     println!();
 
     println!("  {} {}", colored(color::BOLD, "›"), colored(color::BOLD, "Automation"));
-    println!("    --yes, --force           # Auto-confirm prompts");
+    println!("    -y, --yes, --force        # Auto-confirm prompts");
+    println!("    -e, --examples           # Show usage examples");
     println!("    --validate               # Validate args (CI/CD)");
     println!("    --exit-codes             # List exit codes");
     println!("    --no-color               # Disable colors");
@@ -3420,12 +3421,16 @@ fn main() -> io::Result<()> {
         println!("  {}  {}", colored(color::CYAN, "→"), colored(color::BOLD, "Basic usage:"));
         println!("     proton-extractor calendar.ics");
         println!();
-        println!("  {}  {}", colored(color::CYAN, "→"), colored(color::BOLD, "Other options:"));
-        println!("     - Provide file paths: proton-extractor calendar.ics");
-        println!("     - Pipe ICS content: cat calendar.ics | proton-extractor --stdin");
-        println!("     - Get help: proton-extractor --help");
-        println!("     - Validate args: proton-extractor --validate");
-        println!("     - List formats: proton-extractor --list-formats");
+        println!("  {}  {}", colored(color::CYAN, "→"), colored(color::BOLD, "Common options:"));
+        println!("     --stdin              # Pipe ICS content (cat calendar.ics | proton-extractor --stdin)");
+        println!("     --person \"Alice\"      # Filter by person");
+        println!("     -d week              # This week's events");
+        println!("     -f json -o out.json  # Export to JSON");
+        println!();
+        println!("  {}  {}", colored(color::CYAN, "→"), colored(color::BOLD, "Help:"));
+        println!("     -e, --examples       # Show usage examples");
+        println!("     --help               # Full help with all options");
+        println!("     --list-formats       # Show available formats");
         println!();
         print_exit_code_hint();
         std::process::exit(exit_codes::FILE_NOT_FOUND);
@@ -3807,7 +3812,7 @@ fn main() -> io::Result<()> {
                         }
                     }).unwrap_or_default()))
                 );
-                if !confirm("overwrite?") {
+                if !confirm("overwrite existing file?") {
                     eprintln!();
                     eprintln!("{} {}", colored(color::RED, "✗"), colored(color::WHITE, "Aborted - no files written"));
                     eprintln!(
