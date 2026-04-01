@@ -102,10 +102,10 @@ pub fn print_warn<S: AsRef<str>>(msg: S) {
 /// Used for both export and stats output to a file
 fn print_saved(count: usize, path: &Path) {
     let event_label = if count == 1 { "event" } else { "events" };
-    println!(
+    eprintln!(
         "{} {} {} {}",
         colored(color::GREEN, "✓"),
-        colored(color::YELLOW, format!("{} {}", count, event_label)),
+        colored(color::BOLD, format!("{} {}", count, event_label)),
         colored(color::DIM, "→"),
         colored(color::CYAN, path.display().to_string())
     );
@@ -3620,7 +3620,7 @@ fn main() -> io::Result<()> {
                         );
                         if !confirm("overwrite existing files in directory?") {
                             eprintln!();
-                            eprintln!("{} Cancelled - no files written", colored(color::YELLOW, "○"));
+                            eprintln!("{} {}", colored(color::RED, "✗"), colored(color::YELLOW, "Aborted - no files written"));
                             eprintln!(
                                 "  {} Use {} or {} to auto-confirm",
                                 colored(color::DIM, "→"),
@@ -3689,7 +3689,7 @@ fn main() -> io::Result<()> {
                 );
                 if !confirm("overwrite existing file?") {
                     eprintln!();
-                    eprintln!("{} Cancelled - no files written", colored(color::YELLOW, "○"));
+                    eprintln!("{} {}", colored(color::RED, "✗"), colored(color::YELLOW, "Aborted - no files written"));
                     eprintln!(
                         "  {} Use {} or {} to auto-confirm",
                         colored(color::DIM, "→"),
