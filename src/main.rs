@@ -885,6 +885,11 @@ fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::
     Ok(())
 }
 
+/// Format hint for date arguments
+fn date_format_hint() -> &'static str {
+    "expected format: YYYY-MM-DD (e.g., 2024-01-15)"
+}
+
 fn validate_month(month: Option<u32>) -> io::Result<()> {
     if let Some(m) = month {
         if !(1..=12).contains(&m) {
@@ -3059,31 +3064,31 @@ fn main() -> io::Result<()> {
         validated_count += 3;
         if args.person.as_ref().map_or(false, |s| s.trim().is_empty()) {
             has_errors = true;
-            print_error("Empty value provided for --person");
-            print_hint("Specify a person name: --person \"Alice\"");
+            print_error("empty value for --person (whitespace-only)");
+            print_hint("Example: --person \"Alice\"");
         }
         if args.project.as_ref().map_or(false, |s| s.trim().is_empty()) {
             has_errors = true;
-            print_error("Empty value provided for --project");
-            print_hint("Specify a project name: --project \"Backend\"");
+            print_error("empty value for --project (whitespace-only)");
+            print_hint("Example: --project \"Backend\"");
         }
         if args.tag.as_ref().map_or(false, |s| s.trim().is_empty()) {
             has_errors = true;
-            print_error("Empty value provided for --tag");
-            print_hint("Specify a tag to filter: --tag \"urgent\"");
+            print_error("empty value for --tag (whitespace-only)");
+            print_hint("Example: --tag \"urgent\"");
         }
 
         // Validate empty string filters for category and location
         validated_count += 2;
         if args.category.as_ref().map_or(false, |s| s.trim().is_empty()) {
             has_errors = true;
-            print_error("Empty value provided for --category");
-            print_hint("Specify a category name: --category \"Work\"");
+            print_error("empty value for --category (whitespace-only)");
+            print_hint("Example: --category \"Work\"");
         }
         if args.location.as_ref().map_or(false, |s| s.trim().is_empty()) {
             has_errors = true;
-            print_error("Empty value provided for --location");
-            print_hint("Specify a location: --location \"Office\"");
+            print_error("empty value for --location (whitespace-only)");
+            print_hint("Example: --location \"Office\"");
         }
 
         if has_errors {
@@ -3214,40 +3219,40 @@ fn main() -> io::Result<()> {
     // Validate empty string filters - these won't match anything and are likely mistakes
     if let Some(ref s) = args.person {
         if s.trim().is_empty() {
-            print_error("Empty value provided for --person");
-            print_hint("Specify a person name: --person \"Alice\"");
+            print_error("empty value for --person (whitespace-only)");
+            print_hint("Example: --person \"Alice\"");
             print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
     if let Some(ref s) = args.project {
         if s.trim().is_empty() {
-            print_error("Empty value provided for --project");
-            print_hint("Specify a project name: --project \"Backend\"");
+            print_error("empty value for --project (whitespace-only)");
+            print_hint("Example: --project \"Backend\"");
             print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
     if let Some(ref s) = args.tag {
         if s.trim().is_empty() {
-            print_error("Empty value provided for --tag");
-            print_hint("Specify a tag to filter: --tag \"urgent\"");
+            print_error("empty value for --tag (whitespace-only)");
+            print_hint("Example: --tag \"urgent\"");
             print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
     if let Some(ref s) = args.category {
         if s.trim().is_empty() {
-            print_error("Empty value provided for --category");
-            print_hint("Specify a category name: --category \"Work\"");
+            print_error("empty value for --category (whitespace-only)");
+            print_hint("Example: --category \"Work\"");
             print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
     if let Some(ref s) = args.location {
         if s.trim().is_empty() {
-            print_error("Empty value provided for --location");
-            print_hint("Specify a location: --location \"Office\"");
+            print_error("empty value for --location (whitespace-only)");
+            print_hint("Example: --location \"Office\"");
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3256,7 +3261,8 @@ fn main() -> io::Result<()> {
     if let (Some(from), Some(to)) = (&args.from, &args.to) {
         if from > to {
             print_error(format!("--from ({}) must be before or equal to --to ({})", from, to));
-            print_hint("Swap the dates or use a valid date range");
+            print_hint("Swap the dates or use --from before --to");
+            print_hint(date_format_hint());
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3841,8 +3847,8 @@ fn main() -> io::Result<()> {
 
     let grouped: BTreeMap<(i32, u32), MonthSummary> = group_by_month(&filtered);
 
-    // No events found - show helpful context and suggestions
-    if grouped.is_empty() {
+    // No events found - show helpful context and suggestions (respects quiet/silent)
+    if grouped.is_empty() && !args.quiet && !args.silent {
         let total_raw = total_raw_events;
 
         if total_raw == 0 {
