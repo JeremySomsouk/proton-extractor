@@ -3073,17 +3073,17 @@ fn main() -> io::Result<()> {
         validated_count += 3;
         if args.person.as_ref().map_or(false, |s| s.trim().is_empty()) {
             has_errors = true;
-            print_error("empty value for --person (whitespace-only)");
+            print_error("empty value: argument '--person' requires a value");
             print_hint("Example: --person \"Alice\"");
         }
         if args.project.as_ref().map_or(false, |s| s.trim().is_empty()) {
             has_errors = true;
-            print_error("empty value for --project (whitespace-only)");
+            print_error("empty value: argument '--project' requires a value");
             print_hint("Example: --project \"Backend\"");
         }
         if args.tag.as_ref().map_or(false, |s| s.trim().is_empty()) {
             has_errors = true;
-            print_error("empty value for --tag (whitespace-only)");
+            print_error("empty value: argument '--tag' requires a value");
             print_hint("Example: --tag \"urgent\"");
         }
 
@@ -3228,7 +3228,7 @@ fn main() -> io::Result<()> {
     // Validate empty string filters - these won't match anything and are likely mistakes
     if let Some(ref s) = args.person {
         if s.trim().is_empty() {
-            print_error("empty value for --person (whitespace-only)");
+            print_error("empty value: argument '--person' requires a value");
             print_hint("Example: --person \"Alice\"");
             print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
@@ -3236,7 +3236,7 @@ fn main() -> io::Result<()> {
     }
     if let Some(ref s) = args.project {
         if s.trim().is_empty() {
-            print_error("empty value for --project (whitespace-only)");
+            print_error("empty value: argument '--project' requires a value");
             print_hint("Example: --project \"Backend\"");
             print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
@@ -3244,7 +3244,7 @@ fn main() -> io::Result<()> {
     }
     if let Some(ref s) = args.tag {
         if s.trim().is_empty() {
-            print_error("empty value for --tag (whitespace-only)");
+            print_error("empty value: argument '--tag' requires a value");
             print_hint("Example: --tag \"urgent\"");
             print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
@@ -3252,7 +3252,7 @@ fn main() -> io::Result<()> {
     }
     if let Some(ref s) = args.category {
         if s.trim().is_empty() {
-            print_error("empty value for --category (whitespace-only)");
+            print_error("empty value: argument '--category' requires a value");
             print_hint("Example: --category \"Work\"");
             print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
@@ -3260,8 +3260,9 @@ fn main() -> io::Result<()> {
     }
     if let Some(ref s) = args.location {
         if s.trim().is_empty() {
-            print_error("empty value for --location (whitespace-only)");
+            print_error("empty value: argument '--location' requires a value");
             print_hint("Example: --location \"Office\"");
+            print_exit_code_hint();
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
@@ -3321,11 +3322,11 @@ fn main() -> io::Result<()> {
         // Detect empty stdin early
         if !found_content && !args.quiet && !args.silent {
             if parse_warnings.is_empty() {
-                print_notice("stdin: no content (expected ICS calendar data)");
+                print_notice("stdin: no content received");
             } else {
                 print_notice("stdin: no valid events found in calendar");
             }
-            print_hint("Try: cat calendar.ics | proton-extractor --stdin");
+            print_hint("Pipe ICS data: cat calendar.ics | proton-extractor --stdin");
         }
     } else {
         // Validate file extensions before processing
@@ -3801,11 +3802,11 @@ fn main() -> io::Result<()> {
     if filtered.is_empty() {
         if !args.quiet && !args.silent {
             eprintln!();
-            print_notice("No events found");
+            print_notice("No events found matching your filters");
             eprintln!(
-                "  {} Exit code: {} (no events)",
+                "  {} Exit code: {}",
                 colored(color::DIM, "→"),
-                colored(color::YELLOW, exit_codes::NO_EVENTS.to_string())
+                colored(color::YELLOW, format!("{} (no events)", exit_codes::NO_EVENTS))
             );
 
             // Show date context
@@ -3875,34 +3876,26 @@ fn main() -> io::Result<()> {
         } else {
             // Events exist but were filtered out
             print_notice(format!(
-                "No events match your filters ({} events in {} files)",
+                "No events match your filters ({} events in {} file{})",
                 colored(color::YELLOW, total_raw.to_string()),
-                colored(color::YELLOW, args.files.len().to_string())
+                colored(color::YELLOW, args.files.len().to_string()),
+                if args.files.len() > 1 { "s" } else { "" }
             ));
             eprintln!();
             eprintln!("  {} Suggestions:", colored(color::CYAN, "→"));
-            eprintln!(
-                "    {} {:<28} Show all events",
-                colored(color::DIM, "•"),
-                colored(color::CYAN, "-d all")
-            );
+            let mut suggestions = Vec::new();
+            suggestions.push(format!("-d all  •  Show all events (remove date filter)"));
             if args.person.is_none() && args.project.is_none() && args.tag.is_none() {
-                eprintln!(
-                    "    {} {:<28} List available persons",
-                    colored(color::DIM, "•"),
-                    colored(color::CYAN, "-P")
-                );
+                suggestions.push(format!("-P  •  List available persons"));
             }
-            eprintln!(
-                "    {} {:<28} Last 30 days",
-                colored(color::DIM, "•"),
-                colored(color::CYAN, "--recent 30")
-            );
-            eprintln!(
-                "    {} {:<28} Include recurring",
-                colored(color::DIM, "•"),
-                colored(color::CYAN, "--include-recurring")
-            );
+            suggestions.push(format!("--recent 30  •  Last 30 days"));
+            if args.exclude_recurring {
+                suggestions.push(format!("--include-recurring  •  Include recurring events"));
+            }
+            for suggestion in suggestions {
+                eprintln!("    {} {}", colored(color::DIM, "•"), suggestion);
+            }
+            eprintln!("    {} {}", colored(color::DIM, "•"), colored(color::CYAN, "--validate  •  Debug your filters"));
         }
         eprintln!();
         eprintln!(
