@@ -1185,7 +1185,8 @@ fn parse_ical_datetime(value: &str) -> Option<NaiveDateTime> {
 
     NaiveDateTime::parse_from_str(clean, "%Y%m%dT%H%M%S")
         .or_else(|_| {
-            NaiveDate::parse_from_str(clean, "%Y%m%d").map(|d| d.and_hms_opt(0, 0, 0).unwrap())
+            NaiveDate::parse_from_str(clean, "%Y%m%d")
+                .map(|d| d.and_hms_opt(0, 0, 0).unwrap())
         })
         .ok()
 }
