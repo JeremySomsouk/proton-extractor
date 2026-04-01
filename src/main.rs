@@ -3022,9 +3022,6 @@ fn main() -> io::Result<()> {
         .compact()
         .init();
 
-    // Apply --no-color flag before any output
-    color::set_no_color(args.no_color);
-    color::set_no_hints(args.no_hints);
 
     debug!("proton-extractor v{} starting", VERSION);
     debug!("Processing {} file(s)", args.files.len());
