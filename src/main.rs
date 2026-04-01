@@ -3025,7 +3025,7 @@ fn main() -> io::Result<()> {
         validated_count += 1;
         if args.compact {
             match args.format {
-                OutputFormat::Json | OutputFormat::Yaml | OutputFormat::Jsonl => {}
+                OutputFormat::Json | OutputFormat::Yaml | OutputFormat::Jsonl => (),
                 _ => {
                     has_errors = true;
                     print_error(format!(
@@ -3035,6 +3035,14 @@ fn main() -> io::Result<()> {
                     print_hint("Remove --compact or use -f json/yaml");
                 }
             }
+        }
+
+        // Validate --recent
+        validated_count += 1;
+        if args.recent.is_some() && args.recent.unwrap() == 0 {
+            has_errors = true;
+            print_error("--recent: must be > 0 (e.g., --recent 7 for last 7 days)");
+            print_hint("Use --recent 1 for today only, or --recent 30 for last 30 days");
         }
 
         // Validate empty string filters
@@ -3070,72 +3078,18 @@ fn main() -> io::Result<()> {
 
         if has_errors {
             eprintln!();
-            print_error("Validation failed");
+            print_error("--validate found errors");
             eprintln!(
-                "  {} {} validation error(s) found",
+                "  {} {} constraint(s) checked",
                 colored(color::DIM, "→"),
-                colored(color::YELLOW, validated_count.to_string())
+                colored(color::CYAN, validated_count.to_string())
             );
             print_exit_code_hint();
             std::process::exit(exit_codes::VALIDATION_FAILED);
         }
 
         // Success output
-        print_success("All arguments validated successfully");
-        if args.verbose {
-            println!(
-                "  {} {} constraint(s) checked",
-                colored(color::DIM, "→"),
-                validated_count
-            );
-            println!();
-            println!("  {} Effective filters:", colored(color::CYAN, "→"));
-            if args.quiet {
-                println!("    {:<22} quiet mode", colored(color::DIM, "-q,"));
-            }
-            if args.silent {
-                println!("    {:<22} silent mode", colored(color::DIM, "--silent"));
-            }
-            if args.today {
-                println!("    {:<22} today", colored(color::DIM, "-t,"));
-            }
-            if args.yesterday {
-                println!("    {:<22} yesterday", colored(color::DIM, "--yesterday"));
-            }
-            if args.weekly {
-                println!("    {:<22} this week", colored(color::DIM, "-w,"));
-            }
-            if args.last_week {
-                println!("    {:<22} last week", colored(color::DIM, "-l,"));
-            }
-            if !matches!(args.date, DateFilter::All) {
-                println!(
-                    "    {:<22} date filter: {:?}",
-                    colored(color::DIM, "-d,"),
-                    args.date
-                );
-            }
-            if let Some(ref p) = args.person {
-                println!("    {:<22} person: {}", colored(color::DIM, "--person"), p);
-            }
-            if let Some(ref p) = args.project {
-                println!(
-                    "    {:<22} project: {}",
-                    colored(color::DIM, "--project"),
-                    p
-                );
-            }
-            if let Some(ref t) = args.tag {
-                println!("    {:<22} tag: {}", colored(color::DIM, "--tag"), t);
-            }
-            if let Some(ref f) = args.from {
-                println!("    {:<22} from: {}", colored(color::DIM, "--from"), f);
-            }
-            if let Some(ref t) = args.to {
-                println!("    {:<22} to: {}", colored(color::DIM, "--to"), t);
-            }
-        }
-
+        print_success(format!("{} argument(s) validated successfully", validated_count));
         return Ok(());
     }
 
