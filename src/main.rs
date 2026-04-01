@@ -127,10 +127,10 @@ pub fn print_warn<S: AsRef<str>>(msg: S) {
 pub fn print_saved(count: usize, path: &Path) {
     let event_label = if count == 1 { "event" } else { "events" };
     eprintln!(
-        "{} {} {} {}",
+        "{} {}{} {}",
         colored(color::GREEN, "✓"),
-        colored(color::BOLD, format!("{} {}", count, event_label)),
-        colored(color::DIM, "→"),
+        colored(color::BOLD, count.to_string()),
+        colored(color::DIM, format!(" {}", event_label)),
         colored(color::CYAN, path.display().to_string())
     );
 }
@@ -209,16 +209,13 @@ fn print_empty_notice<S: AsRef<str>>(msg: S) {
 /// Styled info message for successful list operations
 /// Made public for library consumers.
 pub fn print_list_summary(count: usize, label: &str) {
-    let item = if count == 1 {
-        label
-    } else {
-        &format!("{}s", label)
-    };
+    let item = if count == 1 { label } else { &format!("{}s", label) };
     println!(
-        "{} {} {} found",
+        "{} {} {}{}",
         colored(color::GREEN, "✓"),
         colored(color::BOLD, count.to_string()),
-        item
+        item,
+        colored(color::DIM, " found")
     );
 }
 
