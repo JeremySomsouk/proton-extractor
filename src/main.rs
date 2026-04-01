@@ -87,12 +87,14 @@ fn colored<S: AsRef<str>>(c: color::Color, text: S) -> String {
 
 /// Styled error message output - clear, actionable, and consistent
 /// Accepts format args for cleaner error construction
-fn print_error<S: AsRef<str>>(msg: S) {
+/// Made public for library consumers.
+pub fn print_error<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::RED, "error:"), msg.as_ref());
 }
 
 /// Styled warning message output - non-blocking feedback
-fn print_warn<S: AsRef<str>>(msg: S) {
+/// Made public for library consumers.
+pub fn print_warn<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::YELLOW, "warning:"), msg.as_ref());
 }
 
@@ -111,7 +113,8 @@ fn print_saved(count: usize, path: &Path) {
 
 /// Styled hint message output - helpful suggestions with user's specific values
 /// Use for actionable tips after errors. Respects --no-hints flag.
-fn print_hint<S: AsRef<str>>(msg: S) {
+/// Made public for library consumers.
+pub fn print_hint<S: AsRef<str>>(msg: S) {
     if color::is_hints_enabled() {
         eprintln!(
             "  {} {}",
@@ -122,7 +125,8 @@ fn print_hint<S: AsRef<str>>(msg: S) {
 }
 
 /// Print hint about exit codes for errors. Respects --no-hints flag.
-fn print_exit_code_hint() {
+/// Made public for library consumers.
+pub fn print_exit_code_hint() {
     if color::is_hints_enabled() {
         eprintln!(
             "  {} See {} for error code reference",
@@ -133,7 +137,8 @@ fn print_exit_code_hint() {
 }
 
 /// Multiple hints at once - accepts slice of &str. Respects --no-hints flag.
-fn print_hints(hints: &[&str]) {
+/// Made public for library consumers.
+pub fn print_hints(hints: &[&str]) {
     if !color::is_hints_enabled() {
         return;
     }
@@ -159,12 +164,14 @@ fn print_banner(message: &str) {
 
 /// Styled notice message output - neutral notices that aren't errors
 /// Used when there's nothing to report but it's not a failure
-fn print_notice<S: AsRef<str>>(msg: S) {
+/// Made public for library consumers.
+pub fn print_notice<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::YELLOW, "○"), msg.as_ref());
 }
 
 /// Styled info message for successful list operations
-fn print_list_summary(count: usize, label: &str) {
+/// Made public for library consumers.
+pub fn print_list_summary(count: usize, label: &str) {
     let item = if count == 1 {
         label
     } else {
@@ -3557,10 +3564,10 @@ fn main() -> io::Result<()> {
                                 format!("'{}' is not empty", output_dir.display())
                             )
                         );
-                        if !confirm("overwrite files?") {
+                        if !confirm("overwrite existing files in directory?") {
                             eprintln!();
-                            println!("{} Cancelled - no files written", colored(color::YELLOW, "○"));
-                            println!(
+                            eprintln!("{} Cancelled - no files written", colored(color::YELLOW, "○"));
+                            eprintln!(
                                 "  {} Use {} or {} to auto-confirm",
                                 colored(color::DIM, "→"),
                                 colored(color::CYAN, "--yes"),
@@ -3628,8 +3635,8 @@ fn main() -> io::Result<()> {
                 );
                 if !confirm("overwrite existing file?") {
                     eprintln!();
-                    println!("{} Cancelled - no files written", colored(color::YELLOW, "○"));
-                    println!(
+                    eprintln!("{} Cancelled - no files written", colored(color::YELLOW, "○"));
+                    eprintln!(
                         "  {} Use {} or {} to auto-confirm",
                         colored(color::DIM, "→"),
                         colored(color::CYAN, "--yes"),
