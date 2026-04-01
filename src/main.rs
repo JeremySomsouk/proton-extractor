@@ -113,6 +113,13 @@ pub fn print_error_with_context<S: AsRef<str>, C: AsRef<str>>(msg: S, context_la
         colored(color::CYAN, context_label.as_ref()),
         colored(color::WHITE, context_value)
     );
+    if color::is_hints_enabled() {
+        eprintln!(
+            "  {} See {} for error code reference",
+            colored(color::DIM, "→"),
+            colored(color::CYAN, "--exit-codes")
+        );
+    }
 }
 
 /// Styled warning message output - non-blocking feedback
@@ -202,7 +209,8 @@ pub fn print_success<S: AsRef<str>>(msg: S) {
 
 /// Styled notice message for empty input (distinct from errors)
 /// Uses a neutral marker since it's not an error condition
-fn print_empty_notice<S: AsRef<str>>(msg: S) {
+/// Made public for library consumers.
+pub fn print_empty_notice<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::DIM, "○"), msg.as_ref());
 }
 
