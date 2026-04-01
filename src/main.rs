@@ -203,8 +203,8 @@ fn confirm(prompt: &str) -> bool {
 
     eprint!(
         "\n  {} {}\n  {} [{}/n] ",
-        colored(color::YELLOW, "?"),
-        prompt,
+        colored(color::YELLOW, "!"),
+        colored(color::BOLD, prompt),
         colored(color::DIM, "Enter"),
         colored(color::GREEN, "Y")
     );
@@ -3113,10 +3113,10 @@ fn main() -> io::Result<()> {
         // Success output - use eprintln for stderr consistency
         eprintln!();
         eprintln!(
-            "{} {} {}",
+            "  {} {}  {}",
             colored(color::GREEN, "✓"),
             colored(color::BOLD, "Arguments validated successfully"),
-            colored(color::DIM, format!("({} checks)", validated_count))
+            colored(color::DIM, format!("({} constraints checked)", validated_count))
         );
         eprintln!();
         return Ok(());
