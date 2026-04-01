@@ -101,7 +101,7 @@ fn print_warn<S: AsRef<str>>(msg: S) {
 fn print_saved(count: usize, path: &Path) {
     let event_label = if count == 1 { "event" } else { "events" };
     println!(
-        "{} {} {} → {}",
+        "{} {} {} {}",
         colored(color::GREEN, "✓"),
         colored(color::YELLOW, format!("{} {}", count, event_label)),
         colored(color::DIM, "→"),
