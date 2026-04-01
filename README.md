@@ -69,7 +69,7 @@ proton-extractor ~/Downloads/*.ics -d previous
 proton-extractor client-calendar.ics
 
 # Babysitter: Log hours for parents
-proton-extractor babysitter-calendar.ics -m previous
+proton-extractor babysitter-calendar.ics -d previous
 
 # Families: Split childcare between parents
 proton-extractor ~/Downloads/*-calendar.ics
