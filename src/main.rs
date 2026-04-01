@@ -637,7 +637,7 @@ struct Args {
     #[arg(long, conflicts_with_all = ["quiet", "sum_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "stats", "top", "bottom", "group_by_person", "group_by_project", "group_by_weekday", "group_by_location", "group_by_category", "dry_run", "silent", "list_formats"])]
     total_only: bool,
 
-    /// Auto-confirm file overwrite and directory prompts (CI/CD friendly)
+    /// Auto-confirm all destructive actions (file overwrites, non-empty directories)
     #[arg(short = 'y', long = "yes", visible_aliases = ["force", "confirm"])]
     yes: bool,
 
@@ -3286,10 +3286,36 @@ fn main() -> io::Result<()> {
                     args.format
                 ));
                 print_hint("Remove --compact or use -f json/yaml");
+                print_hint("Use --list-formats to see all available formats");
                 print_exit_code_hint();
                 std::process::exit(exit_codes::INVALID_ARGS);
             }
         }
+    }
+
+    // List formats early (doesn't require files)
+    if args.list_formats {
+        eprintln!();
+        print_banner("Available Output Formats");
+        eprintln!();
+        let formats = [
+            ("text", "Default - Human-readable text with colors"),
+            ("json", "JSON array (pretty or compact with --compact)"),
+            ("jsonl", "JSON Lines - One event per line"),
+            ("csv", "CSV - Spreadsheet compatible"),
+            ("markdown", "Markdown table"),
+            ("ical", "iCalendar - Re-importable"),
+            ("html", "HTML - Styled web report"),
+            ("yaml", "YAML - Human-readable serialization"),
+            ("toml", "TOML - Config file format"),
+            ("pivot", "Pivot table - Aggregated summary"),
+        ];
+        for (name, desc) in formats {
+            eprintln!("  {}  {}", colored(color::CYAN, name), colored(color::DIM, format!("─ {}", desc)));
+        }
+        eprintln!();
+        eprintln!("  {} Use {} to set format", colored(color::DIM, "→"), colored(color::BOLD, "-f, --format"));
+        return Ok(());
     }
 
     // Validate duration filters
@@ -3372,6 +3398,7 @@ fn main() -> io::Result<()> {
         println!("     - Pipe ICS content: cat calendar.ics | proton-extractor --stdin");
         println!("     - Get help: proton-extractor --help");
         println!("     - Validate args: proton-extractor --validate");
+        println!("     - List formats: proton-extractor --list-formats");
         println!();
         print_exit_code_hint();
         std::process::exit(exit_codes::FILE_NOT_FOUND);
@@ -4048,31 +4075,6 @@ fn main() -> io::Result<()> {
         if count > 0 {
             print_list_summary(count, "person");
         }
-        return Ok(());
-    }
-
-    // List all available output formats
-    if args.list_formats {
-        eprintln!();
-        print_banner("Available Output Formats");
-        eprintln!();
-        let formats = [
-            ("text", "Default - Human-readable text with colors"),
-            ("json", "JSON array (pretty or compact with --compact)"),
-            ("jsonl", "JSON Lines - One event per line"),
-            ("csv", "CSV - Spreadsheet compatible"),
-            ("markdown", "Markdown table"),
-            ("ical", "iCalendar - Re-importable"),
-            ("html", "HTML - Styled web report"),
-            ("yaml", "YAML - Human-readable serialization"),
-            ("toml", "TOML - Config file format"),
-            ("pivot", "Pivot table - Aggregated summary"),
-        ];
-        for (name, desc) in formats {
-            eprintln!("  {}  {}", colored(color::CYAN, name), colored(color::DIM, format!("─ {}", desc)));
-        }
-        eprintln!();
-        eprintln!("  {} Use {} to set format", colored(color::DIM, "→"), colored(color::BOLD, "-f, --format"));
         return Ok(());
     }
 
