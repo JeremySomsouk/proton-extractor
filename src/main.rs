@@ -262,9 +262,18 @@ impl Spinner {
         } else {
             format!("{}s", secs)
         };
+        
+        // Use ASCII spinner that's TTY-safe and respects no-color
+        let spinner_char = if color::is_color_enabled() {
+            self.chars[self.current].to_string()
+        } else {
+            "/-\\|".chars().nth(self.current % 4).unwrap().to_string()
+        };
+        
+        // Clear line and show spinner
         eprint!(
-            "\r\x1b[K{}{} {}",
-            self.chars[self.current],
+            "\r{}{} {}",
+            spinner_char,
             self.message,
             colored(color::DIM, format!("[{}]", time_str))
         );
@@ -279,8 +288,17 @@ impl Spinner {
     }
 
     fn finish(&self) {
-        // Clear the current line completely
-        eprint!("\r\x1b[K\r");
+        // Only clear if spinner was actually shown
+        if !self.shown {
+            return;
+        }
+        // Clear the current line completely (TTY-safe)
+        if color::is_color_enabled() {
+            eprint!("\r\x1b[K\r");
+        } else {
+            // In non-color mode, just return cursor to start
+            eprint!("\r");
+        }
         io::stderr().flush().ok();
     }
 
@@ -4344,7 +4362,12 @@ fn main() -> io::Result<()> {
 
         match args.stats_format {
             StatsFormat::Text => {
-                writeln!(out_writer, "📊 Statistics")?;
+                let stats_header = if color::is_color_enabled() {
+                    "📊 Statistics"
+                } else {
+                    "Statistics"
+                };
+                writeln!(out_writer, "{}", stats_header)?;
                 writeln!(out_writer, "{}", colored(color::CYAN, "============"))?;
                 writeln!(out_writer)?;
                 writeln!(
@@ -4375,8 +4398,9 @@ fn main() -> io::Result<()> {
                 writeln!(out_writer, "{}", colored(color::CYAN, "--------"))?;
                 if !by_person.is_empty() {
                     for (person, mins) in &by_person {
+                        // Use text marker instead of emoji for cross-platform compatibility
                         let marker = if Some((person, mins)) == top_person_entry {
-                            " 🏆"
+                            " (top)"
                         } else {
                             ""
                         };
