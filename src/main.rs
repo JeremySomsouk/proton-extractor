@@ -937,7 +937,26 @@ fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
     if let Some(ref week) = week_str {
         if parse_week_filter(week).is_none() {
             // Generate actionable hint based on common mistakes
-            let hint = if week.chars().all(|c| c.is_ascii_digit()) && week.len() <= 2 {
+            // First, check if it's a number that's simply out of valid range (1-53)
+            let as_number: Option<u32> = week.parse().ok();
+            
+            let hint = if let Some(n) = as_number {
+                if n > 53 {
+                    // Number too high (e.g., 54, 100, 2024)
+                    if n > 9999 {
+                        // Looks like a year
+                        format!("'{}' looks like a year — use format '2024-W10'", n)
+                    } else {
+                        format!("ISO week must be 1-53, not {}\n    (if you meant week {}, this doesn't exist in ISO 8601)", n, n)
+                    }
+                } else if n == 0 {
+                    // Week 0 was likely a typo
+                    "ISO week starts at 1 — did you mean W1?".to_string()
+                } else {
+                    // Number in range but still failed parse - shouldn't happen, but be safe
+                    format!("did you mean 'W{}'?", n)
+                }
+            } else if week.chars().all(|c| c.is_ascii_digit()) && week.len() <= 2 {
                 // Bare number like "5" or "42" - likely meant to be an ISO week
                 format!(
                     "did you mean 'W{}'? Use W prefix for ISO week",
@@ -950,11 +969,27 @@ fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
                     &week[..1.min(week.len())]
                 )
             } else if week.starts_with("W") && week.len() <= 3 {
-                // "W5" style without year - suggest adding year
-                format!(
-                    "did you mean '2024-{}'? Include year for specific week",
-                    week.to_uppercase()
-                )
+                // "W5" or "W54" style - check if week number is valid
+                let week_num: Option<u32> = week[1..].parse().ok();
+                if let Some(n) = week_num {
+                    if n == 0 {
+                        "ISO week starts at 1 — did you mean W1?".to_string()
+                    } else if n > 53 {
+                        // Week 54+ doesn't exist
+                        format!(
+                            "ISO week must be 1-53, not {} (week {} doesn't exist)",
+                            n, n
+                        )
+                    } else {
+                        // Valid week number, suggest year prefix
+                        format!(
+                            "did you mean '2024-{}'? Include year for specific week",
+                            week.to_uppercase()
+                        )
+                    }
+                } else {
+                    "use format 'W10' (week 1-53)".to_string()
+                }
             } else if week.contains("-W") || week.contains("W-") {
                 // Reversed format like "2024-W10-2024" or similar
                 "try format '2024-W10' (year-Wweek)".to_string()
