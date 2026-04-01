@@ -239,9 +239,11 @@ impl Spinner {
             return false;
         }
         
-        let secs = elapsed.as_secs();
-        let time_str = if secs >= 60 {
-            format!("{}m {:02}s", secs / 60, secs % 60)
+        let total_secs = elapsed.as_secs();
+        let mins = total_secs / 60;
+        let secs = total_secs % 60;
+        let time_str = if mins > 0 {
+            format!("{}:{:02}m", mins, secs)
         } else {
             format!("{}s", secs)
         };
@@ -273,11 +275,15 @@ impl Spinner {
             self.finish();
         }
         let elapsed = self.start_time.elapsed();
-        let secs = elapsed.as_secs();
-        let time_str = if secs >= 60 {
-            format!(" ({}m {:02}s)", secs / 60, secs % 60)
-        } else if secs > 0 {
-            format!(" ({}s)", secs)
+        let total_secs = elapsed.as_secs();
+        let time_str = if total_secs > 0 {
+            let mins = total_secs / 60;
+            let secs = total_secs % 60;
+            if mins > 0 {
+                format!(" ({}:{:02}m)", mins, secs)
+            } else {
+                format!(" ({}s)", secs)
+            }
         } else {
             String::new()
         };
@@ -2670,64 +2676,65 @@ fn build_json_output(
 fn print_exit_codes() {
     println!();
     println!(
-        "{} {}",
+        "{} {} {}",
         colored(color::CYAN, "━━━"),
-        colored(color::BOLD, "Exit Codes")
+        colored(color::BOLD, "Exit Codes"),
+        colored(color::CYAN, "━━━")
     );
     println!();
     println!(
-        "  {} {}  {}",
+        "  {:>3}  {:<18} {}",
         colored(color::GREEN, "0"),
         colored(color::BOLD, "SUCCESS"),
-        colored(color::DIM, "# Operation completed successfully")
+        "Operation completed successfully"
     );
     println!(
-        "  {} {}  {}",
+        "  {:>3}  {:<18} {}",
         colored(color::RED, "1"),
         colored(color::BOLD, "FILE_ERROR"),
-        colored(color::DIM, "# Generic file errors (corrupt, unreadable)")
+        "Generic file errors (corrupt, unreadable)"
     );
     println!(
-        "  {} {}  {}",
+        "  {:>3}  {:<18} {}",
         colored(color::YELLOW, "2"),
         colored(color::BOLD, "FILE_NOT_FOUND"),
-        colored(color::DIM, "# Input file does not exist")
+        "Input file does not exist"
     );
     println!(
-        "  {} {}  {}",
+        "  {:>3}  {:<18} {}",
         colored(color::RED, "3"),
         colored(color::BOLD, "INVALID_ARGS"),
-        colored(color::DIM, "# Invalid CLI arguments or empty filter values")
+        "Invalid CLI arguments or empty filter values"
     );
     println!(
-        "  {} {}  {}",
+        "  {:>3}  {:<18} {}",
         colored(color::RED, "4"),
         colored(color::BOLD, "VALIDATION_FAILED"),
-        colored(color::DIM, "# --validate found errors")
+        "--validate found errors"
     );
     println!(
-        "  {} {}  {}",
+        "  {:>3}  {:<18} {}",
         colored(color::YELLOW, "5"),
         colored(color::BOLD, "NO_EVENTS"),
-        colored(color::DIM, "# No events found matching filters")
+        "No events found matching filters"
     );
     println!(
-        "  {} {}  {}",
+        "  {:>3}  {:<18} {}",
         colored(color::RED, "6"),
         colored(color::BOLD, "PERMISSION_DENIED"),
-        colored(color::DIM, "# File permission issues")
+        "File permission issues"
     );
     println!(
-        "  {} {}  {}",
+        "  {:>3}  {:<18} {}",
         colored(color::RED, "7"),
         colored(color::BOLD, "OUTPUT_ERROR"),
-        colored(color::DIM, "# Could not write output")
+        "Could not write output"
     );
     println!();
     println!(
-        "  {} Use in scripts: {}",
+        "  {} {}",
         colored(color::DIM, "→"),
-        colored(color::CYAN, "proton-extractor [args]; case $? in 0) echo ok ;; 2) echo missing ;; 3) echo invalid ;; esac")
+        colored(color::CYAN, "Use in scripts: case $? in 0) ok ;; 2) missing ;; 3) invalid ;; esac")
     );
     println!();
 }
@@ -3872,30 +3879,32 @@ fn main() -> io::Result<()> {
                 DateFilter::All => {}
             }
 
-            // Quick fixes (only show relevant ones)
+            // Grouped quick fixes (only show relevant ones)
             eprintln!();
+            eprintln!("  {} Quick fixes:", colored(color::CYAN, "→"));
+            let mut hints: Vec<String> = Vec::new();
             if !matches!(args.date, DateFilter::All) || args.today || args.yesterday || args.weekly || args.last_week {
-                eprintln!("  {} -d all  Show all events", colored(color::DIM, "•"));
+                hints.push(format!("-d all  •  Show all events"));
             }
             if args.person.is_some() || !args.persons.clone().unwrap_or_default().is_empty() {
-                eprintln!("  {} --person  Check filter", colored(color::DIM, "•"));
+                hints.push("--person  •  Check filter".to_string());
             }
-            if args.exclude_recurring { eprintln!("  {} --include-recurring", colored(color::DIM, "•")); }
+            if args.exclude_recurring {
+                hints.push("--include-recurring  •  Include recurring".to_string());
+            }
             if args.recent.is_none() && args.from.is_none() {
-                eprintln!("  {} --recent 30  Last 30 days", colored(color::DIM, "•"));
+                hints.push("--recent 30  •  Last 30 days".to_string());
             }
-            // Suggest --validate if any date/person/project filters are set
             if args.from.is_some() || args.to.is_some() || args.person.is_some()
                 || args.project.is_some() || args.tag.is_some() || args.month.is_some()
                 || args.week_number.is_some()
             {
-                eprintln!(
-                    "  {} {:<28} Validate filters",
-                    colored(color::DIM, "•"),
-                    colored(color::CYAN, "--validate")
-                );
+                hints.push("--validate  •  Debug filters".to_string());
             }
-            eprintln!("  {} --help for more options", colored(color::DIM, "→"));
+            for hint in hints {
+                eprintln!("    {} {}", colored(color::DIM, "•"), hint);
+            }
+            eprintln!("  {} --help for full options", colored(color::DIM, "→"));
         }
         return Ok(());
     }
