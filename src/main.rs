@@ -2913,54 +2913,10 @@ fn main() -> io::Result<()> {
     let has_stdin = args.stdin;
     let has_files = !args.files.is_empty();
 
-    // Validate empty string filters early (these won't match anything)
-    if let Some(ref s) = args.person {
-        if s.trim().is_empty() {
-            print_error("Empty value provided for --person");
-            print_hint("Specify a person name: --person \"Alice\"");
-            print_exit_code_hint();
-            std::process::exit(exit_codes::INVALID_ARGS);
-        }
-    }
-    if let Some(ref s) = args.project {
-        if s.trim().is_empty() {
-            print_error("Empty value provided for --project");
-            print_hint("Specify a project name: --project \"Backend\"");
-            print_exit_code_hint();
-            std::process::exit(exit_codes::INVALID_ARGS);
-        }
-    }
-    if let Some(ref s) = args.tag {
-        if s.trim().is_empty() {
-            print_error("Empty value provided for --tag");
-            print_hint("Specify a tag to filter: --tag \"urgent\"");
-            print_exit_code_hint();
-            std::process::exit(exit_codes::INVALID_ARGS);
-        }
-    }
-
     // --validate is a pre-flight check that doesn't require files
     if args.validate {
         let mut has_errors = false;
         let mut validated_count = 0;
-
-        // Validate empty strings
-        validated_count += 3;
-        if args.person.as_ref().map_or(false, |s| s.trim().is_empty()) {
-            has_errors = true;
-            print_error("Empty value provided for --person");
-            print_hint("Specify a person name: --person \"Alice\"");
-        }
-        if args.project.as_ref().map_or(false, |s| s.trim().is_empty()) {
-            has_errors = true;
-            print_error("Empty value provided for --project");
-            print_hint("Specify a project name: --project \"Backend\"");
-        }
-        if args.tag.as_ref().map_or(false, |s| s.trim().is_empty()) {
-            has_errors = true;
-            print_error("Empty value provided for --tag");
-            print_hint("Specify a tag to filter: --tag \"urgent\"");
-        }
 
         // Validate date range
         validated_count += 1;
