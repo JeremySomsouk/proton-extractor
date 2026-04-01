@@ -402,30 +402,30 @@ impl std::fmt::Display for EventStatus {
     version,
     before_help = "━━━ Examples
   Getting Started:
-    proton-extractor calendar.ics                        # Basic usage
-    cat calendar.ics | proton-extractor --stdin          # Pipe input
+    proton-extractor calendar.ics                    # Basic usage
+    cat calendar.ics | proton-extractor --stdin      # Pipe input
 
   Quick Filters:
-    -d current             # Current month (default)
-    -t                      # Today's events
-    --recent 7             # Last 7 days
+    -d current                # Current month (default)
+    -t                        # Today's events
+    --recent 7                # Last 7 days
 
   By Person / Project:
-    --person \"Alice\"        # Filter by person
-    --project \"Backend\"     # Filter by project
+    --person \"Alice\"          # Filter by person
+    --project \"Backend\"       # Filter by project
 
   Export & Output:
-    -f json -o out.json    # JSON export
-    -f jsonl -o out.jsonl  # JSON Lines (stream)
-    -f pivot -o out.txt    # Pivot table
-    -q                      # Quiet (totals only)
-    -s                      # Statistics
+    -f json -o out.json       # JSON export
+    -f jsonl -o out.jsonl     # JSON Lines (stream)
+    -f pivot -o out.txt       # Pivot table
+    -q                        # Quiet (totals only)
+    -s                        # Statistics
 
   Automation:
-    --validate             # Validate args (CI/CD)
-    --yes                   # Auto-confirm prompts
-    --no-color              # Disable colors
-    --no-hints              # Suppress hints in scripts/CI
+    --validate                # Validate args (CI/CD)
+    -y, --yes, --force        # Auto-confirm prompts
+    --no-color                # Disable colors
+    --no-hints                # Suppress hints in scripts/CI
 
   See --examples for full help.",
     after_help = "TIP: Run with --examples to see all usage patterns.
