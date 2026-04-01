@@ -583,7 +583,7 @@ struct Args {
     #[arg(long, conflicts_with_all = ["quiet", "sum_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "stats", "top", "bottom", "group_by_person", "group_by_project", "group_by_weekday", "group_by_location", "group_by_category", "dry_run", "silent"])]
     total_only: bool,
 
-    /// Auto-confirm destructive actions (overwrite files, delete data)
+    /// Auto-confirm file overwrite and directory prompts (CI/CD friendly)
     #[arg(short = 'y', long = "yes", visible_aliases = ["force", "confirm"])]
     yes: bool,
 
