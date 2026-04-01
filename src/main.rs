@@ -96,21 +96,14 @@ fn print_success<S: AsRef<str>>(msg: S) {
 /// Styled success message for file output operations
 /// Used for both export and stats output to a file
 fn print_saved(count: usize, path: &Path) {
-    if count == 1 {
-        println!(
-            "{} {} → {}",
-            colored(color::GREEN, "✓"),
-            colored(color::YELLOW, "1 event"),
-            colored(color::CYAN, path.display().to_string())
-        );
-    } else {
-        println!(
-            "{} {} → {}",
-            colored(color::GREEN, "✓"),
-            colored(color::YELLOW, format!("{} events", count)),
-            colored(color::CYAN, path.display().to_string())
-        );
-    }
+    let event_label = if count == 1 { "event" } else { "events" };
+    println!(
+        "{} {} {} → {}",
+        colored(color::GREEN, "✓"),
+        colored(color::YELLOW, format!("{} {}", count, event_label)),
+        colored(color::DIM, "→"),
+        colored(color::CYAN, path.display().to_string())
+    );
 }
 
 /// Styled hint message output - helpful suggestions with user's specific values
@@ -145,10 +138,12 @@ fn print_hints(hints: &[&str]) {
 
 /// Styled info banner - for startup/version banners
 fn print_banner(message: &str) {
+    println!();
     println!(
-        "{} {}",
+        "{} {} {}",
         colored(color::CYAN, "━━━"),
-        colored(color::BOLD, message)
+        colored(color::BOLD, message),
+        colored(color::CYAN, "━━━")
     );
 }
 
@@ -849,14 +844,17 @@ fn validate_time_filter(time_str: &str, _flag_name: &str) -> io::Result<()> {
     if let Some((hours, minutes)) = parse_time(time_str) {
         if hours > 23 || minutes > 59 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                format!("'{}': hours 0-23, minutes 0-59", time_str)));
+                format!("'{}': hours must be 0-23, minutes must be 0-59", time_str)));
         }
         Ok(())
     } else {
+        // Generate actionable hint based on common mistakes
         let hint = if time_str.len() == 4 && time_str.chars().all(|c| c.is_ascii_digit()) {
             "use ':' separator (e.g., '09:00')"
         } else if time_str.contains('.') {
             "use ':' not '.'"
+        } else if time_str.len() <= 2 && time_str.chars().all(|c| c.is_ascii_digit()) {
+            "use HH:MM format (e.g., '09:00' or '17:30')"
         } else {
             "use HH:MM format"
         };
@@ -3359,8 +3357,8 @@ fn main() -> io::Result<()> {
             }
         }
 
-        let is_large_batch = args.files.len() > 1 || args.dry_run;
-        let show_progress = !args.no_progress && !args.quiet && !args.silent;
+        // Always show spinner for file reading when not quiet (helps user know something is happening)
+        let show_spinner = !args.no_progress && !args.quiet && !args.silent && has_files;
         let spinner_message = if args.files.len() > 1 {
             format!("Processing {} files...", args.files.len())
         } else if args.files.len() == 1 {
@@ -3368,7 +3366,7 @@ fn main() -> io::Result<()> {
         } else {
             "Processing...".to_string()
         };
-        let mut spinner = if is_large_batch && show_progress {
+        let mut spinner = if show_spinner {
             Some(Spinner::new(&spinner_message))
         } else {
             None
