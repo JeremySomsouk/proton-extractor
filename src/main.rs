@@ -208,11 +208,12 @@ fn confirm(prompt: &str) -> bool {
     }
 
     eprint!(
-        "\n  {} {}\n  {} [{}/n] ",
+        "\n  {} {}\n  {} To proceed, enter {} (or {} to cancel): ",
         colored(color::YELLOW, "!"),
         colored(color::BOLD, prompt),
-        colored(color::DIM, "Enter"),
-        colored(color::GREEN, "Y")
+        colored(color::DIM, "→"),
+        colored(color::GREEN, "Y"),
+        colored(color::RED, "n")
     );
     io::stderr().flush().ok();
     let mut response = String::new();
@@ -621,7 +622,7 @@ struct Args {
     sum_only: bool,
 
     /// Show only the grand total (single line output, useful for scripting)
-    #[arg(long, conflicts_with_all = ["quiet", "sum_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "stats", "top", "bottom", "group_by_person", "group_by_project", "group_by_weekday", "group_by_location", "group_by_category", "dry_run", "silent"])]
+    #[arg(long, conflicts_with_all = ["quiet", "sum_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "stats", "top", "bottom", "group_by_person", "group_by_project", "group_by_weekday", "group_by_location", "group_by_category", "dry_run", "silent", "list_formats"])]
     total_only: bool,
 
     /// Auto-confirm file overwrite and directory prompts (CI/CD friendly)
@@ -647,6 +648,10 @@ struct Args {
     /// List all unique events found (one per line with date and summary)
     #[arg(short = 'E', long)]
     list_events: bool,
+
+    /// List all available output formats
+    #[arg(long)]
+    list_formats: bool,
 
     /// List all unique locations found in events
     #[arg(short = 'L', long)]
@@ -756,7 +761,7 @@ struct Args {
     compact: bool,
 
     /// Show statistics about events (count, avg/day, top person, busiest day)
-    #[arg(short = 's', long)]
+    #[arg(short = 's', long, conflicts_with_all = ["list_formats"])]
     stats: bool,
 
     /// Output format for statistics (only applies when --stats is used)
@@ -764,7 +769,7 @@ struct Args {
     stats_format: StatsFormat,
 
     /// Compact stats output (single line, useful for scripting)
-    #[arg(long, conflicts_with_all = ["quiet", "silent", "total_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "dry_run", "top", "bottom"])]
+    #[arg(long, conflicts_with_all = ["quiet", "silent", "total_only", "list_persons", "list_projects", "list_events", "list_locations", "list_categories", "list_tags", "list_years", "list_uids", "dry_run", "top", "bottom", "stats", "list_formats"])]
     stats_quiet: bool,
 
     /// Reverse chronological order (newest first)
@@ -892,8 +897,12 @@ struct Args {
     sort_reverse: bool,
 
     /// Validate arguments and exit (useful for CI/CD pre-flight checks)
-    #[arg(long)]
+    #[arg(long, alias = "check", verbatim_doc_comment)]
     validate: bool,
+
+    /// Compact validate output (single line, no hints) for CI/CD
+    #[arg(long, requires = "validate", verbatim_doc_comment)]
+    validate_quiet: bool,
 }
 
 fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::Result<()> {
@@ -3158,26 +3167,34 @@ fn main() -> io::Result<()> {
         }
 
         if has_errors {
-            eprintln!();
-            print_error("--validate found errors");
-            eprintln!(
-                "  {} {} constraint(s) checked",
-                colored(color::DIM, "→"),
-                colored(color::CYAN, validated_count.to_string())
-            );
-            print_exit_code_hint();
+            if args.validate_quiet {
+                eprintln!("VALIDATION_FAILED: {} error(s)", validated_count);
+            } else {
+                eprintln!();
+                print_error("--validate found errors");
+                eprintln!(
+                    "  {} {} constraint(s) checked",
+                    colored(color::DIM, "→"),
+                    colored(color::CYAN, validated_count.to_string())
+                );
+                print_exit_code_hint();
+            }
             std::process::exit(exit_codes::VALIDATION_FAILED);
         }
 
         // Success output - use eprintln for stderr consistency
-        eprintln!();
-        eprintln!(
-            "  {} {}  {}",
-            colored(color::GREEN, "✓"),
-            colored(color::BOLD, "Arguments validated successfully"),
-            colored(color::DIM, format!("({} constraints checked)", validated_count))
-        );
-        eprintln!();
+        if args.validate_quiet {
+            println!("VALIDATION_OK");
+        } else {
+            eprintln!();
+            eprintln!(
+                "  {} {}  {}",
+                colored(color::GREEN, "✓"),
+                colored(color::BOLD, "Arguments validated successfully"),
+                colored(color::DIM, format!("({} constraints checked)", validated_count))
+            );
+            eprintln!();
+        }
         return Ok(());
     }
 
@@ -4019,6 +4036,31 @@ fn main() -> io::Result<()> {
         if count > 0 {
             print_list_summary(count, "person");
         }
+        return Ok(());
+    }
+
+    // List all available output formats
+    if args.list_formats {
+        eprintln!();
+        print_banner("Available Output Formats");
+        eprintln!();
+        let formats = [
+            ("text", "Default - Human-readable text with colors"),
+            ("json", "JSON array (pretty or compact with --compact)"),
+            ("jsonl", "JSON Lines - One event per line"),
+            ("csv", "CSV - Spreadsheet compatible"),
+            ("markdown", "Markdown table"),
+            ("ical", "iCalendar - Re-importable"),
+            ("html", "HTML - Styled web report"),
+            ("yaml", "YAML - Human-readable serialization"),
+            ("toml", "TOML - Config file format"),
+            ("pivot", "Pivot table - Aggregated summary"),
+        ];
+        for (name, desc) in formats {
+            eprintln!("  {}  {}", colored(color::CYAN, name), colored(color::DIM, format!("─ {}", desc)));
+        }
+        eprintln!();
+        eprintln!("  {} Use {} to set format", colored(color::DIM, "→"), colored(color::BOLD, "-f, --format"));
         return Ok(());
     }
 
