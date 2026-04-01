@@ -285,13 +285,21 @@ impl Spinner {
         println!("{} {}{}", colored(color::GREEN, "✓"), message, time_str);
     }
 
-    /// Finish with an error message (consistent with print_error style)
-    fn finish_with_error(&self, message: &str) {
+    /// Finish with error message + hints (consistent with print_error + print_hints)
+    fn finish_with_error_hints(&self, message: &str, hints: &[&str]) {
         if self.shown {
             self.finish();
         }
-        // Use same stream as print_error for consistency
         let _ = std::io::stderr().write_all(format!("{} {}\n", colored(color::RED, "error:"), message).as_bytes());
+        if color::is_hints_enabled() {
+            for hint in hints {
+                eprintln!(
+                    "  {} {}",
+                    colored(color::DIM, "→"),
+                    colored(color::CYAN, *hint)
+                );
+            }
+        }
     }
 }
 
@@ -3371,13 +3379,12 @@ fn main() -> io::Result<()> {
                             exit_codes::FILE_ERROR,
                         ),
                     };
-                    // Use spinner error finish if spinner exists, otherwise just print error
+                    // Use spinner error finish with hints if spinner exists
                     if let Some(ref s) = spinner {
-                        s.finish_with_error(&msg);
+                        let hints_slice: Vec<&str> = hints.iter().map(|s| s.as_str()).collect::<Vec<_>>();
+                        s.finish_with_error_hints(&msg, &hints_slice);
                     } else {
                         print_error(&msg);
-                    }
-                    if !hints.is_empty() {
                         print_hints(&hints.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                     }
                     print_exit_code_hint();
