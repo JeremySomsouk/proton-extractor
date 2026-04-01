@@ -453,17 +453,17 @@ impl std::fmt::Display for EventStatus {
 🦀 proton-extractor — Extract & sum calendar hours from ICS files
 
 USAGE:
-    proton-extractor [FLAGS] [OPTIONS] <FILES>...
+	proton-extractor [FLAGS] [OPTIONS] <FILES>...
 
 EXAMPLES:
-    proton-extractor calendar.ics                        # Basic usage
-    cat calendar.ics | proton-extractor --stdin          # Pipe input
-    -d current -t                                       # This month, today only
-    --person Alice --project Backend                    # Filter by person/project
-    -f json -o report.json                              # JSON export
-    -y -O ./output/                                     # Batch with auto-confirm
-    --validate                                          # Validate args (CI/CD)
-    --exit-codes                                        # List exit codes",
+	proton-extractor calendar.ics                        # Basic usage
+	cat calendar.ics | proton-extractor --stdin          # Pipe input
+	-d current -t                                       # This month, today only
+	--person Alice --project Backend                    # Filter by person/project
+	-f json -o report.json                              # JSON export
+	-y -O ./output/                                     # Batch with auto-confirm
+	--validate                                          # Validate args (CI/CD)
+	--exit-codes                                        # List exit codes",
     after_help = "\
 TIP: Run with --examples to see all usage patterns.
 TIP: Use --validate to check your arguments before processing.")]
@@ -532,13 +532,13 @@ EXAMPLES:
   proton-extractor calendar.ics --bottom 5                   # Bottom 5 shortest events
 
   # ── Sorting ─────────────────────────────────────────────────────────────────
-  proton-extractor calendar.ics --sort-by duration --reverse  # Longest first
+  proton-extractor calendar.ics --sort-by duration -r     # Longest first
   proton-extractor calendar.ics --sort-by person             # Alphabetical by person
 
   # ── Export ───────────────────────────────────────────────────────────────────
   proton-extractor calendar.ics -f csv -o report.csv         # CSV export
   proton-extractor calendar.ics -f json -o report.json       # JSON export (pretty)
-  proton-extractor calendar.ics -f json --compact -o r.json  # JSON export (compact)
+  proton-extractor calendar.ics -f json -c -o r.json         # JSON export (compact)
   proton-extractor calendar.ics -f html -o report.html       # HTML report
   proton-extractor calendar.ics -f pivot -o pivot.txt        # Pivot table
   proton-extractor calendar.ics -f yaml -o report.yaml       # YAML export
@@ -769,7 +769,7 @@ struct Args {
     end_before: Option<String>,
 
     /// Enable compact JSON/YAML output (single line, no pretty-printing)
-    #[arg(long, verbatim_doc_comment)]
+    #[arg(short = 'c', long, verbatim_doc_comment)]
     compact: bool,
 
     /// Show statistics about events (count, avg/day, top person, busiest day)
@@ -785,7 +785,7 @@ struct Args {
     stats_quiet: bool,
 
     /// Reverse chronological order (newest first)
-    #[arg(long)]
+    #[arg(short = 'r', long)]
     reverse: bool,
 
     /// Group output by person instead of by month
@@ -889,11 +889,11 @@ struct Args {
     list_uids: bool,
 
     /// Remove duplicate events (same summary, start, and end time)
-    #[arg(long)]
+    #[arg(short = 'D', long)]
     dedupe: bool,
 
     /// Remove duplicate events by summary only (keeps first occurrence)
-    #[arg(long)]
+    #[arg(short = 'X', long)]
     dedupe_by_summary: bool,
 
     /// Show only events without [person] or {project} tags (untagged events)
@@ -987,7 +987,7 @@ fn validate_week_number(week_str: &Option<String>) -> io::Result<()> {
                         // Looks like a year
                         format!("'{}' looks like a year — use format '2024-W10'", n)
                     } else {
-                        format!("ISO week must be 1-53, not {}\n    (if you meant week {}, this doesn't exist in ISO 8601)", n, n)
+                        format!("ISO week must be 1-53, not {}\n    (week {} doesn't exist in ISO 8601)", n, n)
                     }
                 } else if n == 0 {
                     // Week 0 was likely a typo
