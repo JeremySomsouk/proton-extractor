@@ -1090,8 +1090,10 @@ fn print_ics_validation_error(e: &io::Error, path: &Path) {
     let path_str = path.display().to_string();
     if path.extension().is_none() {
         print_hint(format!("Rename file with .ics extension: mv {} file.ics", path_str));
+        print_hint("Or pipe content: cat calendar.ics | proton-extractor --stdin");
     } else {
         print_hint("Provide an .ics calendar file");
+        print_hint("Validate: proton-extractor --validate your-file.ics");
     }
 }
 
@@ -3383,19 +3385,22 @@ fn main() -> io::Result<()> {
                         std::io::ErrorKind::NotFound => (
                             format!("'{}' not found", path_str),
                             vec![
-                                format!("Verify the path is correct: ls -la {}", path_str),
-                                "Check that the file exists and is readable".to_string(),
+                                format!("Verify path: ls -la {}", path_str),
+                                "Use --stdin to pipe content".to_string(),
                             ],
                             exit_codes::FILE_NOT_FOUND,
                         ),
                         std::io::ErrorKind::PermissionDenied => (
                             format!("Permission denied: '{}'", path_str),
-                            vec![format!("Run: chmod +r {}", path_str)],
+                            vec![
+                                format!("Fix permissions: chmod +r '{}'", path_str),
+                                "Check file ownership with: ls -la".to_string(),
+                            ],
                             exit_codes::PERMISSION_DENIED,
                         ),
                         _ => (
                             format!("Failed to open '{}': {}", path_str, e),
-                            vec![],
+                            vec!["Try running: file {}".to_string(), "Validate file type: head -5 {}".to_string()],
                             exit_codes::FILE_ERROR,
                         ),
                     };
