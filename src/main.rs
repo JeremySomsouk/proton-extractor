@@ -264,7 +264,7 @@ fn confirm(prompt: &str) -> bool {
     }
 
     eprint!(
-        "\n  {} {}\n  {} Enter {} to proceed, {} to cancel: ",
+        "\n  {} {}\n  {} {} or {}: ",
         colored(color::YELLOW, "!"),
         colored(color::BOLD, prompt),
         colored(color::DIM, "→"),
@@ -3788,13 +3788,26 @@ fn main() -> io::Result<()> {
                     ));
                     std::process::exit(exit_codes::OUTPUT_ERROR);
                 }
+                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("file");
                 eprintln!();
                 eprintln!(
                     "{} {}",
                     colored(color::YELLOW, "warning:"),
-                    colored(color::YELLOW, format!("'{}' already exists", path.display()))
+                    colored(color::YELLOW, format!("'{}' (.{} {}) will be replaced", path.display(), ext.to_uppercase(), path.metadata().map(|m| {
+                        use std::fmt::Write;
+                        let mut s = String::new();
+                        write!(s, "{}", m.len()).ok();
+                        // Format file size nicely
+                        if m.len() > 1024 * 1024 {
+                            format!("{:.1} MB", m.len() as f64 / (1024.0 * 1024.0))
+                        } else if m.len() > 1024 {
+                            format!("{:.1} KB", m.len() as f64 / 1024.0)
+                        } else {
+                            format!("{} bytes", m.len())
+                        }
+                    }).unwrap_or_default()))
                 );
-                if !confirm("overwrite existing file?") {
+                if !confirm("overwrite?") {
                     eprintln!();
                     eprintln!("{} {}", colored(color::RED, "✗"), colored(color::WHITE, "Aborted - no files written"));
                     eprintln!(
