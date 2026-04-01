@@ -232,7 +232,7 @@ fn confirm(prompt: &str) -> bool {
     }
 
     eprint!(
-        "\n  {} {}\n  {} To proceed, enter {} (or {} to cancel): ",
+        "\n  {} {}\n  {} Enter {} to proceed, {} to cancel: ",
         colored(color::YELLOW, "!"),
         colored(color::BOLD, prompt),
         colored(color::DIM, "→"),
