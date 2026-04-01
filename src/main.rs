@@ -3594,9 +3594,9 @@ fn main() -> io::Result<()> {
                                 format!("'{}' is not empty", output_dir.display())
                             )
                         );
-                        if !confirm("Continue?") {
+                        if !confirm("overwrite files?") {
                             eprintln!();
-                            println!("{} Operation cancelled", colored(color::YELLOW, "○"));
+                            println!("{} Cancelled - no files written", colored(color::YELLOW, "○"));
                             println!(
                                 "  {} Use {} or {} to auto-confirm",
                                 colored(color::DIM, "→"),
@@ -3663,9 +3663,9 @@ fn main() -> io::Result<()> {
                     colored(color::YELLOW, "warning:"),
                     colored(color::BOLD, format!("'{}' already exists", path.display()))
                 );
-                if !confirm("Continue?") {
+                if !confirm("overwrite existing file?") {
                     eprintln!();
-                    println!("{} Operation cancelled", colored(color::YELLOW, "○"));
+                    println!("{} Cancelled - no files written", colored(color::YELLOW, "○"));
                     println!(
                         "  {} Use {} or {} to auto-confirm",
                         colored(color::DIM, "→"),
