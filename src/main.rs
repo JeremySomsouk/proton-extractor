@@ -151,7 +151,9 @@ pub fn print_warning<S: AsRef<str>>(msg: S) {
 /// Styled success message for file output operations
 /// Used for both export and stats output to a file
 /// Made public for library consumers.
-pub fn print_saved(count: usize, path: &Path) {
+/// Print saved confirmation with optional total hours
+/// Shows count and path, plus optional total duration
+pub fn print_saved(count: usize, path: &Path, total_hours: Option<i64>) {
     if count == 0 {
         eprintln!(
             "{} {} → {}",
@@ -161,11 +163,16 @@ pub fn print_saved(count: usize, path: &Path) {
         );
     } else {
         let event_label = if count == 1 { "event" } else { "events" };
+        let hours_str = if let Some(mins) = total_hours {
+            format!(" ({})", format_hours(mins))
+        } else {
+            String::new()
+        };
         eprintln!(
-            "{} {}{} → {}",
+            "{} {}{} {}",
             colored(color::GREEN, "✓"),
             colored(color::BOLD, count.to_string()),
-            colored(color::DIM, format!(" {}", event_label)),
+            colored(color::DIM, format!(" {}{}", event_label, hours_str)),
             colored(color::CYAN, path.display().to_string())
         );
     }
@@ -981,9 +988,21 @@ fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::
 fn validate_month(month: Option<u32>) -> io::Result<()> {
     if let Some(m) = month {
         if !(1..=12).contains(&m) {
+            let hint = if m == 0 {
+                "months start at 1 (January)".to_string()
+            } else if m > 12 {
+                if m > 100 {
+                    // Likely confused year with month
+                    format!("did you mean --year {}?", m)
+                } else {
+                    format!("there are only 12 months, not {}", m)
+                }
+            } else {
+                format!("valid months are 1-12 (January-December)")
+            };
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("--month must be between 1 and 12, got {}", m),
+                format!("--month {} is invalid: {}", m, hint),
             ));
         }
     }
@@ -3790,12 +3809,15 @@ fn main() -> io::Result<()> {
                         );
                         if !confirm("overwrite existing files in directory?") {
                             eprintln!();
-                            eprintln!("{} {}", colored(color::RED, "✗"), colored(color::WHITE, "Aborted - no files written"));
                             eprintln!(
-                                "  {} Use {} or {} to auto-confirm",
+                                "{} {}",
+                                colored(color::RED, "✗"),
+                                colored(color::BOLD, "Aborted - no files written")
+                            );
+                            eprintln!(
+                                "  {} Use {} to auto-confirm",
                                 colored(color::DIM, "→"),
-                                colored(color::CYAN, "--yes"),
-                                colored(color::CYAN, "--force")
+                                colored(color::CYAN, "--yes (or -y)")
                             );
                             std::process::exit(exit_codes::OUTPUT_ERROR);
                         }
@@ -3872,12 +3894,15 @@ fn main() -> io::Result<()> {
                 );
                 if !confirm("overwrite existing file?") {
                     eprintln!();
-                    eprintln!("{} {}", colored(color::RED, "✗"), colored(color::WHITE, "Aborted - no files written"));
                     eprintln!(
-                        "  {} Use {} or {} to auto-confirm",
+                        "{} {}",
+                        colored(color::RED, "✗"),
+                        colored(color::BOLD, "Aborted - no files written")
+                    );
+                    eprintln!(
+                        "  {} Use {} to auto-confirm",
                         colored(color::DIM, "→"),
-                        colored(color::CYAN, "--yes"),
-                        colored(color::CYAN, "--force")
+                        colored(color::CYAN, "--yes (or -y)")
                     );
                     std::process::exit(exit_codes::OUTPUT_ERROR);
                 }
@@ -4639,7 +4664,7 @@ fn main() -> io::Result<()> {
         if write_to_file {
             if let Some(ref path) = output_file_path {
                 let count = filtered.len();
-                print_saved(count, path);
+                print_saved(count, path, None);
             }
         }
 
@@ -5525,7 +5550,7 @@ fn main() -> io::Result<()> {
     if write_to_file {
         if let Some(ref path) = output_file_path {
             let event_count = filtered.len();
-            print_saved(event_count, path);
+            print_saved(event_count, path, None);
             if path.extension().map(|e| e == "html").unwrap_or(false) {
                 print_hint(format!("Open in browser: open {}", path.display()));
             } else {
@@ -6963,7 +6988,9 @@ mod tests {
         assert!(validate_month(Some(0)).is_err());
         assert!(validate_month(Some(13)).is_err());
         let err = validate_month(Some(0)).unwrap_err();
-        assert!(err.to_string().contains("between 1 and 12"));
+        assert!(err.to_string().contains("invalid"));
+        // New format: "--month 0 is invalid: months start at 1 (January)"
+        assert!(err.to_string().contains("1")); // mentions the valid range
     }
 
     // Note: validate_duration_range cannot be tested in isolation as it operates

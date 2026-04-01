@@ -866,7 +866,7 @@ fn test_cli_invalid_month() {
 
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("between 1 and 12"));
+        .stderr(predicate::str::contains("invalid"));
 }
 
 #[test]
