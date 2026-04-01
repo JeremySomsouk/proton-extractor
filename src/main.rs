@@ -3222,6 +3222,43 @@ fn main() -> io::Result<()> {
             print_hint("Example: --location \"Office\"");
         }
 
+        // Validate empty string filters for exclude-* options
+        // These are Vec<String> so check if any element is whitespace-only
+        validated_count += 4;
+        if args.exclude_person.iter().any(|s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("empty value for --exclude-person");
+            print_hint("Example: --exclude-person \"Alice\"");
+        }
+        if args.exclude_project.iter().any(|s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("empty value for --exclude-project");
+            print_hint("Example: --exclude-project \"Internal\"");
+        }
+        if args.exclude_category.iter().any(|s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("empty value for --exclude-category");
+            print_hint("Example: --exclude-category \"Private\"");
+        }
+        if args.exclude_summary.iter().any(|s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("empty value for --exclude-summary");
+            print_hint("Example: --exclude-summary \"standup\"");
+        }
+
+        // Validate empty string filters for search options
+        validated_count += 2;
+        if args.search.iter().any(|s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("empty value for --search");
+            print_hint("Example: --search \"meeting\"");
+        }
+        if args.include_summary.iter().any(|s| s.trim().is_empty()) {
+            has_errors = true;
+            print_error("empty value for --include-summary");
+            print_hint("Example: --include-summary \"review\"");
+        }
+
         if has_errors {
             if args.validate_quiet {
                 eprintln!("VALIDATION_FAILED: {} error(s)", validated_count);
