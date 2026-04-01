@@ -896,11 +896,6 @@ fn validate_date_range(from: &Option<NaiveDate>, to: &Option<NaiveDate>) -> io::
     Ok(())
 }
 
-/// Format hint for date arguments
-fn date_format_hint() -> &'static str {
-    "expected format: YYYY-MM-DD (e.g., 2024-01-15)"
-}
-
 fn validate_month(month: Option<u32>) -> io::Result<()> {
     if let Some(m) = month {
         if !(1..=12).contains(&m) {
@@ -2987,7 +2982,6 @@ fn main() -> io::Result<()> {
         if let Err(e) = validate_date_range(&args.from, &args.to) {
             has_errors = true;
             print_error(e.to_string());
-            print_hint("--from must be before or equal to --to");
         }
 
         // Validate month
@@ -3167,7 +3161,6 @@ fn main() -> io::Result<()> {
     // This provides better error messages for invalid filter values
     if let Err(e) = validate_date_range(&args.from, &args.to) {
         print_error(e.to_string());
-        print_hint("--from must be before or equal to --to");
         print_exit_code_hint();
         std::process::exit(exit_codes::INVALID_ARGS);
     }
@@ -3311,7 +3304,6 @@ fn main() -> io::Result<()> {
         if from > to {
             print_error(format!("--from ({}) must be before or equal to --to ({})", from, to));
             print_hint("Swap the dates or use --from before --to");
-            print_hint(date_format_hint());
             std::process::exit(exit_codes::INVALID_ARGS);
         }
     }
