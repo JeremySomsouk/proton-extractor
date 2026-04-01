@@ -89,7 +89,11 @@ fn colored<S: AsRef<str>>(c: color::Color, text: S) -> String {
 /// Accepts format args for cleaner error construction
 /// Made public for library consumers.
 pub fn print_error<S: AsRef<str>>(msg: S) {
-    eprintln!("{} {}", colored(color::RED, "error:"), msg.as_ref());
+    eprintln!(
+        "{} {}",
+        colored(color::RED, "error:"),
+        colored(color::BOLD, msg.as_ref())
+    );
 }
 
 /// Styled warning message output - non-blocking feedback
@@ -3314,12 +3318,16 @@ fn main() -> io::Result<()> {
 
     if !has_stdin && !has_files {
         print_error("No .ics files provided");
-        print_hints(&[
-            "Provide file paths: proton-extractor calendar.ics",
-            "Or pipe ICS content: cat calendar.ics | proton-extractor --stdin",
-            "Get help: proton-extractor --help",
-            "Validate args: proton-extractor --validate [args]",
-        ]);
+        print_banner("Quick Start");
+        println!("  {}  {}", colored(color::CYAN, "→"), colored(color::BOLD, "Basic usage:"));
+        println!("     proton-extractor calendar.ics");
+        println!();
+        println!("  {}  {}", colored(color::CYAN, "→"), colored(color::BOLD, "Other options:"));
+        println!("     - Provide file paths: proton-extractor calendar.ics");
+        println!("     - Pipe ICS content: cat calendar.ics | proton-extractor --stdin");
+        println!("     - Get help: proton-extractor --help");
+        println!("     - Validate args: proton-extractor --validate");
+        println!();
         print_exit_code_hint();
         std::process::exit(exit_codes::FILE_NOT_FOUND);
     }
