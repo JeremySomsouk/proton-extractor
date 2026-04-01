@@ -2881,6 +2881,10 @@ fn print_examples() {
 fn main() -> io::Result<()> {
     let args = Args::parse();
 
+    // Apply --no-color and --no-hints flags BEFORE any output
+    color::set_no_color(args.no_color);
+    color::set_no_hints(args.no_hints);
+
     // Generate shell completion script and exit if requested
     if let Some(shell) = &args.generate_completion {
         let mut cmd = Args::command();
