@@ -3308,26 +3308,12 @@ fn main() -> io::Result<()> {
 
     if !has_stdin && !has_files {
         print_error("No .ics files provided");
-        eprintln!(
-            "  {} {}",
-            colored(color::DIM, "→"),
-            colored(color::CYAN, "Provide file paths: proton-extractor calendar.ics")
-        );
-        eprintln!(
-            "  {} {}",
-            colored(color::DIM, "→"),
-            colored(color::CYAN, "Or pipe ICS content: cat calendar.ics | proton-extractor --stdin")
-        );
-        eprintln!(
-            "  {} {}",
-            colored(color::DIM, "→"),
-            colored(color::CYAN, "Get help: proton-extractor --help")
-        );
-        eprintln!(
-            "  {} {}",
-            colored(color::DIM, "→"),
-            colored(color::CYAN, "Validate args: proton-extractor --validate [args]")
-        );
+        print_hints(&[
+            "Provide file paths: proton-extractor calendar.ics",
+            "Or pipe ICS content: cat calendar.ics | proton-extractor --stdin",
+            "Get help: proton-extractor --help",
+            "Validate args: proton-extractor --validate [args]",
+        ]);
         print_exit_code_hint();
         std::process::exit(exit_codes::FILE_NOT_FOUND);
     }
