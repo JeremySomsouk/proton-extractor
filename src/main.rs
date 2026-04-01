@@ -96,12 +96,6 @@ fn print_warn<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::YELLOW, "warning:"), msg.as_ref());
 }
 
-/// Styled success message output - for simple success cases
-/// Use for single-line success messages without counts
-fn print_success<S: AsRef<str>>(msg: S) {
-    println!("{} {}", colored(color::GREEN, "✓"), msg.as_ref());
-}
-
 /// Styled success message for file output operations
 /// Used for both export and stats output to a file
 fn print_saved(count: usize, path: &Path) {
@@ -3088,8 +3082,15 @@ fn main() -> io::Result<()> {
             std::process::exit(exit_codes::VALIDATION_FAILED);
         }
 
-        // Success output
-        print_success(format!("{} argument(s) validated successfully", validated_count));
+        // Success output - use eprintln for stderr consistency
+        eprintln!();
+        eprintln!(
+            "{} {} {}",
+            colored(color::GREEN, "✓"),
+            colored(color::BOLD, "Arguments validated successfully"),
+            colored(color::DIM, format!("({} checks)", validated_count))
+        );
+        eprintln!();
         return Ok(());
     }
 
