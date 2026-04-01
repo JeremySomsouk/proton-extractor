@@ -694,7 +694,7 @@ struct Args {
     list_events: bool,
 
     /// List all available output formats
-    #[arg(long)]
+    #[arg(long, visible_alias = "list-output-formats")]
     list_formats: bool,
 
     /// List all unique locations found in events
@@ -742,7 +742,7 @@ struct Args {
     generate_completion: Option<clap_complete::Shell>,
 
     /// Show usage examples and exit
-    #[arg(short = 'e', long)]
+    #[arg(short = 'e', long, visible_alias = "list-examples")]
     examples: bool,
 
     /// Show exit codes reference and exit (useful for scripting/CI)
