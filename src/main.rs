@@ -13,8 +13,9 @@ use tracing_subscriber::FmtSubscriber;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Exit codes for CLI - enables scripted/CI/CD handling of specific errors
+/// Made public for library consumers who want to check exit codes programmatically.
 #[allow(dead_code)]
-mod exit_codes {
+pub mod exit_codes {
     pub const SUCCESS: i32 = 0;
     pub const FILE_ERROR: i32 = 1; // Generic file errors
     pub const FILE_NOT_FOUND: i32 = 2; // Input file missing
@@ -104,7 +105,8 @@ pub fn print_warn<S: AsRef<str>>(msg: S) {
 
 /// Styled success message for file output operations
 /// Used for both export and stats output to a file
-fn print_saved(count: usize, path: &Path) {
+/// Made public for library consumers.
+pub fn print_saved(count: usize, path: &Path) {
     let event_label = if count == 1 { "event" } else { "events" };
     eprintln!(
         "{} {} {} {}",
