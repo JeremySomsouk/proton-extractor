@@ -152,14 +152,23 @@ pub fn print_warning<S: AsRef<str>>(msg: S) {
 /// Used for both export and stats output to a file
 /// Made public for library consumers.
 pub fn print_saved(count: usize, path: &Path) {
-    let event_label = if count == 1 { "event" } else { "events" };
-    eprintln!(
-        "{} {}{} {}",
-        colored(color::GREEN, "✓"),
-        colored(color::BOLD, count.to_string()),
-        colored(color::DIM, format!(" {}", event_label)),
-        colored(color::CYAN, path.display().to_string())
-    );
+    if count == 0 {
+        eprintln!(
+            "{} {} → {}",
+            colored(color::DIM, "✓"),
+            colored(color::DIM, "no events"),
+            colored(color::CYAN, path.display().to_string())
+        );
+    } else {
+        let event_label = if count == 1 { "event" } else { "events" };
+        eprintln!(
+            "{} {}{} → {}",
+            colored(color::GREEN, "✓"),
+            colored(color::BOLD, count.to_string()),
+            colored(color::DIM, format!(" {}", event_label)),
+            colored(color::CYAN, path.display().to_string())
+        );
+    }
 }
 
 /// Styled hint message output - helpful suggestions with user's specific values
@@ -3217,8 +3226,16 @@ fn main() -> io::Result<()> {
             if args.validate_quiet {
                 eprintln!("VALIDATION_FAILED: {} error(s)", validated_count);
             } else {
-                print_error(format!("{} constraint(s) checked, see errors above", validated_count));
-                print_exit_code_hint();
+                eprintln!(
+                    "{} {}",
+                    colored(color::RED, "error:"),
+                    colored(color::BOLD, format!("{} validation error{}", validated_count, if validated_count > 1 { "s" } else { "" }))
+                );
+                eprintln!(
+                    "  {} {}",
+                    colored(color::DIM, "→"),
+                    colored(color::DIM, format!("{} option{} validated", validated_count, if validated_count > 1 { "s" } else { "" }))
+                );
             }
             std::process::exit(exit_codes::VALIDATION_FAILED);
         }
@@ -3229,10 +3246,14 @@ fn main() -> io::Result<()> {
         } else {
             print_banner("Validation Passed");
             println!(
-                "  {} {}  {}",
+                "  {} {}",
                 colored(color::GREEN, "✓"),
-                colored(color::BOLD, "All arguments valid"),
-                colored(color::DIM, format!("({} constraints checked)", validated_count))
+                colored(color::BOLD, "All arguments valid")
+            );
+            println!(
+                "  {} {}",
+                colored(color::DIM, "→"),
+                colored(color::DIM, format!("{} option{} validated", validated_count, if validated_count > 1 { "s" } else { "" }))
             );
             println!();
         }
