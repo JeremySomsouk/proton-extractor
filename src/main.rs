@@ -675,7 +675,7 @@ struct Args {
     list_locations: bool,
 
     /// List all unique categories found in events
-    #[arg(long)]
+    #[arg(short = 'G', long)]
     list_categories: bool,
 
     /// Filter by category name (case-insensitive)
@@ -818,7 +818,7 @@ struct Args {
     group_by_year: bool,
 
     /// Filter by ISO week number (1-53), optionally with year (e.g., "10" or "2024-W10")
-    #[arg(long = "week-number", alias = "iso-week", value_name = "WEEK")]
+    #[arg(short = 'W', long = "week-number", alias = "iso-week", value_name = "WEEK")]
     week_number: Option<String>,
 
     /// Limit output to N events (useful for large datasets)
@@ -854,15 +854,15 @@ struct Args {
     last_week: bool,
 
     /// Show events from the last N days (including today)
-    #[arg(long)]
+    #[arg(short = 'R', long)]
     recent: Option<u32>,
 
     /// Filter out events shorter than this duration (e.g., "30m", "1h", "2h30m")
-    #[arg(long)]
+    #[arg(short = 'i', long)]
     min_duration: Option<String>,
 
     /// Filter out events longer than this duration (e.g., "8h", "4h30m")
-    #[arg(long)]
+    #[arg(short = 'x', long)]
     max_duration: Option<String>,
 
     /// Disable colored output
@@ -886,7 +886,7 @@ struct Args {
     list_tags: bool,
 
     /// List all unique years found in events
-    #[arg(long)]
+    #[arg(short = 'Y', long)]
     list_years: bool,
 
     /// List all unique UIDs found in events (useful for debugging/analysis)
@@ -3705,7 +3705,7 @@ fn main() -> io::Result<()> {
                         );
                         if !confirm("overwrite existing files in directory?") {
                             eprintln!();
-                            eprintln!("{} {}", colored(color::RED, "✗"), colored(color::YELLOW, "Aborted - no files written"));
+                            eprintln!("{} {}", colored(color::RED, "✗"), colored(color::WHITE, "Aborted - no files written"));
                             eprintln!(
                                 "  {} Use {} or {} to auto-confirm",
                                 colored(color::DIM, "→"),
@@ -3774,7 +3774,7 @@ fn main() -> io::Result<()> {
                 );
                 if !confirm("overwrite existing file?") {
                     eprintln!();
-                    eprintln!("{} {}", colored(color::RED, "✗"), colored(color::YELLOW, "Aborted - no files written"));
+                    eprintln!("{} {}", colored(color::RED, "✗"), colored(color::WHITE, "Aborted - no files written"));
                     eprintln!(
                         "  {} Use {} or {} to auto-confirm",
                         colored(color::DIM, "→"),
