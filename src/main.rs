@@ -128,6 +128,16 @@ pub fn print_warn<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::YELLOW, "warning:"), msg.as_ref());
 }
 
+/// Styled warning message with emphasis (for important warnings)
+/// Made public for library consumers.
+pub fn print_warning<S: AsRef<str>>(msg: S) {
+    eprintln!(
+        "{} {}",
+        colored(color::YELLOW, "⚠"),
+        colored(color::YELLOW, msg.as_ref())
+    );
+}
+
 /// Styled success message for file output operations
 /// Used for both export and stats output to a file
 /// Made public for library consumers.
@@ -205,6 +215,13 @@ pub fn print_notice<S: AsRef<str>>(msg: S) {
 /// Made public for library consumers.
 pub fn print_success<S: AsRef<str>>(msg: S) {
     eprintln!("{} {}", colored(color::GREEN, "✓"), msg.as_ref());
+}
+
+/// Styled info message for neutral informational output
+/// Use for --validate success, --list-formats, etc.
+/// Made public for library consumers.
+pub fn print_info<S: AsRef<str>>(msg: S) {
+    println!("{}", msg.as_ref());
 }
 
 /// Styled notice message for empty input (distinct from errors)
@@ -3187,30 +3204,24 @@ fn main() -> io::Result<()> {
             if args.validate_quiet {
                 eprintln!("VALIDATION_FAILED: {} error(s)", validated_count);
             } else {
-                eprintln!();
-                print_error("--validate found errors");
-                eprintln!(
-                    "  {} {} constraint(s) checked",
-                    colored(color::DIM, "→"),
-                    colored(color::CYAN, validated_count.to_string())
-                );
+                print_error(format!("{} constraint(s) checked, see errors above", validated_count));
                 print_exit_code_hint();
             }
             std::process::exit(exit_codes::VALIDATION_FAILED);
         }
 
-        // Success output - use eprintln for stderr consistency
+        // Success output
         if args.validate_quiet {
             println!("VALIDATION_OK");
         } else {
-            eprintln!();
-            eprintln!(
+            print_banner("Validation Passed");
+            println!(
                 "  {} {}  {}",
                 colored(color::GREEN, "✓"),
-                colored(color::BOLD, "Arguments validated successfully"),
+                colored(color::BOLD, "All arguments valid"),
                 colored(color::DIM, format!("({} constraints checked)", validated_count))
             );
-            eprintln!();
+            println!();
         }
         return Ok(());
     }
@@ -3300,9 +3311,7 @@ fn main() -> io::Result<()> {
 
     // List formats early (doesn't require files)
     if args.list_formats {
-        eprintln!();
         print_banner("Available Output Formats");
-        eprintln!();
         let formats = [
             ("text", "Default - Human-readable text with colors"),
             ("json", "JSON array (pretty or compact with --compact)"),
@@ -3320,6 +3329,7 @@ fn main() -> io::Result<()> {
         }
         eprintln!();
         eprintln!("  {} Use {} to set format", colored(color::DIM, "→"), colored(color::BOLD, "-f, --format"));
+        print_info("proton-extractor --help          # Full help with all options");
         return Ok(());
     }
 
