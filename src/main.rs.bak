@@ -297,19 +297,6 @@ fn confirm(prompt: &str) -> bool {
     response.is_empty() || response.eq("y") || response.eq("yes")
 }
 
-/// Print abort message and exit with code
-/// Used after user declines confirmation prompts
-fn abort(message: &str) {
-    eprintln!();
-    eprintln!("{} {}", colored(color::RED, "✗"), colored(color::BOLD, message));
-    eprintln!(
-        "  {} Use {} to auto-confirm",
-        colored(color::DIM, "→"),
-        colored(color::CYAN, "--yes (or -y)")
-    );
-    std::process::exit(exit_codes::OUTPUT_ERROR);
-}
-
 /// Animated progress indicator for long-running operations
 struct Spinner {
     message: String,
@@ -542,7 +529,6 @@ Quick Reference:
   • Today's events: proton-extractor calendar.ics -t
   • ISO week: proton-extractor calendar.ics --week-number W10
   • Pipe input: cat calendar.ics | proton-extractor --stdin
-  • Auto-confirm: proton-extractor calendar.ics -y   # Skip prompts
 
 Enable shell completion for faster CLI usage:
   source <(proton-extractor --generate-completion bash)   # bash
@@ -3822,7 +3808,18 @@ fn main() -> io::Result<()> {
                             )
                         );
                         if !confirm("overwrite existing files in directory?") {
-                            abort("Aborted - no files written");
+                            eprintln!();
+                            eprintln!(
+                                "{} {}",
+                                colored(color::RED, "✗"),
+                                colored(color::BOLD, "Aborted - no files written")
+                            );
+                            eprintln!(
+                                "  {} Use {} to auto-confirm",
+                                colored(color::DIM, "→"),
+                                colored(color::CYAN, "--yes (or -y)")
+                            );
+                            std::process::exit(exit_codes::OUTPUT_ERROR);
                         }
                     }
                 }
@@ -4104,32 +4101,6 @@ fn main() -> io::Result<()> {
     }
 
     let grouped: BTreeMap<(i32, u32), MonthSummary> = group_by_month(&filtered);
-
-    // Subtle filter summary: show when filters reduced the event set (respects quiet/silent)
-    let has_active_filters = args.person.is_some() || args.project.is_some() || args.tag.is_some()
-        || !args.persons.as_ref().map(|p| p.is_empty()).unwrap_or(true)
-        || !args.weekdays.as_ref().map(|w| w.is_empty()).unwrap_or(true)
-        || args.today || args.yesterday || args.tomorrow || args.weekly || args.last_week
-        || args.week_number.is_some() || args.recent.is_some()
-        || args.from.is_some() || args.to.is_some()
-        || args.min_duration.is_some() || args.max_duration.is_some();
-
-    if has_active_filters && !args.quiet && !args.silent && !grouped.is_empty() {
-        let pct = if total_raw_events > 0 {
-            (filtered.len() as f64 / total_raw_events as f64 * 100.0) as usize
-        } else {
-            0
-        };
-        if total_raw_events > filtered.len() {
-            eprintln!(
-                "  {} showing {} of {} events ({}%)",
-                colored(color::DIM, "→"),
-                colored(color::CYAN, filtered.len().to_string()),
-                colored(color::DIM, total_raw_events.to_string()),
-                colored(color::DIM, format!("{}%", pct))
-            );
-        }
-    }
 
     // No events found - show helpful context and suggestions (respects quiet/silent)
     if grouped.is_empty() && !args.quiet && !args.silent {
