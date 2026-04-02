@@ -1,4 +1,4 @@
-# 🦀 Proton Extractor
+# Proton Extractor
 
 > **Track your time without the spreadsheet. Extract hours from Proton Calendar exports.**
 
